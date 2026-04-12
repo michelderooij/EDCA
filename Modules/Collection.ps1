@@ -1,0 +1,5070 @@
+﻿# Author:  Michel de Rooij
+# Website: https://eightwone.com
+
+Set-StrictMode -Version Latest
+
+function Get-EDCARemoteTlsState {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Server
+    )
+
+    $scriptBlock = {
+        $paths = @{
+            Tls10 = 'HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.0\Server'
+            Tls11 = 'HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.1\Server'
+            Tls12 = 'HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.2\Server'
+            Tls13 = 'HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.3\Server'
+        }
+
+        $result = @{}
+        foreach ($key in $paths.Keys) {
+            $enabled = $null
+            if (Test-Path -Path $paths[$key]) {
+                $item = Get-ItemProperty -Path $paths[$key] -ErrorAction SilentlyContinue
+                $enabled = $item.Enabled
+            }
+            $result[$key] = $enabled
+        }
+
+        $tls13CipherSuiteAvailable = $null
+        if ($null -eq $result.Tls13 -and (Get-Command -Name Get-TlsCipherSuite -ErrorAction SilentlyContinue)) {
+            try {
+                $tls13Suites = @(Get-TlsCipherSuite -ErrorAction SilentlyContinue | Where-Object { [string]$_.Protocol -eq 'TLS 1.3' })
+                $tls13CipherSuiteAvailable = ($tls13Suites.Count -gt 0)
+            }
+            catch {
+            }
+        }
+
+        $tls13Enabled = $null
+        $tls13EvidenceSource = 'Unknown'
+        if ($null -ne $result.Tls13) {
+            $tls13Enabled = ($result.Tls13 -eq 1)
+            $tls13EvidenceSource = 'Registry'
+        }
+        elseif ($null -ne $tls13CipherSuiteAvailable) {
+            $tls13Enabled = [bool]$tls13CipherSuiteAvailable
+            $tls13EvidenceSource = 'CipherSuites'
+        }
+
+        return [pscustomobject]@{
+            Tls10Enabled        = ($result.Tls10 -eq 1)
+            Tls11Enabled        = ($result.Tls11 -eq 1)
+            Tls12Enabled        = ($result.Tls12 -eq 1)
+            Tls13Enabled        = $tls13Enabled
+            Tls13EvidenceSource = $tls13EvidenceSource
+            Raw                 = $result
+        }
+    }
+
+    return Invoke-EDCAServerCommand -Server $Server -ScriptBlock $scriptBlock
+}
+
+function Get-EDCARemoteServiceState {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Server,
+        [Parameter(Mandatory = $true)]
+        [string[]]$ServiceNames
+    )
+
+    $scriptBlock = {
+        param($ServiceNames)
+        $services = @()
+        foreach ($serviceName in $ServiceNames) {
+            $service = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
+            if ($null -eq $service) {
+                $services += [pscustomobject]@{
+                    Name   = $serviceName
+                    Status = 'NotFound'
+                }
+                continue
+            }
+
+            $services += [pscustomobject]@{
+                Name   = $service.Name
+                Status = [string]$service.Status
+            }
+        }
+
+        return $services
+    }
+
+    return Invoke-EDCAServerCommand -Server $Server -ScriptBlock $scriptBlock -ArgumentList (, $ServiceNames)
+}
+
+function Get-EDCARemoteCertificates {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Server
+    )
+
+    $scriptBlock = {
+        $certs = Get-ChildItem -Path Cert:\LocalMachine\My -ErrorAction SilentlyContinue | Select-Object -Property Subject, Thumbprint, NotAfter
+        $output = @()
+        foreach ($cert in $certs) {
+            $output += [pscustomobject]@{
+                Subject    = $cert.Subject
+                Thumbprint = $cert.Thumbprint
+                NotAfter   = $cert.NotAfter
+                IsExpired  = ($cert.NotAfter -lt (Get-Date))
+            }
+        }
+
+        return $output
+    }
+
+    return Invoke-EDCAServerCommand -Server $Server -ScriptBlock $scriptBlock
+}
+
+function Get-EDCACertificateStatusFromInventory {
+    [CmdletBinding()]
+    param(
+        [AllowNull()]
+        [string]$Thumbprint,
+        [AllowNull()]
+        [object[]]$Certificates
+    )
+
+    $normalizedThumbprint = ''
+    if (-not [string]::IsNullOrWhiteSpace($Thumbprint)) {
+        $normalizedThumbprint = $Thumbprint.Trim().ToUpperInvariant()
+    }
+
+    if ([string]::IsNullOrWhiteSpace($normalizedThumbprint)) {
+        return [pscustomobject]@{
+            Thumbprint    = $null
+            Found         = $false
+            NotAfter      = $null
+            IsExpired     = $null
+            DaysRemaining = $null
+        }
+    }
+
+    $matchedCertificate = @($Certificates | Where-Object {
+            -not [string]::IsNullOrWhiteSpace([string]$_.Thumbprint) -and
+            ([string]$_.Thumbprint).Trim().ToUpperInvariant() -eq $normalizedThumbprint
+        } | Select-Object -First 1)
+
+    if ($matchedCertificate.Count -eq 0) {
+        return [pscustomobject]@{
+            Thumbprint    = $normalizedThumbprint
+            Found         = $false
+            NotAfter      = $null
+            IsExpired     = $null
+            DaysRemaining = $null
+        }
+    }
+
+    $notAfter = $null
+    if ($null -ne $matchedCertificate[0].NotAfter) {
+        $notAfter = [datetime]$matchedCertificate[0].NotAfter
+    }
+    $now = Get-Date
+    return [pscustomobject]@{
+        Thumbprint    = $normalizedThumbprint
+        Found         = $true
+        NotAfter      = $notAfter
+        IsExpired     = ($notAfter -lt $now)
+        DaysRemaining = [int][math]::Floor(($notAfter - $now).TotalDays)
+    }
+}
+
+function Get-EDCAIntervalMinutes {
+    [CmdletBinding()]
+    param(
+        [AllowNull()]
+        [object]$Value
+    )
+
+    if ($null -eq $Value) {
+        return $null
+    }
+
+    if ($Value -is [TimeSpan]) {
+        return [double]$Value.TotalMinutes
+    }
+
+    if ($Value.PSObject.Properties.Name -contains 'TotalMinutes' -and $null -ne $Value.TotalMinutes) {
+        return [double]$Value.TotalMinutes
+    }
+
+    if ($Value.PSObject.Properties.Name -contains 'Ticks' -and $null -ne $Value.Ticks) {
+        try {
+            return [double]([TimeSpan]::FromTicks([int64]$Value.Ticks).TotalMinutes)
+        }
+        catch {
+        }
+    }
+
+    if ($Value.PSObject.Properties.Name -contains 'TimeSpan' -and $null -ne $Value.TimeSpan) {
+        $inner = Get-EDCAIntervalMinutes -Value $Value.TimeSpan
+        if ($null -ne $inner) {
+            return $inner
+        }
+    }
+
+    $asTimeSpan = [TimeSpan]::Zero
+    $valueText = [string]$Value
+    if ([TimeSpan]::TryParse($valueText, [ref]$asTimeSpan)) {
+        return [double]$asTimeSpan.TotalMinutes
+    }
+
+    $asDouble = 0.0
+    if ([double]::TryParse($valueText, [ref]$asDouble)) {
+        return $asDouble
+    }
+
+    return $null
+}
+
+function Get-EDCAExchangeServerInfo {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Server
+    )
+
+    $scriptBlock = {
+        $exchangeInfo = [pscustomobject]@{
+            ExchangeCmdletsAvailable       = $false
+            Name                           = $env:COMPUTERNAME
+            AdminDisplayVersion            = $null
+            Edition                        = $null
+            ProductLine                    = 'Unknown'
+            IsExchangeServer               = $false
+            ExtendedProtectionStatus       = @()
+            AdminAuditLogEnabled           = $null
+            ReplicationHealthPassed        = $null
+            IsDagMember                    = $null
+            Pop3ServiceStatus              = $null
+            Imap4ServiceStatus             = $null
+            MapiHttpEnabled                = $null
+            ReceiveConnectors              = @()
+            UpnPrimarySmtpMismatchCount    = $null
+            SharedMailboxTypeMismatchCount = $null
+            OwaDownloadDomainsConfigured   = $null
+            AlternateServiceAccount        = $null
+            DatabaseStoragePaths           = @()
+            CollectionWarnings             = @()
+        }
+
+        $setupKey = 'HKLM:\SOFTWARE\Microsoft\ExchangeServer\v15\Setup'
+        $hasExchangeInstall = Test-Path -Path $setupKey
+        if ($hasExchangeInstall) {
+            $exchangeInfo.IsExchangeServer = $true
+        }
+        else {
+            $exchangeInfo.CollectionWarnings += 'Exchange installation not detected on target server.'
+        }
+
+        $exchangeInstallPath = $null
+        $exchangeBinPath = $null
+        if ($hasExchangeInstall) {
+            try {
+                $setupForPath = Get-ItemProperty -Path $setupKey -ErrorAction SilentlyContinue
+                $pathCandidates = @()
+
+                if ($null -ne $setupForPath) {
+                    if ($setupForPath.PSObject.Properties.Name -contains 'MsiInstallPath') {
+                        $pathCandidates += [string]$setupForPath.MsiInstallPath
+                    }
+                    if ($setupForPath.PSObject.Properties.Name -contains 'InstallPath') {
+                        $pathCandidates += [string]$setupForPath.InstallPath
+                    }
+                    if ($setupForPath.PSObject.Properties.Name -contains 'SetupBinPath') {
+                        $pathCandidates += [string]$setupForPath.SetupBinPath
+                    }
+                }
+
+                if (-not [string]::IsNullOrWhiteSpace([string]$env:ExchangeInstallPath)) {
+                    $pathCandidates += [string]$env:ExchangeInstallPath
+                }
+
+                foreach ($pathCandidate in $pathCandidates) {
+                    if ([string]::IsNullOrWhiteSpace($pathCandidate)) {
+                        continue
+                    }
+
+                    $normalizedPath = $pathCandidate.Trim().Trim('"')
+                    if (-not (Test-Path -Path $normalizedPath)) {
+                        continue
+                    }
+
+                    $leaf = [string](Split-Path -Path $normalizedPath -Leaf)
+                    if ($leaf.Equals('bin', [System.StringComparison]::OrdinalIgnoreCase)) {
+                        $exchangeBinPath = $normalizedPath
+                        $exchangeInstallPath = Split-Path -Path $normalizedPath -Parent
+                    }
+                    else {
+                        $exchangeInstallPath = $normalizedPath
+                        $candidateBinPath = Join-Path -Path $exchangeInstallPath -ChildPath 'bin'
+                        if (Test-Path -Path $candidateBinPath) {
+                            $exchangeBinPath = $candidateBinPath
+                        }
+                    }
+
+                    if (-not [string]::IsNullOrWhiteSpace($exchangeInstallPath) -and -not [string]::IsNullOrWhiteSpace($exchangeBinPath)) {
+                        break
+                    }
+                }
+            }
+            catch {
+                $exchangeInfo.CollectionWarnings += ('Exchange install path resolution failed: ' + $_.Exception.Message)
+            }
+
+            if ([string]::IsNullOrWhiteSpace($exchangeBinPath)) {
+                $exchangeInfo.CollectionWarnings += 'Exchange installation detected but bin path could not be resolved from setup registry.'
+            }
+        }
+
+        if ($hasExchangeInstall -and -not (Get-Command -Name Get-ExchangeServer -ErrorAction SilentlyContinue)) {
+            try {
+                if ($exchangeBinPath) {
+                    $exShellPsc1 = Join-Path -Path $exchangeBinPath -ChildPath 'exShell.psc1'
+                    if (Test-Path -Path $exShellPsc1) {
+                        [xml]$psSnapIns = Get-Content -Path $exShellPsc1 -ErrorAction Stop
+                        foreach ($psSnapIn in $psSnapIns.PSConsoleFile.PSSnapIns.PSSnapIn) {
+                            try {
+                                Add-PSSnapin -Name $psSnapIn.Name -ErrorAction Stop
+                            }
+                            catch {
+                                # Ignore already-loaded snap-ins.
+                            }
+                        }
+                    }
+
+                    $exchangePs1 = Join-Path -Path $exchangeBinPath -ChildPath 'Exchange.ps1'
+                    if (Test-Path -Path $exchangePs1) {
+                        Import-Module $exchangePs1 -ErrorAction SilentlyContinue
+                    }
+                }
+            }
+            catch {
+                $exchangeInfo.CollectionWarnings += ('Exchange shell bootstrap failed: ' + $_.Exception.Message)
+            }
+        }
+
+        if ($hasExchangeInstall -and -not (Get-Command -Name Get-ExchangeServer -ErrorAction SilentlyContinue)) {
+            try {
+                Add-PSSnapin -Name Microsoft.Exchange.Management.PowerShell.SnapIn -ErrorAction Stop
+            }
+            catch {
+            }
+        }
+
+        if ($hasExchangeInstall -and -not (Get-Command -Name Get-ExchangeServer -ErrorAction SilentlyContinue)) {
+            try {
+                $setup = Get-ItemProperty -Path $setupKey -ErrorAction Stop
+                $major = $null
+                $minor = $null
+                $buildMajor = $null
+                $buildMinor = $null
+
+                if ($setup.PSObject.Properties.Name -contains 'MsiProductMajor') { $major = $setup.MsiProductMajor }
+                if ($setup.PSObject.Properties.Name -contains 'MsiProductMinor') { $minor = $setup.MsiProductMinor }
+                if ($setup.PSObject.Properties.Name -contains 'MsiBuildMajor') { $buildMajor = $setup.MsiBuildMajor }
+                if ($setup.PSObject.Properties.Name -contains 'MsiBuildMinor') { $buildMinor = $setup.MsiBuildMinor }
+
+                if ($null -ne $major -and $null -ne $minor -and $null -ne $buildMajor -and $null -ne $buildMinor) {
+                    $exchangeInfo.AdminDisplayVersion = ('Version {0}.{1} (Build {2}.{3})' -f [int]$major, [int]$minor, [int]$buildMajor, [int]$buildMinor)
+                }
+
+                if ($setup.PSObject.Properties.Name -contains 'Edition') {
+                    $exchangeInfo.Edition = [string]$setup.Edition
+                }
+
+                if ($null -ne $major -and $null -ne $minor) {
+                    if ([int]$major -eq 15 -and [int]$minor -eq 1) {
+                        $exchangeInfo.ProductLine = 'Exchange2016'
+                    }
+                    elseif ([int]$major -eq 15 -and [int]$minor -eq 2) {
+                        $isSe = $false
+                        if ($setup.PSObject.Properties.Name -contains 'IsExchangeServerSubscriptionEdition') {
+                            $isSe = [bool]$setup.IsExchangeServerSubscriptionEdition
+                        }
+                        if (-not $isSe -and $null -ne $buildMajor -and [int]$buildMajor -ge 2562) {
+                            # Exchange SE builds can be identified by 15.2 build train even when explicit SE flags are unavailable.
+                            $isSe = $true
+                        }
+                        $exchangeInfo.ProductLine = if ($isSe) { 'ExchangeSE' } else { 'Exchange2019' }
+                    }
+                }
+
+                $exchangeInfo.CollectionWarnings += 'Exchange cmdlets unavailable; build metadata collected from setup registry.'
+            }
+            catch {
+                $exchangeInfo.CollectionWarnings += ('Exchange setup registry fallback failed: ' + $_.Exception.Message)
+            }
+        }
+
+        if (Get-Command -Name Get-ExchangeServer -ErrorAction SilentlyContinue) {
+            $exchangeInfo.ExchangeCmdletsAvailable = $true
+            try {
+                $server = Get-ExchangeServer -Identity $env:COMPUTERNAME -ErrorAction Stop
+                $exchangeInfo.IsExchangeServer = $true
+                $exchangeInfo.Name = $server.Name
+                $exchangeInfo.AdminDisplayVersion = [string]$server.AdminDisplayVersion
+                $exchangeInfo.Edition = [string]$server.Edition
+                if ($server.PSObject.Properties.Name -contains 'MemberOfDAG') {
+                    $exchangeInfo.IsDagMember = -not [string]::IsNullOrWhiteSpace([string]$server.MemberOfDAG)
+                }
+
+                if ($exchangeInfo.AdminDisplayVersion -match 'Version 15\.1') {
+                    $exchangeInfo.ProductLine = 'Exchange2016'
+                }
+                elseif ($exchangeInfo.AdminDisplayVersion -match 'Version 15\.2') {
+                    $isSe = $false
+                    if ($server.PSObject.Properties.Name -contains 'IsExchangeServerSubscriptionEdition') {
+                        $isSe = [bool]$server.IsExchangeServerSubscriptionEdition
+                    }
+                    if (-not $isSe -and $exchangeInfo.AdminDisplayVersion -match 'Subscription|SE') {
+                        $isSe = $true
+                    }
+                    if (-not $isSe -and $exchangeInfo.AdminDisplayVersion -match 'Build\s+(\d+)\.') {
+                        if ([int]$matches[1] -ge 2562) {
+                            $isSe = $true
+                        }
+                    }
+                    $exchangeInfo.ProductLine = if ($isSe) { 'ExchangeSE' } else { 'Exchange2019' }
+                }
+            }
+            catch {
+                $exchangeInfo.CollectionWarnings += ('Get-ExchangeServer failed: ' + $_.Exception.Message)
+            }
+
+            $virtualDirectoryCommands = @(
+                'Get-MapiVirtualDirectory',
+                'Get-OwaVirtualDirectory',
+                'Get-EcpVirtualDirectory',
+                'Get-WebServicesVirtualDirectory',
+                'Get-ActiveSyncVirtualDirectory',
+                'Get-AutodiscoverVirtualDirectory'
+            )
+
+            foreach ($commandName in $virtualDirectoryCommands) {
+                if (-not (Get-Command -Name $commandName -ErrorAction SilentlyContinue)) {
+                    continue
+                }
+
+                try {
+                    $items = & $commandName -Server $env:COMPUTERNAME -ErrorAction Stop
+                    foreach ($item in $items) {
+                        $exchangeInfo.ExtendedProtectionStatus += [pscustomobject]@{
+                            VirtualDirectoryType            = $commandName
+                            Identity                        = [string]$item.Identity
+                            ExtendedProtectionTokenChecking = [string]$item.ExtendedProtectionTokenChecking
+                            ExtendedProtectionFlags         = [string]$item.ExtendedProtectionFlags
+                            ExtendedProtectionSPNList       = [string]$item.ExtendedProtectionSPNList
+                            InternalAuthenticationMethods   = if ($item.PSObject.Properties.Name -contains 'InternalAuthenticationMethods') { [string]$item.InternalAuthenticationMethods } else { '' }
+                            ExternalAuthenticationMethods   = if ($item.PSObject.Properties.Name -contains 'ExternalAuthenticationMethods') { [string]$item.ExternalAuthenticationMethods } else { '' }
+                            IISAuthenticationMethods        = if ($item.PSObject.Properties.Name -contains 'IISAuthenticationMethods') { [string]$item.IISAuthenticationMethods } else { '' }
+                        }
+                    }
+                }
+                catch {
+                    $exchangeInfo.CollectionWarnings += ('{0} failed: {1}' -f $commandName, $_.Exception.Message)
+                }
+            }
+
+            if (Get-Command -Name Get-AdminAuditLogConfig -ErrorAction SilentlyContinue) {
+                try {
+                    $audit = Get-AdminAuditLogConfig -ErrorAction Stop
+                    $exchangeInfo.AdminAuditLogEnabled = [bool]$audit.AdminAuditLogEnabled
+                }
+                catch {
+                    $exchangeInfo.CollectionWarnings += ('Get-AdminAuditLogConfig failed: ' + $_.Exception.Message)
+                }
+            }
+
+            if (Get-Command -Name Get-MapiVirtualDirectory -ErrorAction SilentlyContinue) {
+                try {
+                    $mapiVirtualDirectories = @(Get-MapiVirtualDirectory -Server $env:COMPUTERNAME -ErrorAction Stop)
+                    if ($mapiVirtualDirectories.Count -gt 0) {
+                        $enabledCount = @($mapiVirtualDirectories | Where-Object { $null -ne $_.IISAuthenticationMethods }).Count
+                        $exchangeInfo.MapiHttpEnabled = ($enabledCount -gt 0)
+                    }
+                }
+                catch {
+                    $exchangeInfo.CollectionWarnings += ('Get-MapiVirtualDirectory (MAPI/HTTP) failed: ' + $_.Exception.Message)
+                }
+            }
+
+            if (Get-Command -Name Get-ReceiveConnector -ErrorAction SilentlyContinue) {
+                try {
+                    $connectors = @(Get-ReceiveConnector -Server $env:COMPUTERNAME -ErrorAction Stop)
+                    foreach ($connector in $connectors) {
+                        $exchangeInfo.ReceiveConnectors += [pscustomobject]@{
+                            Identity            = [string]$connector.Identity
+                            PermissionGroups    = [string]$connector.PermissionGroups
+                            AuthMechanism       = [string]$connector.AuthMechanism
+                            RemoteIPRangesCount = @($connector.RemoteIPRanges).Count
+                        }
+                    }
+                }
+                catch {
+                    $exchangeInfo.CollectionWarnings += ('Get-ReceiveConnector failed: ' + $_.Exception.Message)
+                }
+            }
+
+            if (Get-Command -Name Get-SendConnector -ErrorAction SilentlyContinue) {
+                try {
+                    $sendConnectors = @(Get-SendConnector -ErrorAction Stop)
+                    foreach ($connector in $sendConnectors) {
+                        $smartHosts = @()
+                        if ($connector.PSObject.Properties.Name -contains 'SmartHosts' -and $null -ne $connector.SmartHosts) {
+                            $smartHosts = @($connector.SmartHosts | ForEach-Object { [string]$_ })
+                        }
+
+                        $addressSpaces = @()
+                        if ($connector.PSObject.Properties.Name -contains 'AddressSpaces' -and $null -ne $connector.AddressSpaces) {
+                            $addressSpaces = @($connector.AddressSpaces | ForEach-Object {
+                                    if ($_.PSObject.Properties.Name -contains 'Address') { [string]$_.Address } else { [string]$_ }
+                                })
+                        }
+
+                        $tlsCertificateName = $null
+                        if ($connector.PSObject.Properties.Name -contains 'TlsCertificateName' -and $null -ne $connector.TlsCertificateName) {
+                            $tlsCertificateName = [string]$connector.TlsCertificateName
+                        }
+
+                        $tlsCertificateSyntaxValid = $null
+                        if (-not [string]::IsNullOrWhiteSpace($tlsCertificateName)) {
+                            $tlsCertificateSyntaxValid = ($tlsCertificateName -match '(?i)(<I>).*(<S>).*')
+                        }
+
+                        $exchangeInfo.SendConnectors += [pscustomobject]@{
+                            Identity                  = [string]$connector.Identity
+                            Enabled                   = if ($connector.PSObject.Properties.Name -contains 'Enabled') { [bool]$connector.Enabled } else { $null }
+                            CloudServicesMailEnabled  = if ($connector.PSObject.Properties.Name -contains 'CloudServicesMailEnabled') { [bool]$connector.CloudServicesMailEnabled } else { $null }
+                            TlsAuthLevel              = if ($connector.PSObject.Properties.Name -contains 'TlsAuthLevel') { [string]$connector.TlsAuthLevel } else { $null }
+                            RequireTLS                = if ($connector.PSObject.Properties.Name -contains 'RequireTLS') { [bool]$connector.RequireTLS } else { $null }
+                            TlsCertificateName        = $tlsCertificateName
+                            TlsCertificateSyntaxValid = $tlsCertificateSyntaxValid
+                            TlsDomain                 = if ($connector.PSObject.Properties.Name -contains 'TlsDomain') { [string]$connector.TlsDomain } else { $null }
+                            Fqdn                      = if ($connector.PSObject.Properties.Name -contains 'Fqdn' -and $null -ne $connector.Fqdn) { [string]$connector.Fqdn } else { $null }
+                            SmartHosts                = $smartHosts
+                            AddressSpaces             = $addressSpaces
+                        }
+                    }
+                }
+                catch {
+                    $exchangeInfo.CollectionWarnings += ('Get-SendConnector failed: ' + $_.Exception.Message)
+                }
+            }
+
+            if (Get-Command -Name Get-OwaVirtualDirectory -ErrorAction SilentlyContinue) {
+                try {
+                    $owas = @(Get-OwaVirtualDirectory -Server $env:COMPUTERNAME -ErrorAction Stop)
+                    if ($owas.Count -gt 0) {
+                        $withDownloadDomains = @($owas | Where-Object {
+                                $_.PSObject.Properties.Name -contains 'DownloadDomains' -and
+                                -not [string]::IsNullOrWhiteSpace([string]$_.DownloadDomains)
+                            }).Count
+                        $exchangeInfo.OwaDownloadDomainsConfigured = ($withDownloadDomains -gt 0)
+                        $withSmime = @($owas | Where-Object {
+                                $_.PSObject.Properties.Name -contains 'SMIMEEnabled' -and [bool]$_.SMIMEEnabled
+                            }).Count
+                        $exchangeInfo.OwaSmimeEnabled = ($withSmime -gt 0)
+                    }
+                }
+                catch {
+                    $exchangeInfo.CollectionWarnings += ('Get-OwaVirtualDirectory (Download Domains) failed: ' + $_.Exception.Message)
+                }
+            }
+
+            if (Get-Command -Name Get-RpcClientAccess -ErrorAction SilentlyContinue) {
+                try {
+                    $rpcAccess = Get-RpcClientAccess -Server $env:COMPUTERNAME -ErrorAction Stop
+                    if ($null -ne $rpcAccess) {
+                        $exchangeInfo.RpcClientAccessConfig = [pscustomobject]@{
+                            EncryptionRequired = if ($rpcAccess.PSObject.Properties.Name -contains 'EncryptionRequired') { [bool]$rpcAccess.EncryptionRequired } else { $null }
+                        }
+                    }
+                }
+                catch {
+                    $exchangeInfo.CollectionWarnings += ('Get-RpcClientAccess failed: ' + $_.Exception.Message)
+                }
+            }
+
+            if (Get-Command -Name Get-Mailbox -ErrorAction SilentlyContinue) {
+                try {
+                    $mailboxes = @(Get-Mailbox -ResultSize Unlimited -ErrorAction Stop)
+                    $mismatchedUpn = @($mailboxes | Where-Object {
+                            -not [string]::IsNullOrWhiteSpace([string]$_.UserPrincipalName) -and
+                            -not [string]::IsNullOrWhiteSpace([string]$_.WindowsEmailAddress) -and
+                            -not [string]::Equals([string]$_.UserPrincipalName, [string]$_.WindowsEmailAddress, [System.StringComparison]::OrdinalIgnoreCase)
+                        })
+                    $exchangeInfo.UpnPrimarySmtpMismatchCount = $mismatchedUpn.Count
+
+                    $sharedLikeNames = @($mailboxes | Where-Object {
+                            $_.RecipientTypeDetails -eq 'UserMailbox' -and
+                            ([string]$_.DisplayName -match '(shared|team|group|department|afdeling|gedeeld)')
+                        })
+                    $exchangeInfo.SharedMailboxTypeMismatchCount = $sharedLikeNames.Count
+                }
+                catch {
+                    $exchangeInfo.CollectionWarnings += ('Get-Mailbox baseline checks failed: ' + $_.Exception.Message)
+                }
+            }
+
+            if (Get-Command -Name Get-MailboxDatabase -ErrorAction SilentlyContinue) {
+                try {
+                    $mailboxDatabases = @(Get-MailboxDatabase -Server $env:COMPUTERNAME -ErrorAction Stop)
+                    $storagePathSet = @{}
+                    foreach ($mailboxDatabase in $mailboxDatabases) {
+                        $candidatePaths = @()
+                        if ($mailboxDatabase.PSObject.Properties.Name -contains 'EdbFilePath' -and $null -ne $mailboxDatabase.EdbFilePath) {
+                            $candidatePaths += [string]$mailboxDatabase.EdbFilePath
+                        }
+                        if ($mailboxDatabase.PSObject.Properties.Name -contains 'LogFolderPath' -and $null -ne $mailboxDatabase.LogFolderPath) {
+                            $candidatePaths += [string]$mailboxDatabase.LogFolderPath
+                        }
+
+                        foreach ($candidatePath in $candidatePaths) {
+                            if ([string]::IsNullOrWhiteSpace($candidatePath)) {
+                                continue
+                            }
+
+                            $normalizedPath = $candidatePath.Trim()
+                            if (-not $storagePathSet.ContainsKey($normalizedPath)) {
+                                $storagePathSet[$normalizedPath] = $true
+                                $exchangeInfo.DatabaseStoragePaths += $normalizedPath
+                            }
+                        }
+                    }
+                }
+                catch {
+                    $exchangeInfo.CollectionWarnings += ('Get-MailboxDatabase storage path checks failed: ' + $_.Exception.Message)
+                }
+            }
+
+            try {
+                $popService = Get-Service -Name MSExchangePOP3 -ErrorAction SilentlyContinue
+                if ($null -ne $popService) {
+                    $exchangeInfo.Pop3ServiceStatus = [string]$popService.Status
+                }
+            }
+            catch {
+            }
+
+            try {
+                $imapService = Get-Service -Name MSExchangeIMAP4 -ErrorAction SilentlyContinue
+                if ($null -ne $imapService) {
+                    $exchangeInfo.Imap4ServiceStatus = [string]$imapService.Status
+                }
+            }
+            catch {
+            }
+
+            if ((Get-Command -Name Get-ClientAccessService -ErrorAction SilentlyContinue) -or (Get-Command -Name Get-ClientAccessServer -ErrorAction SilentlyContinue)) {
+                try {
+                    $clientAccessService = $null
+                    $asaSourceCommand = $null
+
+                    if (Get-Command -Name Get-ClientAccessService -ErrorAction SilentlyContinue) {
+                        $asaSourceCommand = 'Get-ClientAccessService'
+                        $clientAccessService = Get-ClientAccessService -Identity $env:COMPUTERNAME -ErrorAction Stop
+                    }
+                    else {
+                        $asaSourceCommand = 'Get-ClientAccessServer'
+                        $clientAccessService = Get-ClientAccessServer -Identity $env:COMPUTERNAME -IncludeAlternateServiceAccountCredentialStatus -ErrorAction Stop
+                    }
+
+                    $asaConfiguration = $null
+                    if ($null -ne $clientAccessService -and ($clientAccessService.PSObject.Properties.Name -contains 'AlternateServiceAccountConfiguration')) {
+                        $asaConfiguration = $clientAccessService.AlternateServiceAccountConfiguration
+                    }
+
+                    $effectiveCredentials = @()
+                    $latestCredential = $null
+                    $previousCredential = $null
+                    $asaConfigurationText = if ($null -eq $asaConfiguration) { '' } else { [string]$asaConfiguration }
+
+                    if ($null -ne $asaConfiguration -and ($asaConfiguration.PSObject.Properties.Name -contains 'EffectiveCredentials') -and $null -ne $asaConfiguration.EffectiveCredentials) {
+                        $effectiveCredentials = @($asaConfiguration.EffectiveCredentials | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | Sort-Object -Unique)
+                    }
+
+                    if ($null -ne $asaConfiguration -and ($asaConfiguration.PSObject.Properties.Name -contains 'Latest') -and $null -ne $asaConfiguration.Latest) {
+                        $latestCredential = [string]$asaConfiguration.Latest
+                    }
+
+                    if ($null -ne $asaConfiguration -and ($asaConfiguration.PSObject.Properties.Name -contains 'Previous') -and $null -ne $asaConfiguration.Previous) {
+                        $previousCredential = [string]$asaConfiguration.Previous
+                    }
+
+                    if ($effectiveCredentials.Count -eq 0 -and -not [string]::IsNullOrWhiteSpace($asaConfigurationText)) {
+                        $credentialMatches = [regex]::Matches($asaConfigurationText, '(?im)\b[0-9a-zA-Z\.\-_]+\\[0-9a-zA-Z\.\-_\$]+\b')
+                        foreach ($credentialMatch in $credentialMatches) {
+                            $credentialValue = [string]$credentialMatch.Value
+                            if (-not [string]::IsNullOrWhiteSpace($credentialValue) -and ($effectiveCredentials -notcontains $credentialValue)) {
+                                $effectiveCredentials += $credentialValue
+                            }
+                        }
+                    }
+
+                    if ([string]::IsNullOrWhiteSpace($latestCredential) -and -not [string]::IsNullOrWhiteSpace($asaConfigurationText)) {
+                        $latestMatch = [regex]::Match($asaConfigurationText, '(?im)Latest\s*:\s*[^,]+,\s*([0-9a-zA-Z\.\-_]+\\[0-9a-zA-Z\.\-_\$]+)')
+                        if ($latestMatch.Success) {
+                            $latestCredential = [string]$latestMatch.Groups[1].Value
+                        }
+                    }
+
+                    if ([string]::IsNullOrWhiteSpace($previousCredential) -and -not [string]::IsNullOrWhiteSpace($asaConfigurationText)) {
+                        $previousMatch = [regex]::Match($asaConfigurationText, '(?im)Previous\s*:\s*[^,]+,\s*([0-9a-zA-Z\.\-_]+\\[0-9a-zA-Z\.\-_\$]+)')
+                        if ($previousMatch.Success) {
+                            $previousCredential = [string]$previousMatch.Groups[1].Value
+                        }
+                    }
+
+                    $configured = $false
+                    if ($effectiveCredentials.Count -gt 0) {
+                        $configured = $true
+                    }
+                    elseif (-not [string]::IsNullOrWhiteSpace($latestCredential) -or -not [string]::IsNullOrWhiteSpace($previousCredential)) {
+                        $configured = $true
+                    }
+                    elseif (-not [string]::IsNullOrWhiteSpace($asaConfigurationText) -and $asaConfigurationText -match '(?i)latest\s*:') {
+                        $configured = $true
+                    }
+
+                    $exchangeInfo.AlternateServiceAccount = [pscustomobject]@{
+                        QuerySucceeded     = $true
+                        SourceCommand      = $asaSourceCommand
+                        Configured         = $configured
+                        CredentialCount    = @($effectiveCredentials).Count
+                        Credentials        = @($effectiveCredentials | Sort-Object -Unique)
+                        LatestCredential   = $latestCredential
+                        PreviousCredential = $previousCredential
+                        RawConfiguration   = $asaConfigurationText
+                    }
+                }
+                catch {
+                    $exchangeInfo.CollectionWarnings += ('Get-ClientAccessService/Get-ClientAccessServer (ASA) failed: ' + $_.Exception.Message)
+                    $exchangeInfo.AlternateServiceAccount = [pscustomobject]@{
+                        QuerySucceeded     = $false
+                        SourceCommand      = 'Get-ClientAccessService/Get-ClientAccessServer'
+                        Configured         = $null
+                        CredentialCount    = 0
+                        Credentials        = @()
+                        LatestCredential   = $null
+                        PreviousCredential = $null
+                        RawConfiguration   = $null
+                    }
+                }
+            }
+
+            if (Get-Command -Name Test-ReplicationHealth -ErrorAction SilentlyContinue) {
+                try {
+                    $replication = Test-ReplicationHealth -Identity $env:COMPUTERNAME -ErrorAction Stop
+                    $failed = $replication | Where-Object { $_.Result -ne 'Passed' }
+                    $exchangeInfo.ReplicationHealthPassed = ($failed.Count -eq 0)
+                }
+                catch {
+                    $exchangeInfo.CollectionWarnings += ('Test-ReplicationHealth failed: ' + $_.Exception.Message)
+                }
+            }
+
+            if (Get-Command -Name Get-AuthConfig -ErrorAction SilentlyContinue) {
+                try {
+                    $authConfig = Get-AuthConfig -ErrorAction Stop
+                    $authCertificateThumbprint = $null
+                    if ($authConfig.PSObject.Properties.Name -contains 'CurrentCertificateThumbprint') {
+                        $authCertificateThumbprint = [string]$authConfig.CurrentCertificateThumbprint
+                    }
+                    $exchangeInfo.AuthCertificate = Get-EDCACertificateStatus -Thumbprint $authCertificateThumbprint -Certificates $certificates
+                }
+                catch {
+                    $exchangeInfo.CollectionWarnings += ('Get-AuthConfig failed: ' + $_.Exception.Message)
+                }
+            }
+
+            if (Get-Command -Name Get-TransportService -ErrorAction SilentlyContinue) {
+                try {
+                    $transportService = Get-TransportService -Identity $env:COMPUTERNAME -ErrorAction Stop
+
+                    $maxPerDomainOutboundConnections = $null
+                    if ($transportService.PSObject.Properties.Name -contains 'MaxPerDomainOutboundConnections') {
+                        $maxPerDomainOutboundConnections = [int]$transportService.MaxPerDomainOutboundConnections
+                    }
+
+                    $messageRetryIntervalMinutes = $null
+                    if ($transportService.PSObject.Properties.Name -contains 'MessageRetryInterval' -and $null -ne $transportService.MessageRetryInterval) {
+                        $messageRetryIntervalMinutes = Get-EDCAIntervalMinutes -Value $transportService.MessageRetryInterval
+                    }
+
+                    $connectivityLogEnabled = $null
+                    if ($transportService.PSObject.Properties.Name -contains 'ConnectivityLogEnabled') {
+                        $connectivityLogEnabled = [bool]$transportService.ConnectivityLogEnabled
+                    }
+
+                    $messageTrackingLogEnabled = $null
+                    if ($transportService.PSObject.Properties.Name -contains 'MessageTrackingLogEnabled') {
+                        $messageTrackingLogEnabled = [bool]$transportService.MessageTrackingLogEnabled
+                    }
+
+                    $messageTrackingLogSubjectLoggingEnabled = $null
+                    if ($transportService.PSObject.Properties.Name -contains 'MessageTrackingLogSubjectLoggingEnabled') {
+                        $messageTrackingLogSubjectLoggingEnabled = [bool]$transportService.MessageTrackingLogSubjectLoggingEnabled
+                    }
+
+                    $pickupDirectoryPath = $null
+                    if ($transportService.PSObject.Properties.Name -contains 'PickupDirectoryPath' -and -not [string]::IsNullOrWhiteSpace([string]$transportService.PickupDirectoryPath)) {
+                        $pickupDirectoryPath = [string]$transportService.PickupDirectoryPath
+                    }
+
+                    $exchangeInfo.TransportRetryConfig = [pscustomobject]@{
+                        MaxPerDomainOutboundConnections         = $maxPerDomainOutboundConnections
+                        MessageRetryIntervalMinutes             = $messageRetryIntervalMinutes
+                        ConnectivityLogEnabled                  = $connectivityLogEnabled
+                        MessageTrackingLogEnabled               = $messageTrackingLogEnabled
+                        MessageTrackingLogSubjectLoggingEnabled = $messageTrackingLogSubjectLoggingEnabled
+                        PickupDirectoryPath                     = $pickupDirectoryPath
+                    }
+
+                    $internalTransportCertificateThumbprint = $null
+                    if ($transportService.PSObject.Properties.Name -contains 'InternalTransportCertificateThumbprint') {
+                        $internalTransportCertificateThumbprint = [string]$transportService.InternalTransportCertificateThumbprint
+                    }
+                    $exchangeInfo.InternalTransportCertificate = Get-EDCACertificateStatus -Thumbprint $internalTransportCertificateThumbprint -Certificates $certificates
+                }
+                catch {
+                    $exchangeInfo.CollectionWarnings += ('Get-TransportService failed: ' + $_.Exception.Message)
+                }
+            }
+
+            $settingOverrides = @()
+            if (Get-Command -Name Get-SettingOverride -ErrorAction SilentlyContinue) {
+                try {
+                    $settingOverrides = @(Get-SettingOverride -ErrorAction Stop)
+                    $settingOverrideNames = @($settingOverrides | ForEach-Object { [string]$_.Name } | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | Sort-Object -Unique)
+                    $settingOverrideDetails = @($settingOverrides | ForEach-Object {
+                        $n = if ($_.PSObject.Properties.Name -contains 'Name') { [string]$_.Name } else { '' }
+                        $s = if (($_.PSObject.Properties.Name -contains 'Server') -and ($null -ne $_.Server)) { [string]$_.Server } else { '' }
+                        [pscustomobject]@{ Name = $n; Server = $s }
+                    } | Where-Object { -not [string]::IsNullOrWhiteSpace($_.Name) })
+                    $exchangeInfo.SettingOverrides = [pscustomobject]@{
+                        Count   = $settingOverrides.Count
+                        Names   = $settingOverrideNames
+                        Details = $settingOverrideDetails
+                    }
+
+                    if ($null -ne $exchangeInfo.Amsi) {
+                        $amsiDisabledBySettingOverride = @($settingOverrides | Where-Object {
+                                $componentName = if ($_.PSObject.Properties.Name -contains 'ComponentName') { [string]$_.ComponentName } else { '' }
+                                $sectionName = if ($_.PSObject.Properties.Name -contains 'SectionName') { [string]$_.SectionName } else { '' }
+                                $parametersText = ''
+                                if ($_.PSObject.Properties.Name -contains 'Parameters' -and $null -ne $_.Parameters) {
+                                    $parametersText = [string]::Join(';', @($_.Parameters | ForEach-Object { [string]$_ }))
+                                }
+
+                                $componentName -eq 'Cafe' -and
+                                $sectionName -eq 'HttpRequestFiltering' -and
+                                $parametersText -match 'Enabled\s*=\s*false'
+                            }).Count -gt 0
+
+                        $exchangeInfo.Amsi = [pscustomobject]@{
+                            ProviderCount             = $exchangeInfo.Amsi.ProviderCount
+                            ProviderIds               = $exchangeInfo.Amsi.ProviderIds
+                            DisabledBySettingOverride = $amsiDisabledBySettingOverride
+                        }
+                    }
+                }
+                catch {
+                    $exchangeInfo.CollectionWarnings += ('Get-SettingOverride failed: ' + $_.Exception.Message)
+                }
+            }
+
+            if (Get-Command -Name Get-AuthServer -ErrorAction SilentlyContinue) {
+                try {
+                    $sharedExchangeOnlineAppId = '00000002-0000-0ff1-ce00-000000000000'
+                    $guidPattern = '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+
+                    $authServers = @(Get-AuthServer -ErrorAction Stop)
+                    $evoStsAuthServers = @($authServers | Where-Object {
+                            $_.PSObject.Properties.Name -contains 'Name' -and
+                            $_.PSObject.Properties.Name -contains 'Type' -and
+                            $_.PSObject.Properties.Name -contains 'Enabled' -and
+                            ([string]$_.Name -like 'EvoSTS*') -and
+                            ([string]$_.Type -eq 'AzureAD') -and
+                            [bool]$_.Enabled
+                        })
+
+                    $acsAuthServers = @($authServers | Where-Object {
+                            $_.PSObject.Properties.Name -contains 'Type' -and
+                            $_.PSObject.Properties.Name -contains 'Enabled' -and
+                            ([string]$_.Type -eq 'MicrosoftACS') -and
+                            [bool]$_.Enabled
+                        })
+
+                    $enabledEvoAuthServer = ($evoStsAuthServers.Count -gt 0)
+
+                    $exchangeOnlinePartnerApplication = @()
+                    if (Get-Command -Name Get-PartnerApplication -ErrorAction SilentlyContinue) {
+                        $partnerApplications = @(Get-PartnerApplication -ErrorAction SilentlyContinue)
+                        $exchangeOnlinePartnerApplication = @($partnerApplications | Where-Object {
+                                $applicationIdentifier = if ($_.PSObject.Properties.Name -contains 'ApplicationIdentifier') { [string]$_.ApplicationIdentifier } else { '' }
+                                $enabled = if ($_.PSObject.Properties.Name -contains 'Enabled') { [bool]$_.Enabled } else { $true }
+
+                                $enabled -and ($applicationIdentifier -eq $sharedExchangeOnlineAppId)
+                            })
+                    }
+
+                    $enabledHybridPartnerApplication = ($exchangeOnlinePartnerApplication.Count -gt 0)
+
+                    $oAuthConfigured = ((($evoStsAuthServers.Count -or $acsAuthServers.Count) -gt 0) -and ($exchangeOnlinePartnerApplication.Count -gt 0))
+
+                    $dedicatedHybridAppOverrides = @($settingOverrides | Where-Object {
+                            $componentName = if ($_.PSObject.Properties.Name -contains 'ComponentName') { [string]$_.ComponentName } else { '' }
+                            $sectionName = if ($_.PSObject.Properties.Name -contains 'SectionName') { [string]$_.SectionName } else { '' }
+                            $componentName -eq 'Global' -and $sectionName -eq 'ExchangeOnpremAsThirdPartyAppId'
+                        })
+
+                    $sharedAppAuthServers = @($evoStsAuthServers | Where-Object {
+                            ([string]$_.ApplicationIdentifier) -eq $sharedExchangeOnlineAppId
+                        })
+
+                    $dedicatedAppAuthServers = @($evoStsAuthServers | Where-Object {
+                            $applicationIdentifier = [string]$_.ApplicationIdentifier
+                            ($applicationIdentifier -match $guidPattern) -and ($applicationIdentifier -ne $sharedExchangeOnlineAppId)
+                        })
+
+                    $dedicatedHybridAppConfigured = ($dedicatedHybridAppOverrides.Count -ge 1) -and ($dedicatedAppAuthServers.Count -ge 1) -and ($sharedAppAuthServers.Count -eq 0)
+
+                    $hybridConfigured = $oAuthConfigured
+                    $exchangeInfo.HybridApplication = [pscustomobject]@{
+                        Configured                             = $hybridConfigured
+                        DedicatedHybridAppConfigured           = $dedicatedHybridAppConfigured
+                        DedicatedHybridAppOverrideCount        = $dedicatedHybridAppOverrides.Count
+                        DedicatedHybridAppAuthServerCount      = $dedicatedAppAuthServers.Count
+                        SharedExchangeOnlineAppAuthServerCount = $sharedAppAuthServers.Count
+                        Details                                = ('OAuth hybrid detected: {0}; EvoSTS auth servers: {1}; ACS auth servers: {2}; Exchange Online partner app enabled: {3}; dedicated-hybrid-app override count: {4}; dedicated-app auth server count: {5}; shared-app auth server count: {6}' -f $hybridConfigured, $evoStsAuthServers.Count, $acsAuthServers.Count, $enabledHybridPartnerApplication, $dedicatedHybridAppOverrides.Count, $dedicatedAppAuthServers.Count, $sharedAppAuthServers.Count)
+                    }
+                }
+                catch {
+                    $exchangeInfo.CollectionWarnings += ('Get-AuthServer/Get-PartnerApplication hybrid check failed: ' + $_.Exception.Message)
+                }
+            }
+        }
+
+        return $exchangeInfo
+    }
+
+    return Invoke-EDCAServerCommand -Server $Server -ScriptBlock $scriptBlock
+}
+
+function Resolve-EDCADnsRecord {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Name,
+        [Parameter(Mandatory = $true)]
+        [string]$Type
+    )
+
+    if (-not (Get-Command -Name Resolve-DnsName -ErrorAction SilentlyContinue)) {
+        return [pscustomobject]@{
+            ResolverAvailable = $false
+            Success           = $false
+            Records           = @()
+            Error             = 'Resolve-DnsName is not available on this host.'
+        }
+    }
+
+    try {
+        $records = @(Resolve-DnsName -Name $Name -Type $Type -DnsOnly -ErrorAction Stop)
+        return [pscustomobject]@{
+            ResolverAvailable = $true
+            Success           = $true
+            Records           = $records
+            Error             = ''
+        }
+    }
+    catch {
+        return [pscustomobject]@{
+            ResolverAvailable = $true
+            Success           = $false
+            Records           = @()
+            Error             = $_.Exception.Message
+        }
+    }
+}
+
+function Get-EDCATxtRecordValues {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [object[]]$Records
+    )
+
+    $values = @()
+    foreach ($record in $Records) {
+        if ($record.PSObject.Properties.Name -contains 'Type' -and [string]$record.Type -ne 'TXT') {
+            continue
+        }
+
+        if ($record.PSObject.Properties.Name -contains 'Strings' -and $null -ne $record.Strings) {
+            $txtValue = ([string[]]$record.Strings) -join ''
+            if (-not [string]::IsNullOrWhiteSpace($txtValue)) {
+                $values += $txtValue.Trim()
+            }
+        }
+        elseif ($record.PSObject.Properties.Name -contains 'Strings') {
+            continue
+        }
+        else {
+            $rawText = [string]$record
+            if (-not [string]::IsNullOrWhiteSpace($rawText)) {
+                $values += $rawText.Trim()
+            }
+        }
+    }
+
+    return @($values)
+}
+
+function Test-EDCASpfConfiguration {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Domain
+    )
+
+    $txtLookup = Resolve-EDCADnsRecord -Name $Domain -Type 'TXT'
+    if (-not $txtLookup.ResolverAvailable) {
+        return [pscustomobject]@{
+            Status                  = 'Unknown'
+            Evidence                = $txtLookup.Error
+            Records                 = @()
+            PotentialDnsLookupCount = $null
+            Issues                  = @($txtLookup.Error)
+        }
+    }
+
+    if (-not $txtLookup.Success) {
+        return [pscustomobject]@{
+            Status                  = 'Fail'
+            Evidence                = ('No TXT records resolved for SPF check: {0}' -f $txtLookup.Error)
+            Records                 = @()
+            PotentialDnsLookupCount = $null
+            Issues                  = @('No SPF TXT record found.')
+        }
+    }
+
+    $txtValues = Get-EDCATxtRecordValues -Records $txtLookup.Records
+    $spfRecords = @($txtValues | Where-Object { $_ -match '^v=spf1(\s|$)' })
+    if ($spfRecords.Count -eq 0) {
+        return [pscustomobject]@{
+            Status                  = 'Fail'
+            Evidence                = 'TXT records exist, but no SPF record starting with v=spf1 was found.'
+            Records                 = @()
+            PotentialDnsLookupCount = $null
+            Issues                  = @('SPF record missing.')
+        }
+    }
+
+    if ($spfRecords.Count -gt 1) {
+        return [pscustomobject]@{
+            Status                  = 'Fail'
+            Evidence                = ('Multiple SPF records found ({0}). RFC-compliant SPF requires exactly one SPF record.' -f $spfRecords.Count)
+            Records                 = $spfRecords
+            PotentialDnsLookupCount = $null
+            Issues                  = @('Multiple SPF records detected.')
+        }
+    }
+
+    $spf = [string]$spfRecords[0]
+    $issues = @()
+    if ($spf -notmatch '\s[\+\-\~\?]?all(\s|$)') {
+        $issues += 'SPF record does not contain a terminal all mechanism.'
+    }
+
+    if ($spf -match '(^|\s)ptr($|\s|:)') {
+        $issues += 'SPF record uses ptr mechanism (not recommended).'
+    }
+
+    $lookupCount = 0
+    $lookupCount += ([regex]::Matches($spf, '(^|\s)(include:)', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)).Count
+    $lookupCount += ([regex]::Matches($spf, '(^|\s)(a)(:|/|\s|$)', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)).Count
+    $lookupCount += ([regex]::Matches($spf, '(^|\s)(mx)(:|/|\s|$)', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)).Count
+    $lookupCount += ([regex]::Matches($spf, '(^|\s)(ptr)(:|/|\s|$)', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)).Count
+    $lookupCount += ([regex]::Matches($spf, '(^|\s)(exists:)', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)).Count
+    if ($spf -match '(^|\s)redirect=') {
+        $lookupCount += 1
+    }
+
+    if ($lookupCount -gt 10) {
+        $issues += ('SPF has potential DNS lookup count {0}, which exceeds RFC limit of 10.' -f $lookupCount)
+    }
+
+    $status = if ($issues.Count -eq 0) { 'Pass' } else { 'Fail' }
+    return [pscustomobject]@{
+        Status                  = $status
+        Evidence                = ('SPF record: {0}; potential DNS lookups: {1}; issues: {2}' -f $spf, $lookupCount, $issues.Count)
+        Records                 = @($spf)
+        PotentialDnsLookupCount = $lookupCount
+        Issues                  = $issues
+    }
+}
+
+function Test-EDCADmarcConfiguration {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Domain
+    )
+
+    $dmarcDomain = ('_dmarc.{0}' -f $Domain)
+    $txtLookup = Resolve-EDCADnsRecord -Name $dmarcDomain -Type 'TXT'
+    if (-not $txtLookup.ResolverAvailable) {
+        return [pscustomobject]@{
+            Status   = 'Unknown'
+            Evidence = $txtLookup.Error
+            Records  = @()
+            Policy   = $null
+            Issues   = @($txtLookup.Error)
+        }
+    }
+
+    if (-not $txtLookup.Success) {
+        return [pscustomobject]@{
+            Status   = 'Fail'
+            Evidence = ('No DMARC TXT records resolved: {0}' -f $txtLookup.Error)
+            Records  = @()
+            Policy   = $null
+            Issues   = @('DMARC record missing.')
+        }
+    }
+
+    $txtValues = Get-EDCATxtRecordValues -Records $txtLookup.Records
+    $dmarcRecords = @($txtValues | Where-Object { $_ -match '^v=DMARC1\s*;?' })
+    if ($dmarcRecords.Count -eq 0) {
+        return [pscustomobject]@{
+            Status   = 'Fail'
+            Evidence = 'TXT records exist at _dmarc, but no record starts with v=DMARC1.'
+            Records  = @()
+            Policy   = $null
+            Issues   = @('DMARC syntax/version marker missing.')
+        }
+    }
+
+    if ($dmarcRecords.Count -gt 1) {
+        return [pscustomobject]@{
+            Status   = 'Fail'
+            Evidence = ('Multiple DMARC records found ({0}); only one DMARC record should exist.' -f $dmarcRecords.Count)
+            Records  = $dmarcRecords
+            Policy   = $null
+            Issues   = @('Multiple DMARC records detected.')
+        }
+    }
+
+    $record = [string]$dmarcRecords[0]
+    $tags = @{}
+    foreach ($fragment in ($record -split ';')) {
+        $trimmed = $fragment.Trim()
+        if ([string]::IsNullOrWhiteSpace($trimmed)) {
+            continue
+        }
+
+        $pair = $trimmed -split '=', 2
+        if ($pair.Count -ne 2) {
+            continue
+        }
+
+        $key = $pair[0].Trim().ToLowerInvariant()
+        $value = $pair[1].Trim()
+        if (-not [string]::IsNullOrWhiteSpace($key)) {
+            $tags[$key] = $value
+        }
+    }
+
+    $issues = @()
+    if (-not $tags.ContainsKey('p')) {
+        $issues += 'DMARC policy tag p= is missing.'
+    }
+
+    $policy = ''
+    if ($tags.ContainsKey('p')) {
+        $policy = [string]$tags['p']
+        if ($policy -notin @('none', 'quarantine', 'reject')) {
+            $issues += ('DMARC p= value is invalid: {0}' -f $policy)
+        }
+        elseif ($policy -eq 'none') {
+            $issues += 'DMARC p=none is monitoring-only and does not enforce protection.'
+        }
+    }
+
+    if ($tags.ContainsKey('pct')) {
+        $pctValue = 0
+        if (-not [int]::TryParse([string]$tags['pct'], [ref]$pctValue) -or $pctValue -lt 1 -or $pctValue -gt 100) {
+            $issues += ('DMARC pct value is invalid: {0}' -f [string]$tags['pct'])
+        }
+    }
+
+    foreach ($alignmentTag in @('adkim', 'aspf')) {
+        if ($tags.ContainsKey($alignmentTag)) {
+            $value = [string]$tags[$alignmentTag]
+            if ($value -notin @('r', 's')) {
+                $issues += ('DMARC {0} value is invalid: {1}' -f $alignmentTag, $value)
+            }
+        }
+    }
+
+    $status = if ($issues.Count -eq 0) { 'Pass' } else { 'Fail' }
+    return [pscustomobject]@{
+        Status   = $status
+        Evidence = ('DMARC record: {0}; policy: {1}; issues: {2}' -f $record, $policy, $issues.Count)
+        Records  = @($record)
+        Policy   = $policy
+        Issues   = $issues
+    }
+}
+
+function Test-EDCAMtaStsConfiguration {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Domain
+    )
+
+    $dnsName = ('_mta-sts.{0}' -f $Domain)
+    $txtLookup = Resolve-EDCADnsRecord -Name $dnsName -Type 'TXT'
+    if (-not $txtLookup.ResolverAvailable) {
+        return [pscustomobject]@{
+            Status       = 'Unknown'
+            Evidence     = $txtLookup.Error
+            DnsRecord    = $null
+            PolicyUrl    = ('https://mta-sts.{0}/.well-known/mta-sts.txt' -f $Domain)
+            PolicyStatus = 'Unknown'
+            Issues       = @($txtLookup.Error)
+        }
+    }
+
+    if (-not $txtLookup.Success) {
+        return [pscustomobject]@{
+            Status       = 'Fail'
+            Evidence     = ('No MTA-STS DNS TXT record resolved: {0}' -f $txtLookup.Error)
+            DnsRecord    = $null
+            PolicyUrl    = ('https://mta-sts.{0}/.well-known/mta-sts.txt' -f $Domain)
+            PolicyStatus = 'NotChecked'
+            Issues       = @('MTA-STS DNS TXT record missing.')
+        }
+    }
+
+    $txtValues = Get-EDCATxtRecordValues -Records $txtLookup.Records
+    $stsRecords = @($txtValues | Where-Object { $_ -match '^v=STSv1\s*;?' })
+    if ($stsRecords.Count -eq 0) {
+        return [pscustomobject]@{
+            Status       = 'Fail'
+            Evidence     = 'TXT records exist at _mta-sts, but no record starts with v=STSv1.'
+            DnsRecord    = $null
+            PolicyUrl    = ('https://mta-sts.{0}/.well-known/mta-sts.txt' -f $Domain)
+            PolicyStatus = 'NotChecked'
+            Issues       = @('MTA-STS DNS version marker missing.')
+        }
+    }
+
+    if ($stsRecords.Count -gt 1) {
+        return [pscustomobject]@{
+            Status       = 'Fail'
+            Evidence     = ('Multiple MTA-STS TXT records found ({0}); only one should exist.' -f $stsRecords.Count)
+            DnsRecord    = $stsRecords[0]
+            PolicyUrl    = ('https://mta-sts.{0}/.well-known/mta-sts.txt' -f $Domain)
+            PolicyStatus = 'NotChecked'
+            Issues       = @('Multiple MTA-STS DNS TXT records detected.')
+        }
+    }
+
+    $dnsRecord = [string]$stsRecords[0]
+    $dnsParts = @{}
+    foreach ($fragment in ($dnsRecord -split ';')) {
+        $trimmed = $fragment.Trim()
+        if ([string]::IsNullOrWhiteSpace($trimmed)) {
+            continue
+        }
+
+        $pair = $trimmed -split '=', 2
+        if ($pair.Count -ne 2) {
+            continue
+        }
+
+        $dnsParts[$pair[0].Trim().ToLowerInvariant()] = $pair[1].Trim()
+    }
+
+    $issues = @()
+    if (-not $dnsParts.ContainsKey('id') -or [string]::IsNullOrWhiteSpace([string]$dnsParts['id'])) {
+        $issues += 'MTA-STS DNS TXT record is missing id= value.'
+    }
+
+    $policyUrl = ('https://mta-sts.{0}/.well-known/mta-sts.txt' -f $Domain)
+    $policyStatus = 'Unknown'
+    $policyMode = ''
+    try {
+        $response = Invoke-WebRequest -Uri $policyUrl -UseBasicParsing -TimeoutSec 10 -ErrorAction Stop
+        $policyLines = @([string]$response.Content -split "`r?`n") | ForEach-Object { $_.Trim() } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+        $policyMap = @{}
+        $mxEntries = @()
+        foreach ($line in $policyLines) {
+            if ($line -match '^[Mm][Xx]\s*:\s*(.+)$') {
+                $mxEntries += $matches[1].Trim()
+                continue
+            }
+
+            $pair = $line -split ':', 2
+            if ($pair.Count -eq 2) {
+                $key = $pair[0].Trim().ToLowerInvariant()
+                $value = $pair[1].Trim()
+                if (-not [string]::IsNullOrWhiteSpace($key)) {
+                    $policyMap[$key] = $value
+                }
+            }
+        }
+
+        if (-not $policyMap.ContainsKey('version') -or [string]$policyMap['version'] -ne 'STSv1') {
+            $issues += 'MTA-STS policy file version is missing or not STSv1.'
+        }
+
+        if (-not $policyMap.ContainsKey('mode')) {
+            $issues += 'MTA-STS policy file mode is missing.'
+        }
+        else {
+            $policyMode = [string]$policyMap['mode']
+            if ($policyMode -notin @('enforce', 'testing', 'none')) {
+                $issues += ('MTA-STS policy mode is invalid: {0}' -f $policyMode)
+            }
+        }
+
+        if (-not $policyMap.ContainsKey('max_age')) {
+            $issues += 'MTA-STS policy file max_age is missing.'
+        }
+        else {
+            $maxAge = 0
+            if (-not [int]::TryParse([string]$policyMap['max_age'], [ref]$maxAge) -or $maxAge -le 0) {
+                $issues += ('MTA-STS max_age is invalid: {0}' -f [string]$policyMap['max_age'])
+            }
+        }
+
+        if ($policyMode -in @('enforce', 'testing') -and $mxEntries.Count -eq 0) {
+            $issues += 'MTA-STS policy mode requires at least one mx: entry.'
+        }
+
+        $policyStatus = 'Fetched'
+    }
+    catch {
+        $policyStatus = 'FetchFailed'
+        $issues += ('MTA-STS policy fetch failed: {0}' -f $_.Exception.Message)
+    }
+
+    $status = if ($issues.Count -eq 0) { 'Pass' } else { 'Fail' }
+    return [pscustomobject]@{
+        Status       = $status
+        Evidence     = ('MTA-STS DNS record present; policy status: {0}; issues: {1}' -f $policyStatus, $issues.Count)
+        DnsRecord    = $dnsRecord
+        PolicyUrl    = $policyUrl
+        PolicyStatus = $policyStatus
+        Issues       = $issues
+    }
+}
+
+function Test-EDCADaneConfiguration {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Domain
+    )
+
+    $mxLookup = Resolve-EDCADnsRecord -Name $Domain -Type 'MX'
+    if (-not $mxLookup.ResolverAvailable) {
+        return [pscustomobject]@{
+            Status     = 'Unknown'
+            Evidence   = $mxLookup.Error
+            MxHosts    = @()
+            TlsaByHost = @()
+            Issues     = @($mxLookup.Error)
+        }
+    }
+
+    if (-not $mxLookup.Success) {
+        return [pscustomobject]@{
+            Status     = 'Fail'
+            Evidence   = ('No MX records resolved for domain: {0}' -f $mxLookup.Error)
+            MxHosts    = @()
+            TlsaByHost = @()
+            Issues     = @('MX records missing; SMTP DANE cannot be evaluated.')
+        }
+    }
+
+    $mxHosts = @()
+    foreach ($record in $mxLookup.Records) {
+        if ($record.PSObject.Properties.Name -contains 'NameExchange') {
+            $mxHost = ([string]$record.NameExchange).Trim().TrimEnd('.').ToLowerInvariant()
+            if (-not [string]::IsNullOrWhiteSpace($mxHost)) {
+                $mxHosts += $mxHost
+            }
+        }
+    }
+
+    $mxHosts = @($mxHosts | Sort-Object -Unique)
+    if ($mxHosts.Count -eq 0) {
+        return [pscustomobject]@{
+            Status     = 'Fail'
+            Evidence   = 'MX lookup returned no usable MX host entries.'
+            MxHosts    = @()
+            TlsaByHost = @()
+            Issues     = @('MX records did not contain NameExchange values.')
+        }
+    }
+
+    $issues = @()
+    $tlsaByHost = @()
+    foreach ($mxHost in $mxHosts) {
+        $tlsaName = ('_25._tcp.{0}' -f $mxHost)
+        $tlsaLookup = Resolve-EDCADnsRecord -Name $tlsaName -Type 'TLSA'
+        if (-not $tlsaLookup.Success) {
+            $issues += ('No TLSA record found for MX host {0}.' -f $mxHost)
+            $tlsaByHost += [pscustomobject]@{
+                MxHost    = $mxHost
+                TlsaCount = 0
+                Error     = $tlsaLookup.Error
+            }
+            continue
+        }
+
+        $tlsaRecords = @($tlsaLookup.Records | Where-Object { $_.PSObject.Properties.Name -contains 'Type' -and [string]$_.Type -eq 'TLSA' })
+        $invalidTlsaCount = 0
+        foreach ($tlsaRecord in $tlsaRecords) {
+            if (($tlsaRecord.PSObject.Properties.Name -contains 'CertificateUsage') -and ($tlsaRecord.CertificateUsage -notin 0, 1, 2, 3)) {
+                $invalidTlsaCount++
+            }
+            if (($tlsaRecord.PSObject.Properties.Name -contains 'Selector') -and ($tlsaRecord.Selector -notin 0, 1)) {
+                $invalidTlsaCount++
+            }
+            if (($tlsaRecord.PSObject.Properties.Name -contains 'MatchingType') -and ($tlsaRecord.MatchingType -notin 0, 1, 2)) {
+                $invalidTlsaCount++
+            }
+        }
+
+        if ($invalidTlsaCount -gt 0) {
+            $issues += ('TLSA records for {0} contain invalid parameter values.' -f $mxHost)
+        }
+
+        $tlsaByHost += [pscustomobject]@{
+            MxHost    = $mxHost
+            TlsaCount = $tlsaRecords.Count
+            Error     = ''
+        }
+    }
+
+    $status = if ($issues.Count -eq 0) { 'Pass' } else { 'Fail' }
+    return [pscustomobject]@{
+        Status     = $status
+        Evidence   = ('MX hosts evaluated: {0}; hosts with TLSA records: {1}; issues: {2}' -f $mxHosts.Count, (@($tlsaByHost | Where-Object { $_.TlsaCount -gt 0 }).Count), $issues.Count)
+        MxHosts    = $mxHosts
+        TlsaByHost = $tlsaByHost
+        Issues     = $issues
+    }
+}
+
+function Invoke-EDCAEmailAuthenticationChecks {
+    [CmdletBinding()]
+    param(
+        [string[]]$AcceptedDomains
+    )
+
+    $normalizedDomains = @($AcceptedDomains | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | ForEach-Object { ([string]$_).Trim().TrimEnd('.').ToLowerInvariant() } | Sort-Object -Unique)
+    $domains = @($normalizedDomains | Where-Object { $_ -ne 'onmicrosoft.com' -and -not $_.EndsWith('.onmicrosoft.com') })
+
+    $skippedOnMicrosoftDomains = @($normalizedDomains | Where-Object { $_ -eq 'onmicrosoft.com' -or $_.EndsWith('.onmicrosoft.com') })
+    if ($skippedOnMicrosoftDomains.Count -gt 0) {
+        Write-Verbose ('Skipping {0} onmicrosoft.com domain(s) for email authentication checks: {1}' -f $skippedOnMicrosoftDomains.Count, ($skippedOnMicrosoftDomains -join ', '))
+    }
+
+    if ($domains.Count -eq 0) {
+        return [pscustomobject]@{
+            Available     = $false
+            Reason        = 'No eligible accepted domains were discovered from Exchange after excluding onmicrosoft.com domains.'
+            DomainResults = @()
+        }
+    }
+
+    if (-not (Get-Command -Name Resolve-DnsName -ErrorAction SilentlyContinue)) {
+        return [pscustomobject]@{
+            Available     = $false
+            Reason        = 'Resolve-DnsName is not available on this host; DNS-based email authentication checks cannot run.'
+            DomainResults = @()
+        }
+    }
+
+    $domainResults = @()
+    foreach ($domain in $domains) {
+        Write-EDCALog -Message ('Validating email authentication DNS records for domain: {0}' -f $domain)
+        $domainResults += [pscustomobject]@{
+            Domain = $domain
+            Spf    = Test-EDCASpfConfiguration -Domain $domain
+            Dmarc  = Test-EDCADmarcConfiguration -Domain $domain
+            MtaSts = Test-EDCAMtaStsConfiguration -Domain $domain
+            Dane   = Test-EDCADaneConfiguration -Domain $domain
+        }
+    }
+
+    return [pscustomobject]@{
+        Available     = $true
+        Reason        = ''
+        DomainResults = $domainResults
+    }
+}
+
+function Get-EDCAServerInventory {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Server
+    )
+
+    $collectionScriptBlock = {
+        param([bool]$collectExchangeCmdlets = $true)
+        Set-StrictMode -Version Latest
+        $ErrorActionPreference = 'Stop'
+
+        function Get-EDCACertificateStatus {
+            [CmdletBinding()]
+            param(
+                [AllowNull()]
+                [string]$Thumbprint,
+                [AllowNull()]
+                [object[]]$Certificates
+            )
+
+            $normalizedThumbprint = ''
+            if (-not [string]::IsNullOrWhiteSpace($Thumbprint)) {
+                $normalizedThumbprint = $Thumbprint.Trim().ToUpperInvariant()
+            }
+
+            if ([string]::IsNullOrWhiteSpace($normalizedThumbprint)) {
+                return [pscustomobject]@{
+                    Thumbprint    = $null
+                    Found         = $false
+                    NotAfter      = $null
+                    IsExpired     = $null
+                    DaysRemaining = $null
+                }
+            }
+
+            $matchedCertificate = @($Certificates | Where-Object {
+                    -not [string]::IsNullOrWhiteSpace([string]$_.Thumbprint) -and
+                    ([string]$_.Thumbprint).Trim().ToUpperInvariant() -eq $normalizedThumbprint
+                } | Select-Object -First 1)
+
+            if ($matchedCertificate.Count -eq 0) {
+                return [pscustomobject]@{
+                    Thumbprint    = $normalizedThumbprint
+                    Found         = $false
+                    NotAfter      = $null
+                    IsExpired     = $null
+                    DaysRemaining = $null
+                }
+            }
+
+            $notAfter = $matchedCertificate[0].NotAfter
+            $now = Get-Date
+            return [pscustomobject]@{
+                Thumbprint    = $normalizedThumbprint
+                Found         = $true
+                NotAfter      = $notAfter
+                IsExpired     = ($notAfter -lt $now)
+                DaysRemaining = [int][math]::Floor(($notAfter - $now).TotalDays)
+            }
+        }
+
+        function Get-EDCACimInstance {
+            [CmdletBinding()]
+            param(
+                [Parameter(Mandatory = $true)]
+                [string]$ClassName,
+                [AllowNull()]
+                [string]$Namespace,
+                [AllowNull()]
+                [string]$Filter
+            )
+
+            $cimParams = @{
+                ClassName   = $ClassName
+                ErrorAction = 'SilentlyContinue'
+            }
+            if (-not [string]::IsNullOrWhiteSpace($Namespace)) {
+                $cimParams.Namespace = $Namespace
+            }
+            if (-not [string]::IsNullOrWhiteSpace($Filter)) {
+                $cimParams.Filter = $Filter
+            }
+
+            # Keep CIM chatter out of verbose output and surface it under debug instead.
+            $records = @(& { Get-CimInstance @cimParams -Verbose } 4>&1)
+            foreach ($record in $records) {
+                if ($record -is [System.Management.Automation.VerboseRecord]) {
+                    Write-Debug ('CIM {0}: {1}' -f $ClassName, $record.Message)
+                    continue
+                }
+
+                $record
+            }
+        }
+
+        $exchangeInfo = [pscustomobject]@{
+            ExchangeCmdletsAvailable       = $false
+            Name                           = $env:COMPUTERNAME
+            AdminDisplayVersion            = $null
+            Edition                        = $null
+            ProductLine                    = 'Unknown'
+            IsExchangeServer               = $false
+            ExtendedProtectionStatus       = @()
+            AdminAuditLogEnabled           = $null
+            ReplicationHealthPassed        = $null
+            IsDagMember                    = $null
+            OAuth2ClientProfileEnabled     = $null
+            Pop3ServiceStatus              = $null
+            Imap4ServiceStatus             = $null
+            MapiHttpEnabled                = $null
+            ReceiveConnectors              = @()
+            SendConnectors                 = @()
+            UpnPrimarySmtpMismatchCount    = $null
+            SharedMailboxTypeMismatchCount = $null
+            OwaDownloadDomainsConfigured   = $null
+            AlternateServiceAccount        = $null
+            AcceptedDomains                = @()
+            DatabaseStoragePaths           = @()
+            InstallPath                    = $null
+            RpcMinConnectionTimeout        = $null
+            TcpKeepAliveTime               = $null
+            NumaGroupSizeOptimization      = $null
+            IPv6DisabledComponents         = $null
+            CtsProcessorAffinityPercentage = $null
+            DisableAsyncNotification       = $null
+            DisableRootAutoUpdate          = $null
+            SleepyNic                      = $null
+            NodeRunner                     = $null
+            MapiFrontEndAppPoolGcMode      = $null
+            VisualCRedistributable         = $null
+            AuthCertificate                = $null
+            SerializedDataSigningEnabled   = $null
+            SettingOverrides               = $null
+            InternalTransportCertificate   = $null
+            Eems                           = $null
+            Amsi                           = $null
+            Hsts                           = $null
+            IisModules                     = $null
+            TokenCacheModuleLoaded         = $null
+            FipFs                          = $null
+            IisWebConfig                   = $null
+            ExchangeComputerMembership     = $null
+            UnifiedContentCleanup          = $null
+            TransportRetryConfig           = $null
+            HybridApplication              = $null
+            MailboxDatabases               = @()
+            OwaSmimeEnabled                = $null
+            RpcClientAccessConfig          = $null
+            CollectionWarnings             = @()
+        }
+
+        $os = Get-EDCACimInstance -ClassName Win32_OperatingSystem
+        $cs = Get-EDCACimInstance -ClassName Win32_ComputerSystem
+        $cpu = Get-EDCACimInstance -ClassName Win32_Processor
+
+        $activePowerPlanGuid = $null
+        $activePowerPlanName = $null
+        $highPerformanceSet = $false
+        try {
+            $powerPlanOutput = (powercfg /GETACTIVESCHEME 2>$null | Out-String)
+            $powerMatch = [regex]::Match($powerPlanOutput, 'Power Scheme GUID:\s*([a-fA-F0-9\-]+)\s*\(([^\)]+)\)')
+            if ($powerMatch.Success) {
+                $activePowerPlanGuid = $powerMatch.Groups[1].Value
+                $activePowerPlanName = $powerMatch.Groups[2].Value
+                $knownHighPerformanceGuids = @(
+                    '8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c',
+                    'db310065-829b-4671-9647-2261c00e86ef'
+                )
+                $highPerformanceSet = ($knownHighPerformanceGuids -contains $activePowerPlanGuid.ToLowerInvariant()) -or ($activePowerPlanName -like '*High performance*')
+            }
+        }
+        catch {
+        }
+
+        $pageFiles = @(Get-EDCACimInstance -ClassName Win32_PageFileSetting)
+        $pageFileItems = @()
+        foreach ($pageFile in $pageFiles) {
+            $pageFileItems += [pscustomobject]@{
+                Name        = $pageFile.Name
+                InitialSize = $pageFile.InitialSize
+                MaximumSize = $pageFile.MaximumSize
+            }
+        }
+
+        $volumeItems = @()
+        $systemDrive = [string]$os.SystemDrive
+        $systemVolume = $null
+        try {
+            $volumes = @(Get-EDCACimInstance -ClassName Win32_Volume -Filter 'DriveType = 3')
+            foreach ($volume in $volumes) {
+                $driveLetter = [string]$volume.DriveLetter
+                if ([string]::IsNullOrWhiteSpace($driveLetter)) {
+                    continue
+                }
+
+                $volumeItem = [pscustomobject]@{
+                    DriveLetter = $driveLetter
+                    Label       = [string]$volume.Label
+                    FileSystem  = [string]$volume.FileSystem
+                    BlockSize   = if ($null -ne $volume.BlockSize) { [int64]$volume.BlockSize } else { $null }
+                    CapacityGB  = if ($null -ne $volume.Capacity) { [math]::Round(([double]$volume.Capacity / 1GB), 2) } else { $null }
+                    FreeSpaceGB = if ($null -ne $volume.FreeSpace) { [math]::Round(([double]$volume.FreeSpace / 1GB), 2) } else { $null }
+                }
+
+                $volumeItems += $volumeItem
+                if (-not [string]::IsNullOrWhiteSpace($systemDrive) -and $driveLetter.Equals($systemDrive, [System.StringComparison]::OrdinalIgnoreCase)) {
+                    $systemVolume = $volumeItem
+                }
+            }
+        }
+        catch {
+        }
+
+        $rssEnabledCount = $null
+        $rssAdapterCount = $null
+        $rssDetails = @()
+        if (Get-Command -Name Get-NetAdapterRss -ErrorAction SilentlyContinue) {
+            try {
+                $rssAdapters = @(Get-NetAdapterRss -ErrorAction SilentlyContinue)
+                $rssAdapterCount = $rssAdapters.Count
+                $rssEnabledCount = @($rssAdapters | Where-Object { $_.Enabled -eq $true }).Count
+                foreach ($adapter in $rssAdapters) {
+                    $rssDetails += [pscustomobject]@{
+                        Name    = $adapter.Name
+                        Enabled = [bool]$adapter.Enabled
+                    }
+                }
+            }
+            catch {
+            }
+        }
+
+        $vmxnet3Adapters = @()
+        $vmxnet3CommandAvailable = (Get-Command -Name Get-NetAdapter -ErrorAction SilentlyContinue) -and (Get-Command -Name Get-NetAdapterAdvancedProperty -ErrorAction SilentlyContinue)
+        if ($vmxnet3CommandAvailable) {
+            try {
+                $allAdapters = @(Get-NetAdapter -ErrorAction SilentlyContinue)
+                $candidateAdapters = @($allAdapters | Where-Object {
+                        ([string]$_.InterfaceDescription -match 'vmxnet3') -or
+                        ([string]$_.DriverDescription -match 'vmxnet3') -or
+                        ([string]$_.Name -match 'vmxnet3')
+                    })
+
+                foreach ($adapter in $candidateAdapters) {
+                    $adapterName = [string]$adapter.Name
+
+                    $discardTotal = 0
+                    $discardDetails = @()
+                    if (Get-Command -Name Get-NetAdapterStatistics -ErrorAction SilentlyContinue) {
+                        try {
+                            $stats = Get-NetAdapterStatistics -Name $adapterName -ErrorAction SilentlyContinue
+                            if ($null -ne $stats) {
+                                foreach ($property in $stats.PSObject.Properties) {
+                                    if ($property.Name -match 'Discard' -and ($property.Value -is [ValueType])) {
+                                        $value = [int64]$property.Value
+                                        $discardTotal += $value
+                                        $discardDetails += [pscustomobject]@{
+                                            Counter = [string]$property.Name
+                                            Value   = $value
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        catch {
+                        }
+                    }
+
+                    $advancedProperties = @()
+                    try {
+                        $advancedProperties = @(Get-NetAdapterAdvancedProperty -Name $adapterName -ErrorAction SilentlyContinue)
+                    }
+                    catch {
+                    }
+
+                    $ringProperties = @($advancedProperties | Where-Object { [string]$_.DisplayName -match 'ring' })
+                    $bufferProperties = @($advancedProperties | Where-Object { [string]$_.DisplayName -match 'buffer' })
+
+                    $vmxnet3Adapters += [pscustomobject]@{
+                        Name                  = $adapterName
+                        InterfaceDescription  = [string]$adapter.InterfaceDescription
+                        DriverDescription     = [string]$adapter.DriverDescription
+                        Status                = [string]$adapter.Status
+                        LinkSpeed             = [string]$adapter.LinkSpeed
+                        DiscardedPacketsTotal = $discardTotal
+                        DiscardCounters       = $discardDetails
+                        RingProperties        = @($ringProperties | ForEach-Object {
+                                [pscustomobject]@{
+                                    DisplayName  = [string]$_.DisplayName
+                                    DisplayValue = [string]$_.DisplayValue
+                                    RegistryKey  = [string]$_.RegistryKeyword
+                                }
+                            })
+                        BufferProperties      = @($bufferProperties | ForEach-Object {
+                                [pscustomobject]@{
+                                    DisplayName  = [string]$_.DisplayName
+                                    DisplayValue = [string]$_.DisplayValue
+                                    RegistryKey  = [string]$_.RegistryKeyword
+                                }
+                            })
+                        HasRingProperties     = (@($ringProperties).Count -gt 0)
+                        HasBufferProperties   = (@($bufferProperties).Count -gt 0)
+                    }
+                }
+            }
+            catch {
+            }
+        }
+
+        $smb1Value = $null
+        try {
+            $smbServerParams = Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters' -ErrorAction SilentlyContinue
+            if ($null -ne $smbServerParams -and $smbServerParams.PSObject.Properties.Name -contains 'SMB1') {
+                $smb1Value = [int]$smbServerParams.SMB1
+            }
+        }
+        catch {
+        }
+
+        $firewallProfiles = @()
+        $firewallAllProfilesEnabled = $null
+        if (Get-Command -Name Get-NetFirewallProfile -ErrorAction SilentlyContinue) {
+            try {
+                $EAprofiles = @(Get-NetFirewallProfile -ErrorAction SilentlyContinue)
+                foreach ($EAprofile in $EAprofiles) {
+                    $firewallProfiles += [pscustomobject]@{
+                        Name    = [string]$EAprofile.Name
+                        Enabled = [bool]$EAprofile.Enabled
+                    }
+                }
+
+                if ($EAprofiles.Count -gt 0) {
+                    $enabledCount = @($EAprofiles | Where-Object { $_.Enabled -eq $true }).Count
+                    $firewallAllProfilesEnabled = ($enabledCount -eq $EAprofiles.Count)
+                }
+            }
+            catch {
+            }
+        }
+
+        $llmnrValue = $null
+        try {
+            $dnsPolicy = Get-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\DNSClient' -ErrorAction SilentlyContinue
+            if ($null -ne $dnsPolicy -and $dnsPolicy.PSObject.Properties.Name -contains 'EnableMulticast') {
+                $llmnrValue = [int]$dnsPolicy.EnableMulticast
+            }
+        }
+        catch {
+        }
+
+        $lmCompatibilityLevel = $null
+        try {
+            $lsaPolicy = Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Lsa' -ErrorAction SilentlyContinue
+            if ($null -ne $lsaPolicy -and $lsaPolicy.PSObject.Properties.Name -contains 'LmCompatibilityLevel') {
+                $lmCompatibilityLevel = [int]$lsaPolicy.LmCompatibilityLevel
+            }
+        }
+        catch {
+        }
+
+        $ntlmMinClientSec = $null
+        $ntlmMinServerSec = $null
+        try {
+            $msvPolicy = Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Lsa\MSV1_0' -ErrorAction SilentlyContinue
+            if ($null -ne $msvPolicy) {
+                if ($msvPolicy.PSObject.Properties.Name -contains 'NtlmMinClientSec') {
+                    $ntlmMinClientSec = [int]$msvPolicy.NtlmMinClientSec
+                }
+                if ($msvPolicy.PSObject.Properties.Name -contains 'NtlmMinServerSec') {
+                    $ntlmMinServerSec = [int]$msvPolicy.NtlmMinServerSec
+                }
+            }
+        }
+        catch {
+        }
+
+        $wdigestUseLogonCredential = $null
+        try {
+            $wdigestPolicy = Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\WDigest' -ErrorAction SilentlyContinue
+            if ($null -ne $wdigestPolicy -and $wdigestPolicy.PSObject.Properties.Name -contains 'UseLogonCredential') {
+                $wdigestUseLogonCredential = [int]$wdigestPolicy.UseLogonCredential
+            }
+        }
+        catch {
+        }
+
+        $rdpNlaRequired = $null
+        try {
+            $rdpTcp = Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -ErrorAction SilentlyContinue
+            if ($null -ne $rdpTcp -and $rdpTcp.PSObject.Properties.Name -contains 'UserAuthentication') {
+                $rdpNlaRequired = ([int]$rdpTcp.UserAuthentication -eq 1)
+            }
+        }
+        catch {
+        }
+
+        $defenderRealtimeProtectionEnabled = $null
+        $defenderAvailable = $false
+        if (Get-Command -Name Get-MpComputerStatus -ErrorAction SilentlyContinue) {
+            try {
+                $mpStatus = Get-MpComputerStatus -ErrorAction SilentlyContinue
+                if ($null -ne $mpStatus) {
+                    $defenderAvailable = $true
+                    if ($mpStatus.PSObject.Properties.Name -contains 'RealTimeProtectionEnabled') {
+                        $defenderRealtimeProtectionEnabled = [bool]$mpStatus.RealTimeProtectionEnabled
+                    }
+                }
+            }
+            catch {
+            }
+        }
+
+        $defenderExclusionPaths = @()
+        $defenderExclusionProcesses = @()
+        if ($defenderAvailable -and (Get-Command -Name Get-MpPreference -ErrorAction SilentlyContinue)) {
+            try {
+                $mpPref = Get-MpPreference -ErrorAction SilentlyContinue
+                if ($null -ne $mpPref) {
+                    if ($mpPref.PSObject.Properties.Name -contains 'ExclusionPath' -and $null -ne $mpPref.ExclusionPath) {
+                        $defenderExclusionPaths = @($mpPref.ExclusionPath | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | ForEach-Object { [string]$_ })
+                    }
+                    if ($mpPref.PSObject.Properties.Name -contains 'ExclusionProcess' -and $null -ne $mpPref.ExclusionProcess) {
+                        $defenderExclusionProcesses = @($mpPref.ExclusionProcess | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | ForEach-Object { [string]$_ })
+                    }
+                }
+            }
+            catch {
+            }
+        }
+
+        $credentialGuardEnabled = $null
+        $credentialGuardSignals = @()
+        try {
+            $cgPolicy = Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\CredentialGuard' -ErrorAction SilentlyContinue
+            if ($null -ne $cgPolicy -and $cgPolicy.PSObject.Properties.Name -contains 'Enabled') {
+                $credentialGuardSignals += ([int]$cgPolicy.Enabled -eq 1)
+            }
+        }
+        catch {
+        }
+
+        try {
+            $lsaPolicy = Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Lsa' -ErrorAction SilentlyContinue
+            if ($null -ne $lsaPolicy -and $lsaPolicy.PSObject.Properties.Name -contains 'LsaCfgFlags') {
+                $lsaCfgFlags = [int]$lsaPolicy.LsaCfgFlags
+                if ($lsaCfgFlags -in @(1, 2)) {
+                    $credentialGuardSignals += $true
+                }
+                elseif ($lsaCfgFlags -eq 0) {
+                    $credentialGuardSignals += $false
+                }
+            }
+        }
+        catch {
+        }
+
+        try {
+            if (Get-Command -Name Get-CimInstance -ErrorAction SilentlyContinue) {
+                $deviceGuard = Get-EDCACimInstance -ClassName 'Win32_DeviceGuard' -Namespace 'root\Microsoft\Windows\DeviceGuard'
+                if ($null -ne $deviceGuard -and $deviceGuard.PSObject.Properties.Name -contains 'SecurityServicesRunning' -and $null -ne $deviceGuard.SecurityServicesRunning) {
+                    $runningSecurityServices = @($deviceGuard.SecurityServicesRunning | ForEach-Object { [int]$_ })
+                    if ($runningSecurityServices.Count -gt 0) {
+                        # Value 1 indicates that Credential Guard is running.
+                        $credentialGuardSignals += ($runningSecurityServices -contains 1)
+                    }
+                }
+            }
+        }
+        catch {
+        }
+
+        if ($credentialGuardSignals.Count -gt 0) {
+            $credentialGuardEnabled = ($credentialGuardSignals -contains $true)
+        }
+
+        $scriptBlockLoggingEnabled = $null
+        try {
+            $psLogging = Get-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\PowerShell\ScriptBlockLogging' -ErrorAction SilentlyContinue
+            if ($null -ne $psLogging -and $psLogging.PSObject.Properties.Name -contains 'EnableScriptBlockLogging') {
+                $scriptBlockLoggingEnabled = ([int]$psLogging.EnableScriptBlockLogging -eq 1)
+            }
+        }
+        catch {
+        }
+
+        $netFrameworkRelease = $null
+        try {
+            $netReg = Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\NET Framework Setup\NDP\v4\Full' -Name Release -ErrorAction SilentlyContinue
+            if ($null -ne $netReg -and $netReg.PSObject.Properties.Name -contains 'Release') {
+                $netFrameworkRelease = [int]$netReg.Release
+            }
+        }
+        catch {
+        }
+
+        $tcpKeepAliveTime = $null
+        try {
+            $tcpParameters = Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters' -ErrorAction SilentlyContinue
+            if ($null -ne $tcpParameters -and $tcpParameters.PSObject.Properties.Name -contains 'KeepAliveTime') {
+                $tcpKeepAliveTime = [int]$tcpParameters.KeepAliveTime
+            }
+        }
+        catch {
+        }
+
+        $rpcMinConnectionTimeout = $null
+        try {
+            $rpcPolicy = Get-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\RPC' -ErrorAction SilentlyContinue
+            if ($null -ne $rpcPolicy -and $rpcPolicy.PSObject.Properties.Name -contains 'MinimumConnectionTimeout') {
+                $rpcMinConnectionTimeout = [int]$rpcPolicy.MinimumConnectionTimeout
+            }
+        }
+        catch {
+        }
+
+        $ipv6DisabledComponents = $null
+        try {
+            $ipv6Parameters = Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip6\Parameters' -ErrorAction SilentlyContinue
+            if ($null -ne $ipv6Parameters -and $ipv6Parameters.PSObject.Properties.Name -contains 'DisabledComponents') {
+                $ipv6DisabledComponents = [int]$ipv6Parameters.DisabledComponents
+            }
+        }
+        catch {
+        }
+
+        $disableRootAutoUpdate = $null
+        try {
+            $authRootPolicy = Get-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\SystemCertificates\AuthRoot' -ErrorAction SilentlyContinue
+            if ($null -ne $authRootPolicy -and $authRootPolicy.PSObject.Properties.Name -contains 'DisableRootAutoUpdate') {
+                $disableRootAutoUpdate = [int]$authRootPolicy.DisableRootAutoUpdate
+            }
+        }
+        catch {
+        }
+
+        $numaGroupSizeOptimization = $null
+        try {
+            $kernelSettings = Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Kernel' -ErrorAction SilentlyContinue
+            if ($null -ne $kernelSettings -and $kernelSettings.PSObject.Properties.Name -contains 'NumaGroupSizeOptimization') {
+                $numaGroupSizeOptimization = [int]$kernelSettings.NumaGroupSizeOptimization
+            }
+        }
+        catch {
+        }
+
+        $ctsProcessorAffinityPercentage = $null
+        try {
+            $ctsSettings = Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\ExchangeServer\v15\Search\SystemParameters' -ErrorAction SilentlyContinue
+            if ($null -ne $ctsSettings -and $ctsSettings.PSObject.Properties.Name -contains 'CtsProcessorAffinityPercentage') {
+                $ctsProcessorAffinityPercentage = [int]$ctsSettings.CtsProcessorAffinityPercentage
+            }
+        }
+        catch {
+        }
+
+        $disableAsyncNotification = $null
+        try {
+            $exchangeRootSettings = Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\ExchangeServer\v15' -ErrorAction SilentlyContinue
+            if ($null -ne $exchangeRootSettings -and $exchangeRootSettings.PSObject.Properties.Name -contains 'DisableAsyncNotification') {
+                $disableAsyncNotification = [int]$exchangeRootSettings.DisableAsyncNotification
+            }
+        }
+        catch {
+        }
+
+        $allowInsecureRenegoClients = $null
+        $allowInsecureRenegoServers = $null
+        try {
+            $schannelPolicy = Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL' -ErrorAction SilentlyContinue
+            if ($null -ne $schannelPolicy) {
+                if ($schannelPolicy.PSObject.Properties.Name -contains 'AllowInsecureRenegoClients') {
+                    $allowInsecureRenegoClients = [int]$schannelPolicy.AllowInsecureRenegoClients
+                }
+                if ($schannelPolicy.PSObject.Properties.Name -contains 'AllowInsecureRenegoServers') {
+                    $allowInsecureRenegoServers = [int]$schannelPolicy.AllowInsecureRenegoServers
+                }
+            }
+        }
+        catch {
+        }
+
+        $weakCipherStates = @()
+        foreach ($cipherName in @('NULL', 'DES 56/56', 'RC4 40/128', 'RC4 56/128', 'RC4 64/128', 'RC4 128/128', 'Triple DES 168')) {
+            $cipherEnabled = $null
+            try {
+                $cipherKey = "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Ciphers\$cipherName"
+                if (Test-Path -Path $cipherKey) {
+                    $cipherItem = Get-ItemProperty -Path $cipherKey -ErrorAction SilentlyContinue
+                    if ($null -ne $cipherItem -and $cipherItem.PSObject.Properties.Name -contains 'Enabled') {
+                        $cipherEnabled = if ([long]$cipherItem.Enabled -eq 0) { 0 } else { 1 }
+                    }
+                }
+            }
+            catch {
+            }
+            $weakCipherStates += [pscustomobject]@{ Name = $cipherName; Enabled = $cipherEnabled }
+        }
+
+        $weakHashStates = @()
+        foreach ($hashName in @('MD5', 'SHA')) {
+            $hashEnabled = $null
+            try {
+                $hashKey = "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Hashes\$hashName"
+                if (Test-Path -Path $hashKey) {
+                    $hashItem = Get-ItemProperty -Path $hashKey -ErrorAction SilentlyContinue
+                    if ($null -ne $hashItem -and $hashItem.PSObject.Properties.Name -contains 'Enabled') {
+                        $hashEnabled = if ([long]$hashItem.Enabled -eq 0) { 0 } else { 1 }
+                    }
+                }
+            }
+            catch {
+            }
+            $weakHashStates += [pscustomobject]@{ Name = $hashName; Enabled = $hashEnabled }
+        }
+
+        $weakKeyExchangeStates = @()
+        foreach ($keaName in @('PKCS')) {
+            $keaEnabled = $null
+            try {
+                $keaKey = "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\KeyExchangeAlgorithms\$keaName"
+                if (Test-Path -Path $keaKey) {
+                    $keaItem = Get-ItemProperty -Path $keaKey -ErrorAction SilentlyContinue
+                    if ($null -ne $keaItem -and $keaItem.PSObject.Properties.Name -contains 'Enabled') {
+                        $keaEnabled = if ([long]$keaItem.Enabled -eq 0) { 0 } else { 1 }
+                    }
+                }
+            }
+            catch {
+            }
+            $weakKeyExchangeStates += [pscustomobject]@{ Name = $keaName; Enabled = $keaEnabled }
+        }
+
+        $serializedDataSigningEnabled = $null
+        try {
+            $diagnosticSettings = Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\ExchangeServer\v15\Diagnostics' -ErrorAction SilentlyContinue
+            if ($null -ne $diagnosticSettings -and $diagnosticSettings.PSObject.Properties.Name -contains 'EnableSerializationDataSigning') {
+                $serializedDataSigningEnabled = ([int]$diagnosticSettings.EnableSerializationDataSigning -eq 1)
+            }
+        }
+        catch {
+        }
+
+        $sleepyNicNonCompliantAdapters = @()
+        $sleepyNicAdapterCount = 0
+        $sleepyNicCommandAvailable = $false
+        if (Get-Command -Name Get-NetAdapter -ErrorAction SilentlyContinue) {
+            $sleepyNicCommandAvailable = $true
+            try {
+                $pnpByInterfaceDescription = @{}
+                $nicClassKeyPath = 'HKLM:\SYSTEM\CurrentControlSet\Control\Class\{4D36E972-E325-11CE-BFC1-08002bE10318}'
+                $nicClassKeys = @(Get-ChildItem -Path $nicClassKeyPath -ErrorAction SilentlyContinue | Where-Object { $_.PSChildName -match '^\d{4}$' })
+                foreach ($nicClassKey in $nicClassKeys) {
+                    $nicClassProperties = Get-ItemProperty -Path $nicClassKey.PSPath -ErrorAction SilentlyContinue
+                    if ($null -eq $nicClassProperties) {
+                        continue
+                    }
+
+                    $driverDescription = ''
+                    if ($nicClassProperties.PSObject.Properties.Name -contains 'DriverDesc') {
+                        $driverDescription = [string]$nicClassProperties.DriverDesc
+                    }
+
+                    if ([string]::IsNullOrWhiteSpace($driverDescription)) {
+                        continue
+                    }
+
+                    $pnpCapabilities = $null
+                    if ($nicClassProperties.PSObject.Properties.Name -contains 'PnPCapabilities') {
+                        $pnpCapabilities = [int]$nicClassProperties.PnPCapabilities
+                    }
+                    $pnpByInterfaceDescription[$driverDescription.Trim().ToLowerInvariant()] = $pnpCapabilities
+                }
+
+                $netAdapters = @(Get-NetAdapter -ErrorAction SilentlyContinue)
+                foreach ($netAdapter in $netAdapters) {
+                    if ([string]$netAdapter.InterfaceDescription -eq 'Remote NDIS Compatible Device') {
+                        continue
+                    }
+
+                    $sleepyNicAdapterCount++
+                    $adapterDescriptionKey = ([string]$netAdapter.InterfaceDescription).Trim().ToLowerInvariant()
+                    $adapterPnpCapabilities = $null
+                    if ($pnpByInterfaceDescription.ContainsKey($adapterDescriptionKey)) {
+                        $adapterPnpCapabilities = $pnpByInterfaceDescription[$adapterDescriptionKey]
+                    }
+
+                    $sleepyNicDisabled = ($adapterPnpCapabilities -in @(24, 280))
+                    if (-not $sleepyNicDisabled) {
+                        $sleepyNicNonCompliantAdapters += [pscustomobject]@{
+                            Name            = [string]$netAdapter.Name
+                            PnPCapabilities = $adapterPnpCapabilities
+                        }
+                    }
+                }
+            }
+            catch {
+            }
+        }
+
+        $sleepyNic = [pscustomobject]@{
+            CommandAvailable     = $sleepyNicCommandAvailable
+            AdapterCount         = $sleepyNicAdapterCount
+            NonCompliantCount    = @($sleepyNicNonCompliantAdapters).Count
+            NonCompliantAdapters = $sleepyNicNonCompliantAdapters
+        }
+
+        $visualCRedistributableEntries = @()
+        try {
+            $uninstallRegistryPaths = @(
+                'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*',
+                'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*'
+            )
+            foreach ($uninstallRegistryPath in $uninstallRegistryPaths) {
+                foreach ($package in @(Get-ItemProperty -Path $uninstallRegistryPath -ErrorAction SilentlyContinue)) {
+                    if (-not ($package.PSObject.Properties.Name -contains 'DisplayName')) {
+                        continue
+                    }
+
+                    $displayName = [string]$package.DisplayName
+                    if ([string]::IsNullOrWhiteSpace($displayName)) {
+                        continue
+                    }
+
+                    if ($displayName -notmatch 'Visual C\+\+') {
+                        continue
+                    }
+
+                    $year = $null
+                    if ($displayName -match '2012') {
+                        $year = 2012
+                    }
+                    elseif ($displayName -match '2013') {
+                        $year = 2013
+                    }
+
+                    if ($null -eq $year) {
+                        continue
+                    }
+
+                    $architecture = if ($displayName -match 'x64') { 'x64' } elseif ($displayName -match 'x86') { 'x86' } else { 'Unknown' }
+                    $displayVersion = if ($package.PSObject.Properties.Name -contains 'DisplayVersion') { [string]$package.DisplayVersion } else { '' }
+                    $entryKey = ('{0}|{1}|{2}' -f $displayName, $displayVersion, $architecture)
+                    if (@($visualCRedistributableEntries | Where-Object { $_.EntryKey -eq $entryKey }).Count -eq 0) {
+                        $visualCRedistributableEntries += [pscustomobject]@{
+                            EntryKey       = $entryKey
+                            DisplayName    = $displayName
+                            DisplayVersion = $displayVersion
+                            Year           = $year
+                            Architecture   = $architecture
+                        }
+                    }
+                }
+            }
+        }
+        catch {
+        }
+
+        $visualCRedistributable = [pscustomobject]@{
+            Entries    = @($visualCRedistributableEntries)
+            Has2012x64 = (@($visualCRedistributableEntries | Where-Object { $_.Year -eq 2012 -and $_.Architecture -eq 'x64' }).Count -gt 0)
+            Has2013x64 = (@($visualCRedistributableEntries | Where-Object { $_.Year -eq 2013 -and $_.Architecture -eq 'x64' }).Count -gt 0)
+        }
+
+        $exchangeComputerMembership = [pscustomobject]@{
+            QuerySucceeded = $false
+            MissingGroups  = @()
+            PresentGroups  = @()
+        }
+
+        $amsiProviderIds = @()
+        $amsiProviderCount = $null
+        try {
+            $amsiProvidersPath = 'HKLM:\SOFTWARE\Microsoft\AMSI\Providers'
+            if (Test-Path -Path $amsiProvidersPath) {
+                $amsiProviderIds = @(Get-ChildItem -Path $amsiProvidersPath -ErrorAction SilentlyContinue | ForEach-Object { [string]$_.PSChildName })
+                $amsiProviderCount = $amsiProviderIds.Count
+            }
+        }
+        catch {
+        }
+
+        $eemsServicePresent = $false
+        $eemsServiceStatus = $null
+        $eemsServiceStartMode = $null
+        try {
+            $eemsService = Get-Service -Name 'MSExchangeMitigation' -ErrorAction SilentlyContinue
+            if ($null -ne $eemsService) {
+                $eemsServicePresent = $true
+                $eemsServiceStatus = [string]$eemsService.Status
+                $eemsServiceCim = Get-EDCACimInstance -ClassName Win32_Service -Filter "Name='MSExchangeMitigation'"
+                if ($null -ne $eemsServiceCim -and $eemsServiceCim.PSObject.Properties.Name -contains 'StartMode') {
+                    $eemsServiceStartMode = [string]$eemsServiceCim.StartMode
+                }
+            }
+        }
+        catch {
+        }
+
+        $pendingRebootLocations = @()
+        try {
+            if (Test-Path -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending') {
+                $pendingRebootLocations += 'Component Based Servicing: RebootPending'
+            }
+        }
+        catch {
+        }
+        try {
+            if (Test-Path -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired') {
+                $pendingRebootLocations += 'Windows Update: RebootRequired'
+            }
+        }
+        catch {
+        }
+        try {
+            $sessionManager = Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager' -ErrorAction SilentlyContinue
+            if ($null -ne $sessionManager -and $sessionManager.PSObject.Properties.Name -contains 'PendingFileRenameOperations' -and $null -ne $sessionManager.PendingFileRenameOperations) {
+                $pendingRebootLocations += 'Session Manager: PendingFileRenameOperations'
+            }
+        }
+        catch {
+        }
+        $pendingReboot = ($pendingRebootLocations.Count -gt 0)
+
+        $msmqInstalledFeatures = @()
+        $msmqQuerySucceeded = $false
+        if (Get-Command -Name Get-WindowsFeature -ErrorAction SilentlyContinue) {
+            $msmqQuerySucceeded = $true
+            try {
+                foreach ($feature in @(Get-WindowsFeature -ErrorAction SilentlyContinue | Where-Object { $_.Name -in @('NET-WCF-MSMQ-Activation45', 'MSMQ') -and $_.Installed })) {
+                    $msmqInstalledFeatures += [string]$feature.Name
+                }
+            }
+            catch {
+            }
+        }
+
+        $serverType = 'Physical'
+        $manufacturerText = [string]$cs.Manufacturer
+        $modelText = [string]$cs.Model
+        if ($manufacturerText -match 'VMware' -or $modelText -match 'VMware') {
+            $serverType = 'VMware'
+        }
+        elseif ($manufacturerText -match 'Microsoft Corporation' -and $modelText -match 'Virtual') {
+            $serverType = 'HyperV'
+        }
+        elseif ($modelText -match 'Virtual') {
+            $serverType = 'Virtual'
+        }
+
+        $dynamicMemoryDetected = $null
+        $dynamicMemoryCounterName = $null
+        $dynamicMemoryCounterValueMB = $null
+        $dynamicMemoryDetails = 'Not applicable for detected server type.'
+        if ($serverType -in @('HyperV', 'VMware')) {
+            $dynamicMemoryCounterName = if ($serverType -eq 'HyperV') { '\Hyper-V Dynamic Memory Integration Service\Maximum Memory, MBytes' } else { '\VM Memory\Memory Reservation in MB' }
+            if (Get-Command -Name Get-Counter -ErrorAction SilentlyContinue) {
+                try {
+                    $counterData = Get-Counter -Counter $dynamicMemoryCounterName -ErrorAction Stop
+                    $counterSample = @($counterData.CounterSamples | Select-Object -First 1)
+                    if ($counterSample.Count -gt 0) {
+                        $dynamicMemoryCounterValueMB = [double]$counterSample[0].CookedValue
+                        $counterValueGB = ($dynamicMemoryCounterValueMB / 1024)
+                        $physicalMemoryGB = [double]($cs.TotalPhysicalMemory / 1GB)
+                        $dynamicMemoryDetected = ([math]::Abs($counterValueGB - $physicalMemoryGB) -gt 0.25)
+                        if ($dynamicMemoryDetected) {
+                            $dynamicMemoryDetails = ('Dynamic memory appears enabled. Counter reports {0} GB while physical memory is {1} GB.' -f [math]::Round($counterValueGB, 2), [math]::Round($physicalMemoryGB, 2))
+                        }
+                        else {
+                            $dynamicMemoryDetails = ('Dynamic memory not detected. Counter reports {0} GB and physical memory is {1} GB.' -f [math]::Round($counterValueGB, 2), [math]::Round($physicalMemoryGB, 2))
+                        }
+                    }
+                    else {
+                        $dynamicMemoryDetails = 'Dynamic memory counter did not return any samples.'
+                    }
+                }
+                catch {
+                    $dynamicMemoryDetails = ('Dynamic memory counter query failed: {0}' -f $_.Exception.Message)
+                }
+            }
+            else {
+                $dynamicMemoryDetails = 'Get-Counter cmdlet is unavailable.'
+            }
+        }
+
+        $exchangeInfo.RpcMinConnectionTimeout = $rpcMinConnectionTimeout
+        $exchangeInfo.TcpKeepAliveTime = $tcpKeepAliveTime
+        $exchangeInfo.NumaGroupSizeOptimization = $numaGroupSizeOptimization
+        $exchangeInfo.IPv6DisabledComponents = $ipv6DisabledComponents
+        $exchangeInfo.CtsProcessorAffinityPercentage = $ctsProcessorAffinityPercentage
+        $exchangeInfo.DisableAsyncNotification = $disableAsyncNotification
+        $exchangeInfo.DisableRootAutoUpdate = $disableRootAutoUpdate
+        $exchangeInfo.SleepyNic = $sleepyNic
+        $exchangeInfo.VisualCRedistributable = $visualCRedistributable
+        $exchangeInfo.ExchangeComputerMembership = $exchangeComputerMembership
+        $exchangeInfo.SerializedDataSigningEnabled = $serializedDataSigningEnabled
+        $exchangeInfo.Amsi = [pscustomobject]@{
+            ProviderCount             = $amsiProviderCount
+            ProviderIds               = $amsiProviderIds
+            DisabledBySettingOverride = $null
+        }
+        $exchangeInfo.Eems = [pscustomobject]@{
+            Present            = $eemsServicePresent
+            Status             = $eemsServiceStatus
+            StartMode          = $eemsServiceStartMode
+            MitigationsEnabled = $null
+        }
+
+        $coreCount = 0
+        foreach ($processor in @($cpu)) {
+            $coreCount += [int]$processor.NumberOfCores
+        }
+
+        $osInfo = [pscustomobject]@{
+            ComputerName              = $env:COMPUTERNAME
+            Domain                    = $env:USERDOMAIN
+            OSVersion                 = $os.Version
+            OSCaption                 = $os.Caption
+            LastBootUpTime            = $os.LastBootUpTime
+            SystemDrive               = $systemDrive
+            SystemVolume              = $systemVolume
+            Volumes                   = $volumeItems
+            Manufacturer              = $cs.Manufacturer
+            Model                     = $cs.Model
+            TotalPhysicalMemoryGB     = [math]::Round(($cs.TotalPhysicalMemory / 1GB), 2)
+            NumberOfCores             = $coreCount
+            NumberOfLogicalProcessors = [int]$cs.NumberOfLogicalProcessors
+            ExecutionPolicy           = [string](Get-ExecutionPolicy -Scope LocalMachine)
+            PowerPlan                 = [pscustomobject]@{
+                ActiveSchemeGuid   = $activePowerPlanGuid
+                ActiveSchemeName   = $activePowerPlanName
+                HighPerformanceSet = $highPerformanceSet
+            }
+            PageFile                  = [pscustomobject]@{
+                Count = $pageFileItems.Count
+                Items = $pageFileItems
+            }
+            NicRss                    = [pscustomobject]@{
+                AdapterCount = $rssAdapterCount
+                EnabledCount = $rssEnabledCount
+                Adapters     = $rssDetails
+            }
+            VmxNet3                   = [pscustomobject]@{
+                CommandAvailable = [bool]$vmxnet3CommandAvailable
+                AdapterCount     = @($vmxnet3Adapters).Count
+                Adapters         = $vmxnet3Adapters
+            }
+            CisPolicy                 = [pscustomobject]@{
+                Smb1Value                  = $smb1Value
+                FirewallProfiles           = $firewallProfiles
+                FirewallAllProfilesEnabled = $firewallAllProfilesEnabled
+                LlmnrEnableMulticast       = $llmnrValue
+                LmCompatibilityLevel       = $lmCompatibilityLevel
+                NtlmMinClientSec           = $ntlmMinClientSec
+                NtlmMinServerSec           = $ntlmMinServerSec
+                WdigestUseLogonCredential  = $wdigestUseLogonCredential
+                RdpNlaRequired             = $rdpNlaRequired
+                DefenderAvailable          = $defenderAvailable
+                DefenderRtpEnabled         = $defenderRealtimeProtectionEnabled
+                DefenderExclusionPaths     = $defenderExclusionPaths
+                DefenderExclusionProcesses = $defenderExclusionProcesses
+                CredentialGuardEnabled     = $credentialGuardEnabled
+                ScriptBlockLoggingEnabled  = $scriptBlockLoggingEnabled
+                TcpKeepAlive               = $tcpKeepAliveTime
+                RpcMinConnectionTimeout    = $rpcMinConnectionTimeout
+                IPv6DisabledComponents     = $ipv6DisabledComponents
+                DisableRootAutoUpdate      = $disableRootAutoUpdate
+            }
+            PendingReboot             = [pscustomobject]@{
+                Pending   = $pendingReboot
+                Locations = $pendingRebootLocations
+            }
+            MsmqFeature               = [pscustomobject]@{
+                QuerySucceeded    = $msmqQuerySucceeded
+                InstalledFeatures = $msmqInstalledFeatures
+                Installed         = ($msmqInstalledFeatures.Count -gt 0)
+            }
+            DynamicMemory             = [pscustomobject]@{
+                ServerType     = $serverType
+                IsVirtual      = ($serverType -ne 'Physical')
+                Detected       = $dynamicMemoryDetected
+                CounterName    = $dynamicMemoryCounterName
+                CounterValueMB = $dynamicMemoryCounterValueMB
+                Details        = $dynamicMemoryDetails
+            }
+            TlsHardening              = [pscustomobject]@{
+                AllowInsecureRenegoClients = $allowInsecureRenegoClients
+                AllowInsecureRenegoServers = $allowInsecureRenegoServers
+                WeakCiphers                = $weakCipherStates
+                WeakHashes                 = $weakHashStates
+                WeakKeyExchange            = $weakKeyExchangeStates
+            }
+            NetFrameworkRelease       = $netFrameworkRelease
+        }
+
+        $tlsPaths = @{
+            Tls10 = 'HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.0\Server'
+            Tls11 = 'HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.1\Server'
+            Tls12 = 'HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.2\Server'
+            Tls13 = 'HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.3\Server'
+        }
+        $tlsRaw = @{}
+        foreach ($key in $tlsPaths.Keys) {
+            $enabled = $null
+            if (Test-Path -Path $tlsPaths[$key]) {
+                $item = Get-ItemProperty -Path $tlsPaths[$key] -ErrorAction SilentlyContinue
+                $enabled = $item.Enabled
+            }
+            $tlsRaw[$key] = $enabled
+        }
+
+        $tls13CipherSuiteAvailable = $null
+        if ($null -eq $tlsRaw.Tls13 -and (Get-Command -Name Get-TlsCipherSuite -ErrorAction SilentlyContinue)) {
+            try {
+                $tls13Suites = @(Get-TlsCipherSuite -ErrorAction SilentlyContinue | Where-Object { [string]$_.Protocol -eq 'TLS 1.3' })
+                $tls13CipherSuiteAvailable = ($tls13Suites.Count -gt 0)
+            }
+            catch {
+            }
+        }
+
+        $tls13Enabled = $null
+        $tls13EvidenceSource = 'Unknown'
+        if ($null -ne $tlsRaw.Tls13) {
+            $tls13Enabled = ($tlsRaw.Tls13 -eq 1)
+            $tls13EvidenceSource = 'Registry'
+        }
+        elseif ($null -ne $tls13CipherSuiteAvailable) {
+            $tls13Enabled = [bool]$tls13CipherSuiteAvailable
+            $tls13EvidenceSource = 'CipherSuites'
+        }
+
+        $tlsInfo = [pscustomobject]@{
+            Tls10Enabled        = ($tlsRaw.Tls10 -eq 1)
+            Tls11Enabled        = ($tlsRaw.Tls11 -eq 1)
+            Tls12Enabled        = ($tlsRaw.Tls12 -eq 1)
+            Tls13Enabled        = $tls13Enabled
+            Tls13EvidenceSource = $tls13EvidenceSource
+            Raw                 = $tlsRaw
+        }
+
+        $services = @()
+        foreach ($serviceName in @('MSExchangeIS', 'MSExchangeTransport')) {
+            $service = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
+            if ($null -eq $service) {
+                $services += [pscustomobject]@{
+                    Name   = $serviceName
+                    Status = 'NotFound'
+                }
+            }
+            else {
+                $services += [pscustomobject]@{
+                    Name   = $service.Name
+                    Status = [string]$service.Status
+                }
+            }
+        }
+
+        $certificates = @()
+        foreach ($cert in @(Get-ChildItem -Path Cert:\LocalMachine\My -ErrorAction SilentlyContinue | Select-Object -Property Subject, Thumbprint, NotAfter)) {
+            $certificates += [pscustomobject]@{
+                Subject    = $cert.Subject
+                Thumbprint = $cert.Thumbprint
+                NotAfter   = $cert.NotAfter
+                IsExpired  = ($cert.NotAfter -lt (Get-Date))
+            }
+        }
+
+        $setupKey = 'HKLM:\SOFTWARE\Microsoft\ExchangeServer\v15\Setup'
+        $hasExchangeInstall = Test-Path -Path $setupKey
+        if ($hasExchangeInstall) {
+            $exchangeInfo.IsExchangeServer = $true
+        }
+        else {
+            $exchangeInfo.CollectionWarnings += 'Exchange installation not detected on target server.'
+        }
+
+        $exchangeInstallPath = $null
+        $exchangeBinPath = $null
+        if ($hasExchangeInstall) {
+            try {
+                $setupForPath = Get-ItemProperty -Path $setupKey -ErrorAction SilentlyContinue
+                $pathCandidates = @()
+
+                if ($null -ne $setupForPath) {
+                    if ($setupForPath.PSObject.Properties.Name -contains 'MsiInstallPath') {
+                        $pathCandidates += [string]$setupForPath.MsiInstallPath
+                    }
+                    if ($setupForPath.PSObject.Properties.Name -contains 'InstallPath') {
+                        $pathCandidates += [string]$setupForPath.InstallPath
+                    }
+                    if ($setupForPath.PSObject.Properties.Name -contains 'SetupBinPath') {
+                        $pathCandidates += [string]$setupForPath.SetupBinPath
+                    }
+                }
+
+                if (-not [string]::IsNullOrWhiteSpace([string]$env:ExchangeInstallPath)) {
+                    $pathCandidates += [string]$env:ExchangeInstallPath
+                }
+
+                foreach ($pathCandidate in $pathCandidates) {
+                    if ([string]::IsNullOrWhiteSpace($pathCandidate)) {
+                        continue
+                    }
+
+                    $normalizedPath = $pathCandidate.Trim().Trim('"')
+                    if (-not (Test-Path -Path $normalizedPath)) {
+                        continue
+                    }
+
+                    $leaf = [string](Split-Path -Path $normalizedPath -Leaf)
+                    if ($leaf.Equals('bin', [System.StringComparison]::OrdinalIgnoreCase)) {
+                        $exchangeBinPath = $normalizedPath
+                        $exchangeInstallPath = Split-Path -Path $normalizedPath -Parent
+                    }
+                    else {
+                        $exchangeInstallPath = $normalizedPath
+                        $candidateBinPath = Join-Path -Path $exchangeInstallPath -ChildPath 'bin'
+                        if (Test-Path -Path $candidateBinPath) {
+                            $exchangeBinPath = $candidateBinPath
+                        }
+                    }
+
+                    if (-not [string]::IsNullOrWhiteSpace($exchangeInstallPath) -and -not [string]::IsNullOrWhiteSpace($exchangeBinPath)) {
+                        break
+                    }
+                }
+            }
+            catch {
+                $exchangeInfo.CollectionWarnings += ('Exchange install path resolution failed: ' + $_.Exception.Message)
+            }
+
+            if ([string]::IsNullOrWhiteSpace($exchangeBinPath)) {
+                $exchangeInfo.CollectionWarnings += 'Exchange installation detected but bin path could not be resolved from setup registry.'
+            }
+        }
+
+        if ($hasExchangeInstall -and -not (Get-Command -Name Get-ExchangeServer -ErrorAction SilentlyContinue)) {
+            try {
+                if ($exchangeBinPath) {
+                    $exShellPsc1 = Join-Path -Path $exchangeBinPath -ChildPath 'exShell.psc1'
+                    if (Test-Path -Path $exShellPsc1) {
+                        [xml]$psSnapIns = Get-Content -Path $exShellPsc1 -ErrorAction Stop
+                        foreach ($psSnapIn in $psSnapIns.PSConsoleFile.PSSnapIns.PSSnapIn) {
+                            try {
+                                Add-PSSnapin -Name $psSnapIn.Name -ErrorAction Stop
+                            }
+                            catch {
+                                # Ignore already-loaded snap-ins.
+                            }
+                        }
+                    }
+
+                    $exchangePs1 = Join-Path -Path $exchangeBinPath -ChildPath 'Exchange.ps1'
+                    if (Test-Path -Path $exchangePs1) {
+                        Import-Module $exchangePs1 -ErrorAction SilentlyContinue
+                    }
+                }
+            }
+            catch {
+                $exchangeInfo.CollectionWarnings += ('Exchange shell bootstrap failed: ' + $_.Exception.Message)
+            }
+        }
+
+        if ($hasExchangeInstall -and -not (Get-Command -Name Get-ExchangeServer -ErrorAction SilentlyContinue)) {
+            try {
+                Add-PSSnapin -Name Microsoft.Exchange.Management.PowerShell.SnapIn -ErrorAction Stop
+            }
+            catch {
+            }
+        }
+
+        if ($hasExchangeInstall -and -not (Get-Command -Name Get-ExchangeServer -ErrorAction SilentlyContinue)) {
+            try {
+                $setup = Get-ItemProperty -Path $setupKey -ErrorAction Stop
+                $major = $null
+                $minor = $null
+                $buildMajor = $null
+                $buildMinor = $null
+
+                if ($setup.PSObject.Properties.Name -contains 'MsiProductMajor') { $major = $setup.MsiProductMajor }
+                if ($setup.PSObject.Properties.Name -contains 'MsiProductMinor') { $minor = $setup.MsiProductMinor }
+                if ($setup.PSObject.Properties.Name -contains 'MsiBuildMajor') { $buildMajor = $setup.MsiBuildMajor }
+                if ($setup.PSObject.Properties.Name -contains 'MsiBuildMinor') { $buildMinor = $setup.MsiBuildMinor }
+
+                if ($null -ne $major -and $null -ne $minor -and $null -ne $buildMajor -and $null -ne $buildMinor) {
+                    $exchangeInfo.AdminDisplayVersion = ('Version {0}.{1} (Build {2}.{3})' -f [int]$major, [int]$minor, [int]$buildMajor, [int]$buildMinor)
+                }
+
+                if ($setup.PSObject.Properties.Name -contains 'Edition') {
+                    $exchangeInfo.Edition = [string]$setup.Edition
+                }
+
+                if ($null -ne $major -and $null -ne $minor) {
+                    if ([int]$major -eq 15 -and [int]$minor -eq 1) {
+                        $exchangeInfo.ProductLine = 'Exchange2016'
+                    }
+                    elseif ([int]$major -eq 15 -and [int]$minor -eq 2) {
+                        $isSe = $false
+                        if ($setup.PSObject.Properties.Name -contains 'IsExchangeServerSubscriptionEdition') {
+                            $isSe = [bool]$setup.IsExchangeServerSubscriptionEdition
+                        }
+                        if (-not $isSe -and $null -ne $buildMajor -and [int]$buildMajor -ge 2562) {
+                            # Exchange SE builds can be identified by 15.2 build train even when explicit SE flags are unavailable.
+                            $isSe = $true
+                        }
+                        $exchangeInfo.ProductLine = if ($isSe) { 'ExchangeSE' } else { 'Exchange2019' }
+                    }
+                }
+
+                $exchangeInfo.CollectionWarnings += 'Exchange cmdlets unavailable; build metadata collected from setup registry.'
+            }
+            catch {
+                $exchangeInfo.CollectionWarnings += ('Exchange setup registry fallback failed: ' + $_.Exception.Message)
+            }
+        }
+
+        if (-not [string]::IsNullOrWhiteSpace($exchangeInstallPath)) {
+            $exchangeInfo.InstallPath = $exchangeInstallPath
+
+            $hstsSites = @()
+            try {
+                $appHostConfigPath = Join-Path -Path $env:WINDIR -ChildPath 'System32\inetsrv\config\applicationHost.config'
+                if (Test-Path -Path $appHostConfigPath) {
+                    [xml]$appHostXml = Get-Content -Path $appHostConfigPath -Raw -Encoding UTF8 -ErrorAction Stop
+                    $siteNodes = @($appHostXml.configuration.'system.applicationHost'.sites.site)
+                    $locationNodes = @($appHostXml.configuration.location)
+
+                    foreach ($siteNode in $siteNodes) {
+                        $siteName = [string]$siteNode.name
+                        if ([string]::IsNullOrWhiteSpace($siteName)) {
+                            continue
+                        }
+
+                        $nativeEnabled = $false
+                        $nativeMaxAge = $null
+                        $nativeIncludeSubDomains = $null
+                        $nativePreload = $null
+                        $nativeRedirectHttpToHttps = $null
+
+                        $nativeHstsNode = $siteNode.SelectSingleNode('hsts')
+                        if ($null -ne $nativeHstsNode -and $null -ne $nativeHstsNode.Attributes) {
+                            $enabledAttr = $nativeHstsNode.Attributes['enabled']
+                            if ($null -ne $enabledAttr) {
+                                $tmpBool = $false
+                                if ([bool]::TryParse([string]$enabledAttr.Value, [ref]$tmpBool)) {
+                                    $nativeEnabled = $tmpBool
+                                }
+                            }
+
+                            $maxAgeAttr = $nativeHstsNode.Attributes['max-age']
+                            if ($null -ne $maxAgeAttr) {
+                                $tmpInt = 0
+                                if ([int]::TryParse([string]$maxAgeAttr.Value, [ref]$tmpInt)) {
+                                    $nativeMaxAge = $tmpInt
+                                }
+                            }
+
+                            foreach ($boolAttr in @('includeSubDomains', 'preload', 'redirectHttpToHttps')) {
+                                $attrValue = $nativeHstsNode.Attributes[$boolAttr]
+                                if ($null -ne $attrValue) {
+                                    $tmpBool = $false
+                                    if ([bool]::TryParse([string]$attrValue.Value, [ref]$tmpBool)) {
+                                        switch ($boolAttr) {
+                                            'includeSubDomains' { $nativeIncludeSubDomains = $tmpBool }
+                                            'preload' { $nativePreload = $tmpBool }
+                                            'redirectHttpToHttps' { $nativeRedirectHttpToHttps = $tmpBool }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        $customHeaderValue = $null
+                        foreach ($locationNode in @($locationNodes | Where-Object { [string]$_.path -eq $siteName })) {
+                            foreach ($headerNode in @($locationNode.SelectNodes('system.webServer/httpProtocol/customHeaders/add'))) {
+                                $headerName = [string]$headerNode.GetAttribute('name')
+                                if ([string]::Equals($headerName, 'Strict-Transport-Security', [System.StringComparison]::OrdinalIgnoreCase)) {
+                                    $customHeaderValue = [string]$headerNode.GetAttribute('value')
+                                    break
+                                }
+                            }
+
+                            if (-not [string]::IsNullOrWhiteSpace($customHeaderValue)) {
+                                break
+                            }
+                        }
+
+                        $customHeaderEnabled = -not [string]::IsNullOrWhiteSpace($customHeaderValue)
+                        $customMaxAge = $null
+                        $customIncludeSubDomains = $null
+                        $customPreload = $null
+                        $customRedirectHttpToHttps = $null
+                        if ($customHeaderEnabled) {
+                            $maxAgeMatch = [regex]::Match($customHeaderValue, 'max-age\s*=\s*(\d+)', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+                            if ($maxAgeMatch.Success) {
+                                $customMaxAge = [int]$maxAgeMatch.Groups[1].Value
+                            }
+
+                            $customIncludeSubDomains = ($customHeaderValue -match '(?i)(^|;)\s*includeSubDomains(\s*;|$)')
+                            $customPreload = ($customHeaderValue -match '(?i)(^|;)\s*preload(\s*;|$)')
+                            $customRedirectHttpToHttps = ($customHeaderValue -match '(?i)redirectHttpToHttps\s*=\s*true')
+                        }
+
+                        $effectiveEnabled = ($nativeEnabled -or $customHeaderEnabled)
+                        $effectiveMaxAge = if ($null -ne $nativeMaxAge) { $nativeMaxAge } else { $customMaxAge }
+                        $effectiveIncludeSubDomains = if ($null -ne $nativeIncludeSubDomains) { $nativeIncludeSubDomains } else { $customIncludeSubDomains }
+                        $effectivePreload = if ($null -ne $nativePreload) { $nativePreload } else { $customPreload }
+                        $effectiveRedirectHttpToHttps = if ($null -ne $nativeRedirectHttpToHttps) { $nativeRedirectHttpToHttps } else { $customRedirectHttpToHttps }
+
+                        $hstsSites += [pscustomobject]@{
+                            SiteName            = $siteName
+                            NativeEnabled       = $nativeEnabled
+                            CustomHeaderEnabled = $customHeaderEnabled
+                            CustomHeaderValue   = $customHeaderValue
+                            Enabled             = $effectiveEnabled
+                            MaxAge              = $effectiveMaxAge
+                            IncludeSubDomains   = $effectiveIncludeSubDomains
+                            Preload             = $effectivePreload
+                            RedirectHttpToHttps = $effectiveRedirectHttpToHttps
+                        }
+                    }
+                }
+            }
+            catch {
+                $exchangeInfo.CollectionWarnings += ('HSTS collection failed: ' + $_.Exception.Message)
+            }
+
+            $exchangeInfo.Hsts = [pscustomobject]@{
+                SiteCount = @($hstsSites).Count
+                Sites     = $hstsSites
+            }
+
+            $iisModuleRows = @()
+            $iisModulesQuerySucceeded = $false
+            $tokenCacheModuleLoaded = $null
+            if (Get-Command -Name Get-WebGlobalModule -ErrorAction SilentlyContinue) {
+                $iisModulesQuerySucceeded = $true
+                try {
+                    $globalModules = @(Get-WebGlobalModule)
+                    $tokenCacheModuleLoaded = (@($globalModules | Where-Object {
+                                [string]::Equals([string]$_.Name, 'TokenCacheModule', [System.StringComparison]::OrdinalIgnoreCase)
+                            }).Count -gt 0)
+
+                    foreach ($globalModule in $globalModules) {
+                        $moduleName = [string]$globalModule.Name
+                        $modulePath = [System.Environment]::ExpandEnvironmentVariables([string]$globalModule.Image)
+                        $modulePathExists = (-not [string]::IsNullOrWhiteSpace($modulePath)) -and (Test-Path -Path $modulePath)
+                        $signatureStatus = $null
+                        $signatureSigner = $null
+                        $isSigned = $null
+                        $isMicrosoftSigned = $null
+
+                        if ($modulePathExists) {
+                            try {
+                                $signature = Get-AuthenticodeSignature -FilePath $modulePath -ErrorAction SilentlyContinue
+                                if ($null -ne $signature) {
+                                    $signatureStatus = [string]$signature.Status
+                                    $isSigned = ($signature.Status -ne [System.Management.Automation.SignatureStatus]::NotSigned)
+                                    $subject = $null
+                                    if ($null -ne $signature.SignerCertificate) {
+                                        $subject = [string]$signature.SignerCertificate.Subject
+                                    }
+                                    if (-not [string]::IsNullOrWhiteSpace($subject)) {
+                                        $signatureSigner = $subject
+                                    }
+                                    $isMicrosoftSigned = (-not [string]::IsNullOrWhiteSpace($subject)) -and ($subject -match 'Microsoft')
+                                }
+                            }
+                            catch {
+                            }
+                        }
+
+                        $iisModuleRows += [pscustomobject]@{
+                            Name              = $moduleName
+                            Path              = $modulePath
+                            PathExists        = $modulePathExists
+                            Signed            = $isSigned
+                            SignatureStatus   = $signatureStatus
+                            Signer            = $signatureSigner
+                            IsMicrosoftSigned = $isMicrosoftSigned
+                        }
+                    }
+                }
+                catch {
+                    $exchangeInfo.CollectionWarnings += ('IIS module collection failed: ' + $_.Exception.Message)
+                }
+            }
+
+            $unsignedModuleCount = @($iisModuleRows | Where-Object { $_.Signed -eq $false }).Count
+            $nonMicrosoftModuleCount = @($iisModuleRows | Where-Object { $_.Signed -eq $true -and $_.IsMicrosoftSigned -eq $false }).Count
+            $invalidSignatureCount = @($iisModuleRows | Where-Object { $_.Signed -eq $true -and $null -ne $_.SignatureStatus -and $_.SignatureStatus -ne 'Valid' }).Count
+
+            $exchangeInfo.IisModules = [pscustomobject]@{
+                QuerySucceeded          = $iisModulesQuerySucceeded
+                UnsignedCount           = $unsignedModuleCount
+                NonMicrosoftSignedCount = $nonMicrosoftModuleCount
+                InvalidSignatureCount   = $invalidSignatureCount
+                Modules                 = $iisModuleRows
+            }
+            $exchangeInfo.TokenCacheModuleLoaded = $tokenCacheModuleLoaded
+
+            $nodeRunnerConfigPath = Join-Path -Path $exchangeInstallPath -ChildPath 'Bin\Search\Ceres\Runtime\1.0\noderunner.exe.config'
+            $nodeRunnerPresent = Test-Path -Path $nodeRunnerConfigPath
+            $nodeRunnerConfigValid = $null
+            $nodeRunnerMemoryLimitMB = $null
+            if ($nodeRunnerPresent) {
+                try {
+                    [xml]$nodeRunnerConfigXml = Get-Content -Path $nodeRunnerConfigPath -Raw -Encoding UTF8 -ErrorAction Stop
+                    $memoryLimitRaw = $nodeRunnerConfigXml.configuration.nodeRunnerSettings.memoryLimitMegabytes
+                    if (-not [string]::IsNullOrWhiteSpace([string]$memoryLimitRaw)) {
+                        $nodeRunnerMemoryLimitMB = [int]$memoryLimitRaw
+                    }
+                    $nodeRunnerConfigValid = $true
+                }
+                catch {
+                    $nodeRunnerConfigValid = $false
+                    $exchangeInfo.CollectionWarnings += ('noderunner.exe.config parse failed: ' + $_.Exception.Message)
+                }
+            }
+            $exchangeInfo.NodeRunner = [pscustomobject]@{
+                Present       = $nodeRunnerPresent
+                ConfigValid   = $nodeRunnerConfigValid
+                MemoryLimitMB = $nodeRunnerMemoryLimitMB
+            }
+
+            $mapiFeGcConfigPath = Join-Path -Path $exchangeInstallPath -ChildPath 'Bin\MSExchangeMapiFrontEndAppPool_CLRConfig.config'
+            $mapiFeGcPresent = Test-Path -Path $mapiFeGcConfigPath
+            $mapiFeGcServerEnabled = $null
+            $mapiFeGcParseSucceeded = $null
+            $mapiFeGcDetails = 'MAPI Front End GC mode configuration file not found.'
+            if ($mapiFeGcPresent) {
+                try {
+                    $mapiFeGcRaw = Get-Content -Path $mapiFeGcConfigPath -Raw -Encoding UTF8 -ErrorAction Stop
+                    $mapiFeGcMatch = [regex]::Match($mapiFeGcRaw, '<\s*gcServer\s+enabled\s*=\s*"(true|false)"', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+                    if ($mapiFeGcMatch.Success) {
+                        $mapiFeGcServerEnabled = [bool]::Parse($mapiFeGcMatch.Groups[1].Value)
+                        $mapiFeGcParseSucceeded = $true
+                        $mapiFeGcDetails = ('GCServer enabled={0}' -f $mapiFeGcServerEnabled)
+                    }
+                    else {
+                        $mapiFeGcParseSucceeded = $false
+                        $mapiFeGcDetails = 'gcServer enabled setting not found in MAPI Front End GC mode configuration file.'
+                    }
+                }
+                catch {
+                    $mapiFeGcParseSucceeded = $false
+                    $mapiFeGcDetails = ('Failed to parse MAPI Front End GC mode configuration: {0}' -f $_.Exception.Message)
+                }
+            }
+
+            $exchangeInfo.MapiFrontEndAppPoolGcMode = [pscustomobject]@{
+                ConfigPath      = $mapiFeGcConfigPath
+                Present         = $mapiFeGcPresent
+                ParseSucceeded  = $mapiFeGcParseSucceeded
+                GcServerEnabled = $mapiFeGcServerEnabled
+                Details         = $mapiFeGcDetails
+            }
+
+            $fipFsEngineFolderPath = Join-Path -Path $exchangeInstallPath -ChildPath 'FIP-FS\Data\Engines\amd64\Microsoft\Bin'
+            $fipFsEnginePathPresent = Test-Path -Path $fipFsEngineFolderPath
+            $fipFsProblematicFolders = @()
+            if ($fipFsEnginePathPresent) {
+                try {
+                    foreach ($engineFolder in @(Get-ChildItem -Path $fipFsEngineFolderPath -Directory -ErrorAction SilentlyContinue)) {
+                        $engineVersion = 0
+                        if ([int]::TryParse([string]$engineFolder.Name, [ref]$engineVersion) -and $engineVersion -ge 2201010000) {
+                            $fipFsProblematicFolders += [string]$engineFolder.Name
+                        }
+                    }
+                }
+                catch {
+                    $exchangeInfo.CollectionWarnings += ('FIP-FS engine inspection failed: ' + $_.Exception.Message)
+                }
+            }
+            $exchangeInfo.FipFs = [pscustomobject]@{
+                EngineFolderPath       = $fipFsEngineFolderPath
+                EnginePathPresent      = $fipFsEnginePathPresent
+                ProblematicEngineCount = $fipFsProblematicFolders.Count
+                ProblematicEngineNames = $fipFsProblematicFolders
+            }
+
+            $iisConfigRelativePaths = @(
+                'FrontEnd\HttpProxy\owa\web.config',
+                'FrontEnd\HttpProxy\ecp\web.config',
+                'FrontEnd\HttpProxy\EWS\web.config',
+                'FrontEnd\HttpProxy\Autodiscover\web.config',
+                'ClientAccess\owa\web.config',
+                'ClientAccess\ecp\web.config',
+                'ClientAccess\exchWeb\EWS\web.config',
+                'ClientAccess\Autodiscover\web.config'
+            )
+            $iisMissingFiles = @()
+            $iisInvalidFiles = @()
+            foreach ($iisConfigRelativePath in $iisConfigRelativePaths) {
+                $iisConfigPath = Join-Path -Path $exchangeInstallPath -ChildPath $iisConfigRelativePath
+                if (-not (Test-Path -Path $iisConfigPath)) {
+                    $iisMissingFiles += $iisConfigPath
+                    continue
+                }
+
+                try {
+                    [xml]$null = Get-Content -Path $iisConfigPath -Raw -Encoding UTF8 -ErrorAction Stop
+                }
+                catch {
+                    $iisInvalidFiles += $iisConfigPath
+                }
+            }
+            $exchangeInfo.IisWebConfig = [pscustomobject]@{
+                CheckedCount = $iisConfigRelativePaths.Count
+                MissingCount = $iisMissingFiles.Count
+                InvalidCount = $iisInvalidFiles.Count
+                MissingFiles = $iisMissingFiles
+                InvalidFiles = $iisInvalidFiles
+            }
+
+            $unifiedContentConfigured = $null
+            $unifiedContentDetails = 'UnifiedContent cleanup validation not performed.'
+            $edgeTransportConfigPath = Join-Path -Path $exchangeInstallPath -ChildPath 'Bin\EdgeTransport.exe.config'
+            $antiMalwareConfigPath = Join-Path -Path $exchangeInstallPath -ChildPath 'Bin\Monitoring\Config\AntiMalware.xml'
+            if (-not (Test-Path -Path $edgeTransportConfigPath)) {
+                $unifiedContentConfigured = $false
+                $unifiedContentDetails = 'EdgeTransport.exe.config is missing.'
+            }
+            elseif (-not (Test-Path -Path $antiMalwareConfigPath)) {
+                $unifiedContentConfigured = $false
+                $unifiedContentDetails = 'AntiMalware.xml is missing.'
+            }
+            else {
+                try {
+                    [xml]$edgeTransportConfigXml = Get-Content -Path $edgeTransportConfigPath -Raw -Encoding UTF8 -ErrorAction Stop
+                    [xml]$antiMalwareConfigXml = Get-Content -Path $antiMalwareConfigPath -Raw -Encoding UTF8 -ErrorAction Stop
+
+                    $temporaryStoragePathSetting = ($edgeTransportConfigXml.configuration.appSettings.add | Where-Object { [string]$_.key -eq 'TemporaryStoragePath' } | Select-Object -First 1)
+                    $temporaryStoragePath = if ($null -ne $temporaryStoragePathSetting) { [string]$temporaryStoragePathSetting.value } else { '' }
+                    $cleanupFolderResponderPath = [string]$antiMalwareConfigXml.Definition.MaintenanceDefinition.ExtensionAttributes.CleanupFolderResponderFolderPaths
+
+                    if ([string]::IsNullOrWhiteSpace($temporaryStoragePath) -or [string]::IsNullOrWhiteSpace($cleanupFolderResponderPath)) {
+                        $unifiedContentConfigured = $false
+                        $unifiedContentDetails = 'TemporaryStoragePath or CleanupFolderResponderFolderPaths is empty.'
+                    }
+                    else {
+                        $expectedCleanupPath = (Join-Path -Path $temporaryStoragePath -ChildPath 'UnifiedContent')
+                        $unifiedContentConfigured = ($cleanupFolderResponderPath -like ('*{0}*' -f $expectedCleanupPath))
+                        $unifiedContentDetails = ('Expected cleanup path: {0}' -f $expectedCleanupPath)
+                    }
+                }
+                catch {
+                    $unifiedContentConfigured = $null
+                    $unifiedContentDetails = 'UnifiedContent config parsing failed.'
+                    $exchangeInfo.CollectionWarnings += ('UnifiedContent cleanup inspection failed: ' + $_.Exception.Message)
+                }
+            }
+            $exchangeInfo.UnifiedContentCleanup = [pscustomobject]@{
+                Configured = $unifiedContentConfigured
+                Details    = $unifiedContentDetails
+            }
+        }
+
+        if ($hasExchangeInstall) {
+            try {
+                $popService = Get-Service -Name MSExchangePOP3 -ErrorAction SilentlyContinue
+                if ($null -ne $popService) {
+                    $exchangeInfo.Pop3ServiceStatus = [string]$popService.Status
+                }
+            }
+            catch {
+            }
+
+            try {
+                $imapService = Get-Service -Name MSExchangeIMAP4 -ErrorAction SilentlyContinue
+                if ($null -ne $imapService) {
+                    $exchangeInfo.Imap4ServiceStatus = [string]$imapService.Status
+                }
+            }
+            catch {
+            }
+        }
+
+        if ($collectExchangeCmdlets -and (Get-Command -Name Get-ExchangeServer -ErrorAction SilentlyContinue)) {
+            $exchangeInfo.ExchangeCmdletsAvailable = $true
+            try {
+                $serverObject = Get-ExchangeServer -Identity $env:COMPUTERNAME -ErrorAction Stop
+                $exchangeInfo.IsExchangeServer = $true
+                $exchangeInfo.Name = $serverObject.Name
+                $exchangeInfo.AdminDisplayVersion = [string]$serverObject.AdminDisplayVersion
+                $exchangeInfo.Edition = [string]$serverObject.Edition
+                if ($serverObject.PSObject.Properties.Name -contains 'MemberOfDAG') {
+                    $exchangeInfo.IsDagMember = -not [string]::IsNullOrWhiteSpace([string]$serverObject.MemberOfDAG)
+                }
+
+                if ($exchangeInfo.AdminDisplayVersion -match 'Version 15\.1') {
+                    $exchangeInfo.ProductLine = 'Exchange2016'
+                }
+                elseif ($exchangeInfo.AdminDisplayVersion -match 'Version 15\.2') {
+                    $isSe = $false
+                    if ($serverObject.PSObject.Properties.Name -contains 'IsExchangeServerSubscriptionEdition') {
+                        $isSe = [bool]$serverObject.IsExchangeServerSubscriptionEdition
+                    }
+                    if (-not $isSe -and $exchangeInfo.AdminDisplayVersion -match 'Subscription|SE') {
+                        $isSe = $true
+                    }
+                    if (-not $isSe -and $exchangeInfo.AdminDisplayVersion -match 'Build\s+(\d+)\.') {
+                        if ([int]$matches[1] -ge 2562) {
+                            $isSe = $true
+                        }
+                    }
+                    $exchangeInfo.ProductLine = if ($isSe) { 'ExchangeSE' } else { 'Exchange2019' }
+                }
+            }
+            catch {
+                $exchangeInfo.CollectionWarnings += ('Get-ExchangeServer failed: ' + $_.Exception.Message)
+            }
+
+            foreach ($commandName in @('Get-MapiVirtualDirectory', 'Get-OwaVirtualDirectory', 'Get-EcpVirtualDirectory', 'Get-WebServicesVirtualDirectory', 'Get-ActiveSyncVirtualDirectory', 'Get-AutodiscoverVirtualDirectory')) {
+                if (-not (Get-Command -Name $commandName -ErrorAction SilentlyContinue)) {
+                    continue
+                }
+
+                try {
+                    $items = & $commandName -Server $env:COMPUTERNAME -ErrorAction Stop
+                    foreach ($item in $items) {
+                        $exchangeInfo.ExtendedProtectionStatus += [pscustomobject]@{
+                            VirtualDirectoryType            = $commandName
+                            Identity                        = [string]$item.Identity
+                            ExtendedProtectionTokenChecking = [string]$item.ExtendedProtectionTokenChecking
+                            ExtendedProtectionFlags         = [string]$item.ExtendedProtectionFlags
+                            ExtendedProtectionSPNList       = [string]$item.ExtendedProtectionSPNList
+                            InternalAuthenticationMethods   = if ($item.PSObject.Properties.Name -contains 'InternalAuthenticationMethods') { [string]$item.InternalAuthenticationMethods } else { '' }
+                            ExternalAuthenticationMethods   = if ($item.PSObject.Properties.Name -contains 'ExternalAuthenticationMethods') { [string]$item.ExternalAuthenticationMethods } else { '' }
+                            IISAuthenticationMethods        = if ($item.PSObject.Properties.Name -contains 'IISAuthenticationMethods') { [string]$item.IISAuthenticationMethods } else { '' }
+                        }
+                    }
+                }
+                catch {
+                    $exchangeInfo.CollectionWarnings += ('{0} failed: {1}' -f $commandName, $_.Exception.Message)
+                }
+            }
+
+            if (Get-Command -Name Get-AdminAuditLogConfig -ErrorAction SilentlyContinue) {
+                try {
+                    $audit = Get-AdminAuditLogConfig -ErrorAction Stop
+                    $exchangeInfo.AdminAuditLogEnabled = [bool]$audit.AdminAuditLogEnabled
+                }
+                catch {
+                    $exchangeInfo.CollectionWarnings += ('Get-AdminAuditLogConfig failed: ' + $_.Exception.Message)
+                }
+            }
+
+            if (Get-Command -Name Get-OrganizationConfig -ErrorAction SilentlyContinue) {
+                try {
+                    $orgConfig = Get-OrganizationConfig -ErrorAction Stop
+                    if ($orgConfig.PSObject.Properties.Name -contains 'OAuth2ClientProfileEnabled') {
+                        $exchangeInfo.OAuth2ClientProfileEnabled = [bool]$orgConfig.OAuth2ClientProfileEnabled
+                    }
+                    if ($orgConfig.PSObject.Properties.Name -contains 'MitigationsEnabled' -and $null -ne $exchangeInfo.Eems) {
+                        $exchangeInfo.Eems = [pscustomobject]@{
+                            Present            = $exchangeInfo.Eems.Present
+                            Status             = $exchangeInfo.Eems.Status
+                            StartMode          = $exchangeInfo.Eems.StartMode
+                            MitigationsEnabled = [bool]$orgConfig.MitigationsEnabled
+                        }
+                    }
+                }
+                catch {
+                    $exchangeInfo.CollectionWarnings += ('Get-OrganizationConfig failed: ' + $_.Exception.Message)
+                }
+            }
+
+            if (Get-Command -Name Get-AcceptedDomain -ErrorAction SilentlyContinue) {
+                try {
+                    $acceptedDomains = @(Get-AcceptedDomain -ErrorAction Stop)
+                    $domainSet = @{}
+                    foreach ($acceptedDomain in $acceptedDomains) {
+                        $domainValue = ''
+                        if ($acceptedDomain.PSObject.Properties.Name -contains 'DomainName' -and $null -ne $acceptedDomain.DomainName) {
+                            $domainValue = [string]$acceptedDomain.DomainName
+                        }
+                        elseif ($acceptedDomain.PSObject.Properties.Name -contains 'Name') {
+                            $domainValue = [string]$acceptedDomain.Name
+                        }
+
+                        if ([string]::IsNullOrWhiteSpace($domainValue)) {
+                            continue
+                        }
+
+                        $normalizedDomain = $domainValue.Trim().TrimEnd('.').ToLowerInvariant()
+                        if ([string]::IsNullOrWhiteSpace($normalizedDomain)) {
+                            continue
+                        }
+
+                        if (-not $domainSet.ContainsKey($normalizedDomain)) {
+                            $domainSet[$normalizedDomain] = $true
+                            $exchangeInfo.AcceptedDomains += $normalizedDomain
+                        }
+                    }
+                }
+                catch {
+                    $exchangeInfo.CollectionWarnings += ('Get-AcceptedDomain failed: ' + $_.Exception.Message)
+                }
+            }
+
+            if (Get-Command -Name Get-MapiVirtualDirectory -ErrorAction SilentlyContinue) {
+                try {
+                    $mapiVirtualDirectories = @(Get-MapiVirtualDirectory -Server $env:COMPUTERNAME -ErrorAction Stop)
+                    if ($mapiVirtualDirectories.Count -gt 0) {
+                        $enabledCount = @($mapiVirtualDirectories | Where-Object { $null -ne $_.IISAuthenticationMethods }).Count
+                        $exchangeInfo.MapiHttpEnabled = ($enabledCount -gt 0)
+                    }
+                }
+                catch {
+                    $exchangeInfo.CollectionWarnings += ('Get-MapiVirtualDirectory (MAPI/HTTP) failed: ' + $_.Exception.Message)
+                }
+            }
+
+            if (Get-Command -Name Get-ReceiveConnector -ErrorAction SilentlyContinue) {
+                try {
+                    $connectors = @(Get-ReceiveConnector -Server $env:COMPUTERNAME -ErrorAction Stop)
+                    foreach ($connector in $connectors) {
+                        $exchangeInfo.ReceiveConnectors += [pscustomobject]@{
+                            Identity             = [string]$connector.Identity
+                            PermissionGroups     = [string]$connector.PermissionGroups
+                            AuthMechanism        = [string]$connector.AuthMechanism
+                            RemoteIPRangesCount  = @($connector.RemoteIPRanges).Count
+                            ProtocolLoggingLevel = if ($connector.PSObject.Properties.Name -contains 'ProtocolLoggingLevel') { [string]$connector.ProtocolLoggingLevel } else { $null }
+                            MaxMessageSize       = if ($connector.PSObject.Properties.Name -contains 'MaxMessageSize' -and $null -ne $connector.MaxMessageSize) { [string]$connector.MaxMessageSize } else { $null }
+                        }
+                    }
+                }
+                catch {
+                    $exchangeInfo.CollectionWarnings += ('Get-ReceiveConnector failed: ' + $_.Exception.Message)
+                }
+            }
+
+            if (Get-Command -Name Get-OwaVirtualDirectory -ErrorAction SilentlyContinue) {
+                try {
+                    $owas = @(Get-OwaVirtualDirectory -Server $env:COMPUTERNAME -ErrorAction Stop)
+                    if ($owas.Count -gt 0) {
+                        $withDownloadDomains = @($owas | Where-Object {
+                                $_.PSObject.Properties.Name -contains 'DownloadDomains' -and
+                                -not [string]::IsNullOrWhiteSpace([string]$_.DownloadDomains)
+                            }).Count
+                        $exchangeInfo.OwaDownloadDomainsConfigured = ($withDownloadDomains -gt 0)
+                        $withSmime = @($owas | Where-Object {
+                                $_.PSObject.Properties.Name -contains 'SMIMEEnabled' -and [bool]$_.SMIMEEnabled
+                            }).Count
+                        $exchangeInfo.OwaSmimeEnabled = ($withSmime -gt 0)
+                    }
+                }
+                catch {
+                    $exchangeInfo.CollectionWarnings += ('Get-OwaVirtualDirectory (Download Domains) failed: ' + $_.Exception.Message)
+                }
+            }
+
+            if (Get-Command -Name Get-RpcClientAccess -ErrorAction SilentlyContinue) {
+                try {
+                    $rpcAccess = Get-RpcClientAccess -Server $env:COMPUTERNAME -ErrorAction Stop
+                    if ($null -ne $rpcAccess) {
+                        $exchangeInfo.RpcClientAccessConfig = [pscustomobject]@{
+                            EncryptionRequired = if ($rpcAccess.PSObject.Properties.Name -contains 'EncryptionRequired') { [bool]$rpcAccess.EncryptionRequired } else { $null }
+                        }
+                    }
+                }
+                catch {
+                    $exchangeInfo.CollectionWarnings += ('Get-RpcClientAccess failed: ' + $_.Exception.Message)
+                }
+            }
+
+            if (Get-Command -Name Get-Mailbox -ErrorAction SilentlyContinue) {
+                try {
+                    $mailboxes = @(Get-Mailbox -ResultSize Unlimited -ErrorAction Stop)
+                    $mismatchedUpn = @($mailboxes | Where-Object {
+                            -not [string]::IsNullOrWhiteSpace([string]$_.UserPrincipalName) -and
+                            -not [string]::IsNullOrWhiteSpace([string]$_.WindowsEmailAddress) -and
+                            -not [string]::Equals([string]$_.UserPrincipalName, [string]$_.WindowsEmailAddress, [System.StringComparison]::OrdinalIgnoreCase)
+                        })
+                    $exchangeInfo.UpnPrimarySmtpMismatchCount = $mismatchedUpn.Count
+
+                    $sharedLikeNames = @($mailboxes | Where-Object {
+                            $_.RecipientTypeDetails -eq 'UserMailbox' -and
+                            ([string]$_.DisplayName -match '(shared|team|group|department|afdeling|gedeeld)')
+                        })
+                    $exchangeInfo.SharedMailboxTypeMismatchCount = $sharedLikeNames.Count
+                }
+                catch {
+                    $exchangeInfo.CollectionWarnings += ('Get-Mailbox baseline checks failed: ' + $_.Exception.Message)
+                }
+            }
+
+            if (Get-Command -Name Get-MailboxDatabase -ErrorAction SilentlyContinue) {
+                try {
+                    $mailboxDatabases = @(Get-MailboxDatabase -Server $env:COMPUTERNAME -ErrorAction Stop)
+                    $storagePathSet = @{}
+                    foreach ($mailboxDatabase in $mailboxDatabases) {
+                        $candidatePaths = @()
+                        if ($mailboxDatabase.PSObject.Properties.Name -contains 'EdbFilePath' -and $null -ne $mailboxDatabase.EdbFilePath) {
+                            $candidatePaths += [string]$mailboxDatabase.EdbFilePath
+                        }
+                        if ($mailboxDatabase.PSObject.Properties.Name -contains 'LogFolderPath' -and $null -ne $mailboxDatabase.LogFolderPath) {
+                            $candidatePaths += [string]$mailboxDatabase.LogFolderPath
+                        }
+
+                        foreach ($candidatePath in $candidatePaths) {
+                            if ([string]::IsNullOrWhiteSpace($candidatePath)) {
+                                continue
+                            }
+
+                            $normalizedPath = $candidatePath.Trim()
+                            if (-not $storagePathSet.ContainsKey($normalizedPath)) {
+                                $storagePathSet[$normalizedPath] = $true
+                                $exchangeInfo.DatabaseStoragePaths += $normalizedPath
+                            }
+                        }
+
+                        $itemRetentionDays = $null
+                        if ($mailboxDatabase.PSObject.Properties.Name -contains 'DeletedItemRetention' -and $null -ne $mailboxDatabase.DeletedItemRetention) {
+                            try { $itemRetentionDays = [int]([timespan]$mailboxDatabase.DeletedItemRetention).TotalDays } catch {}
+                        }
+                        $mailboxRetentionDays = $null
+                        if ($mailboxDatabase.PSObject.Properties.Name -contains 'MailboxRetention' -and $null -ne $mailboxDatabase.MailboxRetention) {
+                            try { $mailboxRetentionDays = [int]([timespan]$mailboxDatabase.MailboxRetention).TotalDays } catch {}
+                        }
+                        $backupRestore = if ($mailboxDatabase.PSObject.Properties.Name -contains 'BackupRestore') { [bool]$mailboxDatabase.BackupRestore } else { $null }
+                        $issueWarnQuotaIsUnlimited = $true
+                        $issueWarnQuotaBytes = $null
+                        if ($mailboxDatabase.PSObject.Properties.Name -contains 'IssueWarningQuota' -and $null -ne $mailboxDatabase.IssueWarningQuota) {
+                            $iqStr = [string]$mailboxDatabase.IssueWarningQuota
+                            if ($iqStr -ne 'Unlimited') {
+                                $issueWarnQuotaIsUnlimited = $false
+                                $iqMatch = [regex]::Match($iqStr, '\(([\d,]+)\s*bytes\)')
+                                if ($iqMatch.Success) { try { $issueWarnQuotaBytes = [long]($iqMatch.Groups[1].Value -replace ',', '') } catch {} }
+                            }
+                        }
+                        $prohibitSendQuotaIsUnlimited = $true
+                        $prohibitSendQuotaBytes = $null
+                        if ($mailboxDatabase.PSObject.Properties.Name -contains 'ProhibitSendQuota' -and $null -ne $mailboxDatabase.ProhibitSendQuota) {
+                            $psqStr = [string]$mailboxDatabase.ProhibitSendQuota
+                            if ($psqStr -ne 'Unlimited') {
+                                $prohibitSendQuotaIsUnlimited = $false
+                                $psqMatch = [regex]::Match($psqStr, '\(([\d,]+)\s*bytes\)')
+                                if ($psqMatch.Success) { try { $prohibitSendQuotaBytes = [long]($psqMatch.Groups[1].Value -replace ',', '') } catch {} }
+                            }
+                        }
+                        $prohibitSendReceiveQuotaIsUnlimited = $true
+                        $prohibitSendReceiveQuotaBytes = $null
+                        if ($mailboxDatabase.PSObject.Properties.Name -contains 'ProhibitSendReceiveQuota' -and $null -ne $mailboxDatabase.ProhibitSendReceiveQuota) {
+                            $psrqStr = [string]$mailboxDatabase.ProhibitSendReceiveQuota
+                            if ($psrqStr -ne 'Unlimited') {
+                                $prohibitSendReceiveQuotaIsUnlimited = $false
+                                $psrqMatch = [regex]::Match($psrqStr, '\(([\d,]+)\s*bytes\)')
+                                if ($psrqMatch.Success) { try { $prohibitSendReceiveQuotaBytes = [long]($psrqMatch.Groups[1].Value -replace ',', '') } catch {} }
+                            }
+                        }
+                        $exchangeInfo.MailboxDatabases += [pscustomobject]@{
+                            Name                                = [string]$mailboxDatabase.Name
+                            ItemRetentionDays                   = $itemRetentionDays
+                            MailboxRetentionDays                = $mailboxRetentionDays
+                            BackupRestore                       = $backupRestore
+                            IssueWarningQuotaIsUnlimited        = $issueWarnQuotaIsUnlimited
+                            IssueWarningQuotaBytes              = $issueWarnQuotaBytes
+                            ProhibitSendQuotaIsUnlimited        = $prohibitSendQuotaIsUnlimited
+                            ProhibitSendQuotaBytes              = $prohibitSendQuotaBytes
+                            ProhibitSendReceiveQuotaIsUnlimited = $prohibitSendReceiveQuotaIsUnlimited
+                            ProhibitSendReceiveQuotaBytes       = $prohibitSendReceiveQuotaBytes
+                        }
+                    }
+                }
+                catch {
+                    $exchangeInfo.CollectionWarnings += ('Get-MailboxDatabase storage path checks failed: ' + $_.Exception.Message)
+                }
+            }
+
+            if ((Get-Command -Name Get-ClientAccessService -ErrorAction SilentlyContinue) -or (Get-Command -Name Get-ClientAccessServer -ErrorAction SilentlyContinue)) {
+                try {
+                    $clientAccessService = $null
+                    $asaSourceCommand = $null
+
+                    if (Get-Command -Name Get-ClientAccessService -ErrorAction SilentlyContinue) {
+                        $asaSourceCommand = 'Get-ClientAccessService'
+                        $clientAccessService = Get-ClientAccessService -Identity $env:COMPUTERNAME -ErrorAction Stop
+                    }
+                    else {
+                        $asaSourceCommand = 'Get-ClientAccessServer'
+                        $clientAccessService = Get-ClientAccessServer -Identity $env:COMPUTERNAME -IncludeAlternateServiceAccountCredentialStatus -ErrorAction Stop
+                    }
+
+                    $asaConfiguration = $null
+                    if ($null -ne $clientAccessService -and ($clientAccessService.PSObject.Properties.Name -contains 'AlternateServiceAccountConfiguration')) {
+                        $asaConfiguration = $clientAccessService.AlternateServiceAccountConfiguration
+                    }
+
+                    $effectiveCredentials = @()
+                    $latestCredential = $null
+                    $previousCredential = $null
+                    $asaConfigurationText = if ($null -eq $asaConfiguration) { '' } else { [string]$asaConfiguration }
+
+                    if ($null -ne $asaConfiguration -and ($asaConfiguration.PSObject.Properties.Name -contains 'EffectiveCredentials') -and $null -ne $asaConfiguration.EffectiveCredentials) {
+                        $effectiveCredentials = @($asaConfiguration.EffectiveCredentials | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | Sort-Object -Unique)
+                    }
+
+                    if ($null -ne $asaConfiguration -and ($asaConfiguration.PSObject.Properties.Name -contains 'Latest') -and $null -ne $asaConfiguration.Latest) {
+                        $latestCredential = [string]$asaConfiguration.Latest
+                    }
+
+                    if ($null -ne $asaConfiguration -and ($asaConfiguration.PSObject.Properties.Name -contains 'Previous') -and $null -ne $asaConfiguration.Previous) {
+                        $previousCredential = [string]$asaConfiguration.Previous
+                    }
+
+                    if ($effectiveCredentials.Count -eq 0 -and -not [string]::IsNullOrWhiteSpace($asaConfigurationText)) {
+                        $credentialMatches = [regex]::Matches($asaConfigurationText, '(?im)\b[0-9a-zA-Z\.\-_]+\\[0-9a-zA-Z\.\-_\$]+\b')
+                        foreach ($credentialMatch in $credentialMatches) {
+                            $credentialValue = [string]$credentialMatch.Value
+                            if (-not [string]::IsNullOrWhiteSpace($credentialValue) -and ($effectiveCredentials -notcontains $credentialValue)) {
+                                $effectiveCredentials += $credentialValue
+                            }
+                        }
+                    }
+
+                    if ([string]::IsNullOrWhiteSpace($latestCredential) -and -not [string]::IsNullOrWhiteSpace($asaConfigurationText)) {
+                        $latestMatch = [regex]::Match($asaConfigurationText, '(?im)Latest\s*:\s*[^,]+,\s*([0-9a-zA-Z\.\-_]+\\[0-9a-zA-Z\.\-_\$]+)')
+                        if ($latestMatch.Success) {
+                            $latestCredential = [string]$latestMatch.Groups[1].Value
+                        }
+                    }
+
+                    if ([string]::IsNullOrWhiteSpace($previousCredential) -and -not [string]::IsNullOrWhiteSpace($asaConfigurationText)) {
+                        $previousMatch = [regex]::Match($asaConfigurationText, '(?im)Previous\s*:\s*[^,]+,\s*([0-9a-zA-Z\.\-_]+\\[0-9a-zA-Z\.\-_\$]+)')
+                        if ($previousMatch.Success) {
+                            $previousCredential = [string]$previousMatch.Groups[1].Value
+                        }
+                    }
+
+                    $configured = $false
+                    if ($effectiveCredentials.Count -gt 0) {
+                        $configured = $true
+                    }
+                    elseif (-not [string]::IsNullOrWhiteSpace($latestCredential) -or -not [string]::IsNullOrWhiteSpace($previousCredential)) {
+                        $configured = $true
+                    }
+                    elseif (-not [string]::IsNullOrWhiteSpace($asaConfigurationText) -and $asaConfigurationText -match '(?i)latest\s*:') {
+                        $configured = $true
+                    }
+
+                    $exchangeInfo.AlternateServiceAccount = [pscustomobject]@{
+                        QuerySucceeded     = $true
+                        SourceCommand      = $asaSourceCommand
+                        Configured         = $configured
+                        CredentialCount    = @($effectiveCredentials).Count
+                        Credentials        = @($effectiveCredentials | Sort-Object -Unique)
+                        LatestCredential   = $latestCredential
+                        PreviousCredential = $previousCredential
+                        RawConfiguration   = $asaConfigurationText
+                    }
+                }
+                catch {
+                    $exchangeInfo.CollectionWarnings += ('Get-ClientAccessService/Get-ClientAccessServer (ASA) failed: ' + $_.Exception.Message)
+                    $exchangeInfo.AlternateServiceAccount = [pscustomobject]@{
+                        QuerySucceeded     = $false
+                        SourceCommand      = 'Get-ClientAccessService/Get-ClientAccessServer'
+                        Configured         = $null
+                        CredentialCount    = 0
+                        Credentials        = @()
+                        LatestCredential   = $null
+                        PreviousCredential = $null
+                        RawConfiguration   = $null
+                    }
+                }
+            }
+
+            if (Get-Command -Name Test-ReplicationHealth -ErrorAction SilentlyContinue) {
+                try {
+                    $replication = Test-ReplicationHealth -Identity $env:COMPUTERNAME -ErrorAction Stop
+                    $failed = $replication | Where-Object { $_.Result -ne 'Passed' }
+                    $exchangeInfo.ReplicationHealthPassed = ($failed.Count -eq 0)
+                }
+                catch {
+                    $exchangeInfo.CollectionWarnings += ('Test-ReplicationHealth failed: ' + $_.Exception.Message)
+                }
+            }
+        }
+
+        $inventory = [pscustomobject]@{
+            Server       = $env:COMPUTERNAME
+            OS           = $osInfo
+            Tls          = $tlsInfo
+            Services     = $services
+            Certificates = $certificates
+            Exchange     = $exchangeInfo
+        }
+
+        return ($inventory | ConvertTo-Json -Depth 12 -Compress)
+    }
+
+    $invokeTarget = $Server
+
+    Write-Verbose ('Executing unified collection script block on {0} via Invoke-Command -ComputerName.' -f $invokeTarget)
+    $rawInventoryJson = Invoke-Command -ComputerName $invokeTarget -ScriptBlock $collectionScriptBlock -ArgumentList $false -ErrorAction Stop
+
+    $inventory = $rawInventoryJson | ConvertFrom-Json
+    if ($inventory.PSObject.Properties.Name -contains 'Server') {
+        $inventory.Server = $Server
+    }
+
+    if (($inventory.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $inventory.Exchange -and ($inventory.Exchange.PSObject.Properties.Name -contains 'ExchangeComputerMembership')) {
+        $computerCn = $Server -replace '\..*$', ''
+        try {
+            $searcher = New-Object System.DirectoryServices.DirectorySearcher
+            $searcher.Filter = ('(&(objectCategory=computer)(objectClass=computer)(cn={0}))' -f $computerCn)
+            $searcher.PageSize = 1
+            [void]$searcher.PropertiesToLoad.Add('memberOf')
+            $computerResult = $searcher.FindOne()
+
+            if ($null -ne $computerResult) {
+                $memberGroupNames = @()
+                foreach ($groupDn in @($computerResult.Properties['memberOf'])) {
+                    $groupDnText = [string]$groupDn
+                    if ($groupDnText -match '^CN=([^,]+)') {
+                        $memberGroupNames += $Matches[1]
+                    }
+                }
+
+                $requiredGroups = @('Exchange Trusted Subsystem', 'Exchange Servers')
+                $presentGroups = @()
+                $missingGroups = @()
+                foreach ($requiredGroup in $requiredGroups) {
+                    if (@($memberGroupNames | Where-Object { [string]::Equals([string]$_, $requiredGroup, [System.StringComparison]::OrdinalIgnoreCase) }).Count -gt 0) {
+                        $presentGroups += $requiredGroup
+                    }
+                    else {
+                        $missingGroups += $requiredGroup
+                    }
+                }
+
+                $inventory.Exchange.ExchangeComputerMembership = [pscustomobject]@{
+                    QuerySucceeded = $true
+                    MissingGroups  = $missingGroups
+                    PresentGroups  = $presentGroups
+                }
+            }
+        }
+        catch {
+        }
+    }
+
+    if (($inventory.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $inventory.Exchange -and ($inventory.Exchange.PSObject.Properties.Name -contains 'IsExchangeServer') -and [bool]$inventory.Exchange.IsExchangeServer) {
+        Write-Verbose ('Collecting Exchange cmdlet data for {0} via Exchange endpoint (ConnectionUri/Kerberos).' -f $invokeTarget)
+        $exchEndpointWarnings = @()
+        $cmdletsAvailable = $false
+
+        try {
+            $sb = [scriptblock]::Create("Get-ExchangeServer -Identity '$invokeTarget'")
+            $remoteServer = Invoke-EDCAExchangeEndpointCommand -Server $invokeTarget -ScriptBlock $sb
+            if ($null -ne $remoteServer) {
+                $cmdletsAvailable = $true
+                $inventory.Exchange.ExchangeCmdletsAvailable = $true
+                $inventory.Exchange.IsExchangeServer = $true
+                if ($remoteServer.PSObject.Properties.Name -contains 'Name') {
+                    $inventory.Exchange.Name = [string]$remoteServer.Name
+                }
+                if ($remoteServer.PSObject.Properties.Name -contains 'AdminDisplayVersion') {
+                    $inventory.Exchange.AdminDisplayVersion = [string]$remoteServer.AdminDisplayVersion
+                }
+                if ($remoteServer.PSObject.Properties.Name -contains 'Edition') {
+                    $inventory.Exchange.Edition = [string]$remoteServer.Edition
+                }
+                if ($remoteServer.PSObject.Properties.Name -contains 'MemberOfDAG') {
+                    $inventory.Exchange.IsDagMember = -not [string]::IsNullOrWhiteSpace([string]$remoteServer.MemberOfDAG)
+                }
+                $adv = [string]$inventory.Exchange.AdminDisplayVersion
+                if ($adv -match 'Version 15\.1') {
+                    $inventory.Exchange.ProductLine = 'Exchange2016'
+                }
+                elseif ($adv -match 'Version 15\.2') {
+                    $isSe = $false
+                    if ($remoteServer.PSObject.Properties.Name -contains 'IsExchangeServerSubscriptionEdition') {
+                        $isSe = [bool]$remoteServer.IsExchangeServerSubscriptionEdition
+                    }
+                    if (-not $isSe -and $adv -match 'Subscription|SE') { $isSe = $true }
+                    if (-not $isSe -and $adv -match 'Build\s+(\d+)\.') {
+                        if ([int]$matches[1] -ge 2562) { $isSe = $true }
+                    }
+                    $inventory.Exchange.ProductLine = if ($isSe) { 'ExchangeSE' } else { 'Exchange2019' }
+                }
+            }
+        }
+        catch {
+            $exchEndpointWarnings += ('Get-ExchangeServer via endpoint failed: ' + $_.Exception.Message)
+        }
+
+        if ($cmdletsAvailable) {
+            $virtualDirResults = @{}
+            foreach ($vdirCmd in @('Get-MapiVirtualDirectory', 'Get-OwaVirtualDirectory', 'Get-EcpVirtualDirectory', 'Get-WebServicesVirtualDirectory', 'Get-ActiveSyncVirtualDirectory', 'Get-AutodiscoverVirtualDirectory')) {
+                try {
+                    $sb = [scriptblock]::Create("$vdirCmd -Server '$invokeTarget'")
+                    $vdirs = @(Invoke-EDCAExchangeEndpointCommand -Server $invokeTarget -ScriptBlock $sb)
+                    $virtualDirResults[$vdirCmd] = $vdirs
+                    foreach ($vdir in $vdirs) {
+                        $inventory.Exchange.ExtendedProtectionStatus = @($inventory.Exchange.ExtendedProtectionStatus) + @([pscustomobject]@{
+                                VirtualDirectoryType            = $vdirCmd
+                                Identity                        = [string]$vdir.Identity
+                                ExtendedProtectionTokenChecking = if ($vdir.PSObject.Properties.Name -contains 'ExtendedProtectionTokenChecking') { [string]$vdir.ExtendedProtectionTokenChecking } else { '' }
+                                ExtendedProtectionFlags         = if ($vdir.PSObject.Properties.Name -contains 'ExtendedProtectionFlags') { [string]$vdir.ExtendedProtectionFlags } else { '' }
+                                ExtendedProtectionSPNList       = if ($vdir.PSObject.Properties.Name -contains 'ExtendedProtectionSPNList') { [string]$vdir.ExtendedProtectionSPNList } else { '' }
+                                InternalAuthenticationMethods   = if ($vdir.PSObject.Properties.Name -contains 'InternalAuthenticationMethods') { [string]$vdir.InternalAuthenticationMethods } else { '' }
+                                ExternalAuthenticationMethods   = if ($vdir.PSObject.Properties.Name -contains 'ExternalAuthenticationMethods') { [string]$vdir.ExternalAuthenticationMethods } else { '' }
+                                IISAuthenticationMethods        = if ($vdir.PSObject.Properties.Name -contains 'IISAuthenticationMethods') { [string]$vdir.IISAuthenticationMethods } else { '' }
+                            })
+                    }
+                }
+                catch {
+                    $exchEndpointWarnings += ('{0} via endpoint failed: {1}' -f $vdirCmd, $_.Exception.Message)
+                }
+            }
+
+            if ($virtualDirResults.ContainsKey('Get-MapiVirtualDirectory') -and $virtualDirResults['Get-MapiVirtualDirectory'].Count -gt 0) {
+                $enabledCount = @($virtualDirResults['Get-MapiVirtualDirectory'] | Where-Object { $null -ne $_.IISAuthenticationMethods }).Count
+                $inventory.Exchange.MapiHttpEnabled = ($enabledCount -gt 0)
+            }
+
+            if ($virtualDirResults.ContainsKey('Get-OwaVirtualDirectory') -and $virtualDirResults['Get-OwaVirtualDirectory'].Count -gt 0) {
+                $withDL = @($virtualDirResults['Get-OwaVirtualDirectory'] | Where-Object {
+                        $_.PSObject.Properties.Name -contains 'DownloadDomains' -and
+                        -not [string]::IsNullOrWhiteSpace([string]$_.DownloadDomains)
+                    }).Count
+                $inventory.Exchange.OwaDownloadDomainsConfigured = ($withDL -gt 0)
+                $withSmimeEP = @($virtualDirResults['Get-OwaVirtualDirectory'] | Where-Object {
+                        $_.PSObject.Properties.Name -contains 'SMIMEEnabled' -and [bool]$_.SMIMEEnabled
+                    }).Count
+                $inventory.Exchange.OwaSmimeEnabled = ($withSmimeEP -gt 0)
+            }
+
+            try {
+                $sbRpc = [scriptblock]::Create("Get-RpcClientAccess -Server '$invokeTarget'")
+                $rpcAccess = Invoke-EDCAExchangeEndpointCommand -Server $invokeTarget -ScriptBlock $sbRpc
+                if ($null -ne $rpcAccess) {
+                    $inventory.Exchange.RpcClientAccessConfig = [pscustomobject]@{
+                        EncryptionRequired = if ($rpcAccess.PSObject.Properties.Name -contains 'EncryptionRequired') { [bool]$rpcAccess.EncryptionRequired } else { $null }
+                    }
+                }
+            }
+            catch {
+                $exchEndpointWarnings += ('Get-RpcClientAccess via endpoint failed: ' + $_.Exception.Message)
+            }
+
+            try {
+                $asaSourceCommand = $null
+                $clientAccessService = $null
+
+                $sbCas = [scriptblock]::Create("Get-ClientAccessService -Identity '$invokeTarget' -ErrorAction Stop")
+                try {
+                    $clientAccessService = Invoke-EDCAExchangeEndpointCommand -Server $invokeTarget -ScriptBlock $sbCas
+                    $asaSourceCommand = 'Get-ClientAccessService'
+                }
+                catch {
+                    if ($_.Exception.Message -notmatch 'CommandNotFoundException|is not recognized|not recognized as the name') {
+                        throw
+                    }
+                    $sbCaLegacy = [scriptblock]::Create("Get-ClientAccessServer -Identity '$invokeTarget' -IncludeAlternateServiceAccountCredentialStatus -ErrorAction Stop")
+                    $clientAccessService = Invoke-EDCAExchangeEndpointCommand -Server $invokeTarget -ScriptBlock $sbCaLegacy
+                    $asaSourceCommand = 'Get-ClientAccessServer'
+                }
+
+                if ([string]::IsNullOrWhiteSpace($asaSourceCommand) -or $null -eq $clientAccessService) {
+                    $inventory.Exchange.AlternateServiceAccount = [pscustomobject]@{
+                        QuerySucceeded     = $false
+                        SourceCommand      = 'Get-ClientAccessService/Get-ClientAccessServer'
+                        Configured         = $null
+                        CredentialCount    = 0
+                        Credentials        = @()
+                        LatestCredential   = $null
+                        PreviousCredential = $null
+                        RawConfiguration   = $null
+                    }
+                }
+                else {
+                    $asaConfiguration = $null
+                    if ($clientAccessService.PSObject.Properties.Name -contains 'AlternateServiceAccountConfiguration') {
+                        $asaConfiguration = $clientAccessService.AlternateServiceAccountConfiguration
+                    }
+
+                    $effectiveCredentials = @()
+                    $latestCredential = $null
+                    $previousCredential = $null
+                    $asaConfigurationText = if ($null -eq $asaConfiguration) { '' } else { [string]$asaConfiguration }
+
+                    if ($null -ne $asaConfiguration -and ($asaConfiguration.PSObject.Properties.Name -contains 'EffectiveCredentials') -and $null -ne $asaConfiguration.EffectiveCredentials) {
+                        $effectiveCredentials = @($asaConfiguration.EffectiveCredentials | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | Sort-Object -Unique)
+                    }
+
+                    if ($null -ne $asaConfiguration -and ($asaConfiguration.PSObject.Properties.Name -contains 'Latest') -and $null -ne $asaConfiguration.Latest) {
+                        $latestCredential = [string]$asaConfiguration.Latest
+                    }
+
+                    if ($null -ne $asaConfiguration -and ($asaConfiguration.PSObject.Properties.Name -contains 'Previous') -and $null -ne $asaConfiguration.Previous) {
+                        $previousCredential = [string]$asaConfiguration.Previous
+                    }
+
+                    if ($effectiveCredentials.Count -eq 0 -and -not [string]::IsNullOrWhiteSpace($asaConfigurationText)) {
+                        $credentialMatches = [regex]::Matches($asaConfigurationText, '(?im)\b[0-9a-zA-Z\.\-_]+\\[0-9a-zA-Z\.\-_\$]+\b')
+                        foreach ($credentialMatch in $credentialMatches) {
+                            $credentialValue = [string]$credentialMatch.Value
+                            if (-not [string]::IsNullOrWhiteSpace($credentialValue) -and ($effectiveCredentials -notcontains $credentialValue)) {
+                                $effectiveCredentials += $credentialValue
+                            }
+                        }
+                    }
+
+                    if ([string]::IsNullOrWhiteSpace($latestCredential) -and -not [string]::IsNullOrWhiteSpace($asaConfigurationText)) {
+                        $latestMatch = [regex]::Match($asaConfigurationText, '(?im)Latest\s*:\s*[^,]+,\s*([0-9a-zA-Z\.\-_]+\\[0-9a-zA-Z\.\-_\$]+)')
+                        if ($latestMatch.Success) {
+                            $latestCredential = [string]$latestMatch.Groups[1].Value
+                        }
+                    }
+
+                    if ([string]::IsNullOrWhiteSpace($previousCredential) -and -not [string]::IsNullOrWhiteSpace($asaConfigurationText)) {
+                        $previousMatch = [regex]::Match($asaConfigurationText, '(?im)Previous\s*:\s*[^,]+,\s*([0-9a-zA-Z\.\-_]+\\[0-9a-zA-Z\.\-_\$]+)')
+                        if ($previousMatch.Success) {
+                            $previousCredential = [string]$previousMatch.Groups[1].Value
+                        }
+                    }
+
+                    $configured = $false
+                    if ($effectiveCredentials.Count -gt 0) {
+                        $configured = $true
+                    }
+                    elseif (-not [string]::IsNullOrWhiteSpace($latestCredential) -or -not [string]::IsNullOrWhiteSpace($previousCredential)) {
+                        $configured = $true
+                    }
+                    elseif (-not [string]::IsNullOrWhiteSpace($asaConfigurationText) -and $asaConfigurationText -match '(?i)latest\s*:') {
+                        $configured = $true
+                    }
+
+                    $inventory.Exchange.AlternateServiceAccount = [pscustomobject]@{
+                        QuerySucceeded     = $true
+                        SourceCommand      = $asaSourceCommand
+                        Configured         = $configured
+                        CredentialCount    = @($effectiveCredentials).Count
+                        Credentials        = @($effectiveCredentials | Sort-Object -Unique)
+                        LatestCredential   = $latestCredential
+                        PreviousCredential = $previousCredential
+                        RawConfiguration   = $asaConfigurationText
+                    }
+                }
+            }
+            catch {
+                $exchEndpointWarnings += ('Get-ClientAccessService/Get-ClientAccessServer (ASA) via endpoint failed: ' + $_.Exception.Message)
+                $inventory.Exchange.AlternateServiceAccount = [pscustomobject]@{
+                    QuerySucceeded     = $false
+                    SourceCommand      = 'Get-ClientAccessService/Get-ClientAccessServer'
+                    Configured         = $null
+                    CredentialCount    = 0
+                    Credentials        = @()
+                    LatestCredential   = $null
+                    PreviousCredential = $null
+                    RawConfiguration   = $null
+                }
+            }
+
+            try {
+                $sb = [scriptblock]::Create('Get-AdminAuditLogConfig')
+                $audit = Invoke-EDCAExchangeEndpointCommand -Server $invokeTarget -ScriptBlock $sb
+                if ($null -ne $audit -and $audit.PSObject.Properties.Name -contains 'AdminAuditLogEnabled') {
+                    $inventory.Exchange.AdminAuditLogEnabled = [bool]$audit.AdminAuditLogEnabled
+                }
+            }
+            catch {
+                $exchEndpointWarnings += ('Get-AdminAuditLogConfig via endpoint failed: ' + $_.Exception.Message)
+            }
+
+            try {
+                $sb = [scriptblock]::Create('Get-OrganizationConfig')
+                $orgConfig = Invoke-EDCAExchangeEndpointCommand -Server $invokeTarget -ScriptBlock $sb
+                if ($null -ne $orgConfig -and $orgConfig.PSObject.Properties.Name -contains 'OAuth2ClientProfileEnabled') {
+                    $inventory.Exchange.OAuth2ClientProfileEnabled = [bool]$orgConfig.OAuth2ClientProfileEnabled
+                }
+                if ($null -ne $orgConfig -and $orgConfig.PSObject.Properties.Name -contains 'MitigationsEnabled' -and $null -ne $inventory.Exchange.Eems) {
+                    $inventory.Exchange.Eems = [pscustomobject]@{
+                        Present            = $inventory.Exchange.Eems.Present
+                        Status             = $inventory.Exchange.Eems.Status
+                        StartMode          = $inventory.Exchange.Eems.StartMode
+                        MitigationsEnabled = [bool]$orgConfig.MitigationsEnabled
+                    }
+                }
+            }
+            catch {
+                $exchEndpointWarnings += ('Get-OrganizationConfig via endpoint failed: ' + $_.Exception.Message)
+            }
+
+            try {
+                $sb = [scriptblock]::Create('Get-AcceptedDomain')
+                $acceptedDomains = @(Invoke-EDCAExchangeEndpointCommand -Server $invokeTarget -ScriptBlock $sb)
+                $domainSet = @{}
+                foreach ($ad in $acceptedDomains) {
+                    $domainValue = ''
+                    if ($ad.PSObject.Properties.Name -contains 'DomainName' -and $null -ne $ad.DomainName) {
+                        $domainValue = [string]$ad.DomainName
+                    }
+                    elseif ($ad.PSObject.Properties.Name -contains 'Name') {
+                        $domainValue = [string]$ad.Name
+                    }
+                    if ([string]::IsNullOrWhiteSpace($domainValue)) { continue }
+                    $nd = $domainValue.Trim().TrimEnd('.').ToLowerInvariant()
+                    if (-not [string]::IsNullOrWhiteSpace($nd) -and -not $domainSet.ContainsKey($nd)) {
+                        $domainSet[$nd] = $true
+                        $inventory.Exchange.AcceptedDomains = @($inventory.Exchange.AcceptedDomains) + @($nd)
+                    }
+                }
+            }
+            catch {
+                $exchEndpointWarnings += ('Get-AcceptedDomain via endpoint failed: ' + $_.Exception.Message)
+            }
+
+            try {
+                $sb = [scriptblock]::Create("Get-ReceiveConnector -Server '$invokeTarget'")
+                $connectors = @(Invoke-EDCAExchangeEndpointCommand -Server $invokeTarget -ScriptBlock $sb)
+                foreach ($connector in $connectors) {
+                    $inventory.Exchange.ReceiveConnectors = @($inventory.Exchange.ReceiveConnectors) + @([pscustomobject]@{
+                            Identity             = [string]$connector.Identity
+                            PermissionGroups     = [string]$connector.PermissionGroups
+                            AuthMechanism        = [string]$connector.AuthMechanism
+                            RemoteIPRangesCount  = @($connector.RemoteIPRanges).Count
+                            ProtocolLoggingLevel = if ($connector.PSObject.Properties.Name -contains 'ProtocolLoggingLevel') { [string]$connector.ProtocolLoggingLevel } else { $null }
+                            MaxMessageSize       = if ($connector.PSObject.Properties.Name -contains 'MaxMessageSize' -and $null -ne $connector.MaxMessageSize) { [string]$connector.MaxMessageSize } else { $null }
+                        })
+                }
+            }
+            catch {
+                $exchEndpointWarnings += ('Get-ReceiveConnector via endpoint failed: ' + $_.Exception.Message)
+            }
+
+            try {
+                $sb = [scriptblock]::Create('Get-SendConnector')
+                $sendConnectors = @(Invoke-EDCAExchangeEndpointCommand -Server $invokeTarget -ScriptBlock $sb)
+                foreach ($connector in $sendConnectors) {
+                    $smartHosts = @()
+                    if ($connector.PSObject.Properties.Name -contains 'SmartHosts' -and $null -ne $connector.SmartHosts) {
+                        $smartHosts = @($connector.SmartHosts | ForEach-Object { [string]$_ })
+                    }
+
+                    $addressSpaces = @()
+                    if ($connector.PSObject.Properties.Name -contains 'AddressSpaces' -and $null -ne $connector.AddressSpaces) {
+                        $addressSpaces = @($connector.AddressSpaces | ForEach-Object {
+                                if ($_.PSObject.Properties.Name -contains 'Address') { [string]$_.Address } else { [string]$_ }
+                            })
+                    }
+
+                    $tlsCertificateName = $null
+                    if ($connector.PSObject.Properties.Name -contains 'TlsCertificateName' -and $null -ne $connector.TlsCertificateName) {
+                        $tlsCertificateName = [string]$connector.TlsCertificateName
+                    }
+
+                    $tlsCertificateSyntaxValid = $null
+                    if (-not [string]::IsNullOrWhiteSpace($tlsCertificateName)) {
+                        $tlsCertificateSyntaxValid = ($tlsCertificateName -match '(?i)(<I>).*(<S>).*')
+                    }
+
+                    $sendConnMaxMsgSize = $null
+                    if ($connector.PSObject.Properties.Name -contains 'MaxMessageSize' -and $null -ne $connector.MaxMessageSize) {
+                        $scMsgSizeStr = [string]$connector.MaxMessageSize
+                        if ($scMsgSizeStr -ne 'Unlimited') {
+                            $scMsgSizeMatch = [regex]::Match($scMsgSizeStr, '\(([\d,]+)\s*bytes\)')
+                            if ($scMsgSizeMatch.Success) { try { $sendConnMaxMsgSize = [long]($scMsgSizeMatch.Groups[1].Value -replace ',', '') } catch {} }
+                        }
+                    }
+                    $inventory.Exchange.SendConnectors = @($inventory.Exchange.SendConnectors) + @([pscustomobject]@{
+                            Identity                  = [string]$connector.Identity
+                            Enabled                   = if ($connector.PSObject.Properties.Name -contains 'Enabled') { [bool]$connector.Enabled } else { $null }
+                            CloudServicesMailEnabled  = if ($connector.PSObject.Properties.Name -contains 'CloudServicesMailEnabled') { [bool]$connector.CloudServicesMailEnabled } else { $null }
+                            TlsAuthLevel              = if ($connector.PSObject.Properties.Name -contains 'TlsAuthLevel') { [string]$connector.TlsAuthLevel } else { $null }
+                            RequireTLS                = if ($connector.PSObject.Properties.Name -contains 'RequireTLS') { [bool]$connector.RequireTLS } else { $null }
+                            TlsCertificateName        = $tlsCertificateName
+                            TlsCertificateSyntaxValid = $tlsCertificateSyntaxValid
+                            TlsDomain                 = if ($connector.PSObject.Properties.Name -contains 'TlsDomain') { [string]$connector.TlsDomain } else { $null }
+                            Fqdn                      = if ($connector.PSObject.Properties.Name -contains 'Fqdn' -and $null -ne $connector.Fqdn) { [string]$connector.Fqdn } else { $null }
+                            SmartHosts                = $smartHosts
+                            AddressSpaces             = $addressSpaces
+                            ProtocolLoggingLevel      = if ($connector.PSObject.Properties.Name -contains 'ProtocolLoggingLevel') { [string]$connector.ProtocolLoggingLevel } else { $null }
+                            RequireDNSRouting         = if ($connector.PSObject.Properties.Name -contains 'RequireDNSRouting') { [bool]$connector.RequireDNSRouting } else { $null }
+                            IgnoreStartTLS            = if ($connector.PSObject.Properties.Name -contains 'IgnoreStartTLS') { [bool]$connector.IgnoreStartTLS } else { $null }
+                            DomainSecureEnabled       = if ($connector.PSObject.Properties.Name -contains 'DomainSecureEnabled') { [bool]$connector.DomainSecureEnabled } else { $null }
+                            MaxMessageSizeBytes       = $sendConnMaxMsgSize
+                        })
+                }
+            }
+            catch {
+                $exchEndpointWarnings += ('Get-SendConnector via endpoint failed: ' + $_.Exception.Message)
+            }
+
+            try {
+                $sb = [scriptblock]::Create('Get-Mailbox -ResultSize Unlimited')
+                $mailboxes = @(Invoke-EDCAExchangeEndpointCommand -Server $invokeTarget -ScriptBlock $sb)
+                $sharedLikeNames = @($mailboxes | Where-Object {
+                        $_.RecipientTypeDetails -eq 'UserMailbox' -and
+                        ([string]$_.DisplayName -match '(shared|team|group|department|afdeling|gedeeld)')
+                    })
+                $inventory.Exchange.SharedMailboxTypeMismatchCount = $sharedLikeNames.Count
+            }
+            catch {
+                $exchEndpointWarnings += ('Get-Mailbox via endpoint failed: ' + $_.Exception.Message)
+            }
+
+            try {
+                $sb = [scriptblock]::Create("Get-MailboxDatabase -Server '$invokeTarget'")
+                $mailboxDatabases = @(Invoke-EDCAExchangeEndpointCommand -Server $invokeTarget -ScriptBlock $sb)
+                $storagePathSet = @{}
+                foreach ($mailboxDatabase in $mailboxDatabases) {
+                    $candidatePaths = @()
+                    if ($mailboxDatabase.PSObject.Properties.Name -contains 'EdbFilePath' -and $null -ne $mailboxDatabase.EdbFilePath) {
+                        $candidatePaths += [string]$mailboxDatabase.EdbFilePath
+                    }
+                    if ($mailboxDatabase.PSObject.Properties.Name -contains 'LogFolderPath' -and $null -ne $mailboxDatabase.LogFolderPath) {
+                        $candidatePaths += [string]$mailboxDatabase.LogFolderPath
+                    }
+                    foreach ($candidatePath in $candidatePaths) {
+                        if (-not [string]::IsNullOrWhiteSpace($candidatePath)) {
+                            $np = $candidatePath.Trim()
+                            if (-not $storagePathSet.ContainsKey($np)) {
+                                $storagePathSet[$np] = $true
+                                $inventory.Exchange.DatabaseStoragePaths = @($inventory.Exchange.DatabaseStoragePaths) + @($np)
+                            }
+                        }
+                    }
+                    $itemRetDays = $null
+                    if ($mailboxDatabase.PSObject.Properties.Name -contains 'DeletedItemRetention' -and $null -ne $mailboxDatabase.DeletedItemRetention) {
+                        try { $itemRetDays = [int]([timespan]$mailboxDatabase.DeletedItemRetention).TotalDays } catch {}
+                    }
+                    $mbxRetDays = $null
+                    if ($mailboxDatabase.PSObject.Properties.Name -contains 'MailboxRetention' -and $null -ne $mailboxDatabase.MailboxRetention) {
+                        try { $mbxRetDays = [int]([timespan]$mailboxDatabase.MailboxRetention).TotalDays } catch {}
+                    }
+                    $bkpRestore = if ($mailboxDatabase.PSObject.Properties.Name -contains 'BackupRestore') { [bool]$mailboxDatabase.BackupRestore } else { $null }
+                    $iqIsUnlimited = $true
+                    $iqBytes = $null
+                    if ($mailboxDatabase.PSObject.Properties.Name -contains 'IssueWarningQuota' -and $null -ne $mailboxDatabase.IssueWarningQuota) {
+                        $iqStr = [string]$mailboxDatabase.IssueWarningQuota
+                        if ($iqStr -ne 'Unlimited') {
+                            $iqIsUnlimited = $false
+                            $iqM = [regex]::Match($iqStr, '\(([\d,]+)\s*bytes\)')
+                            if ($iqM.Success) { try { $iqBytes = [long]($iqM.Groups[1].Value -replace ',', '') } catch {} }
+                        }
+                    }
+                    $psqIsUnlimited = $true
+                    $psqBytes = $null
+                    if ($mailboxDatabase.PSObject.Properties.Name -contains 'ProhibitSendQuota' -and $null -ne $mailboxDatabase.ProhibitSendQuota) {
+                        $psqStr = [string]$mailboxDatabase.ProhibitSendQuota
+                        if ($psqStr -ne 'Unlimited') {
+                            $psqIsUnlimited = $false
+                            $psqM = [regex]::Match($psqStr, '\(([\d,]+)\s*bytes\)')
+                            if ($psqM.Success) { try { $psqBytes = [long]($psqM.Groups[1].Value -replace ',', '') } catch {} }
+                        }
+                    }
+                    $psrqIsUnlimited = $true
+                    $psrqBytes = $null
+                    if ($mailboxDatabase.PSObject.Properties.Name -contains 'ProhibitSendReceiveQuota' -and $null -ne $mailboxDatabase.ProhibitSendReceiveQuota) {
+                        $psrqStr = [string]$mailboxDatabase.ProhibitSendReceiveQuota
+                        if ($psrqStr -ne 'Unlimited') {
+                            $psrqIsUnlimited = $false
+                            $psrqM = [regex]::Match($psrqStr, '\(([\d,]+)\s*bytes\)')
+                            if ($psrqM.Success) { try { $psrqBytes = [long]($psrqM.Groups[1].Value -replace ',', '') } catch {} }
+                        }
+                    }
+                    $inventory.Exchange.MailboxDatabases = @($inventory.Exchange.MailboxDatabases) + @([pscustomobject]@{
+                            Name                                = [string]$mailboxDatabase.Name
+                            ItemRetentionDays                   = $itemRetDays
+                            MailboxRetentionDays                = $mbxRetDays
+                            BackupRestore                       = $bkpRestore
+                            IssueWarningQuotaIsUnlimited        = $iqIsUnlimited
+                            IssueWarningQuotaBytes              = $iqBytes
+                            ProhibitSendQuotaIsUnlimited        = $psqIsUnlimited
+                            ProhibitSendQuotaBytes              = $psqBytes
+                            ProhibitSendReceiveQuotaIsUnlimited = $psrqIsUnlimited
+                            ProhibitSendReceiveQuotaBytes       = $psrqBytes
+                        })
+                }
+            }
+            catch {
+                $exchEndpointWarnings += ('Get-MailboxDatabase via endpoint failed: ' + $_.Exception.Message)
+            }
+
+            try {
+                $sb = [scriptblock]::Create("Test-ReplicationHealth -Identity '$invokeTarget'")
+                $replication = @(Invoke-EDCAExchangeEndpointCommand -Server $invokeTarget -ScriptBlock $sb)
+                $failed = @($replication | Where-Object { $_.Result -ne 'Passed' })
+                $inventory.Exchange.ReplicationHealthPassed = ($failed.Count -eq 0)
+            }
+            catch {
+                $exchEndpointWarnings += ('Test-ReplicationHealth via endpoint failed: ' + $_.Exception.Message)
+            }
+
+            try {
+                $sb = [scriptblock]::Create('Get-AuthConfig')
+                $authConfig = Invoke-EDCAExchangeEndpointCommand -Server $invokeTarget -ScriptBlock $sb
+                $authCertificateThumbprint = $null
+                if ($null -ne $authConfig -and $authConfig.PSObject.Properties.Name -contains 'CurrentCertificateThumbprint') {
+                    $authCertificateThumbprint = [string]$authConfig.CurrentCertificateThumbprint
+                }
+                $inventory.Exchange.AuthCertificate = Get-EDCACertificateStatusFromInventory -Thumbprint $authCertificateThumbprint -Certificates @($inventory.Certificates)
+            }
+            catch {
+                $exchEndpointWarnings += ('Get-AuthConfig via endpoint failed: ' + $_.Exception.Message)
+            }
+
+            try {
+                $sb = [scriptblock]::Create("Get-TransportService -Identity '$invokeTarget'")
+                $transportService = Invoke-EDCAExchangeEndpointCommand -Server $invokeTarget -ScriptBlock $sb
+                if ($null -ne $transportService) {
+                    $maxPerDomainOutboundConnections = $null
+                    if ($transportService.PSObject.Properties.Name -contains 'MaxPerDomainOutboundConnections') {
+                        $maxPerDomainOutboundConnections = [int]$transportService.MaxPerDomainOutboundConnections
+                    }
+
+                    $messageRetryIntervalMinutes = $null
+                    if ($transportService.PSObject.Properties.Name -contains 'MessageRetryInterval' -and $null -ne $transportService.MessageRetryInterval) {
+                        $messageRetryIntervalMinutes = Get-EDCAIntervalMinutes -Value $transportService.MessageRetryInterval
+                    }
+
+                    $connectivityLogEnabled = $null
+                    if ($transportService.PSObject.Properties.Name -contains 'ConnectivityLogEnabled') {
+                        $connectivityLogEnabled = [bool]$transportService.ConnectivityLogEnabled
+                    }
+
+                    $messageTrackingLogEnabled = $null
+                    if ($transportService.PSObject.Properties.Name -contains 'MessageTrackingLogEnabled') {
+                        $messageTrackingLogEnabled = [bool]$transportService.MessageTrackingLogEnabled
+                    }
+
+                    $messageTrackingLogSubjectLoggingEnabled = $null
+                    if ($transportService.PSObject.Properties.Name -contains 'MessageTrackingLogSubjectLoggingEnabled') {
+                        $messageTrackingLogSubjectLoggingEnabled = [bool]$transportService.MessageTrackingLogSubjectLoggingEnabled
+                    }
+
+                    $pickupDirectoryPath = $null
+                    if ($transportService.PSObject.Properties.Name -contains 'PickupDirectoryPath' -and -not [string]::IsNullOrWhiteSpace([string]$transportService.PickupDirectoryPath)) {
+                        $pickupDirectoryPath = [string]$transportService.PickupDirectoryPath
+                    }
+
+                    $inventory.Exchange.TransportRetryConfig = [pscustomobject]@{
+                        MaxPerDomainOutboundConnections         = $maxPerDomainOutboundConnections
+                        MessageRetryIntervalMinutes             = $messageRetryIntervalMinutes
+                        ConnectivityLogEnabled                  = $connectivityLogEnabled
+                        MessageTrackingLogEnabled               = $messageTrackingLogEnabled
+                        MessageTrackingLogSubjectLoggingEnabled = $messageTrackingLogSubjectLoggingEnabled
+                        PickupDirectoryPath                     = $pickupDirectoryPath
+                    }
+
+                    $internalTransportCertificateThumbprint = $null
+                    if ($transportService.PSObject.Properties.Name -contains 'InternalTransportCertificateThumbprint') {
+                        $internalTransportCertificateThumbprint = [string]$transportService.InternalTransportCertificateThumbprint
+                    }
+
+                    $inventory.Exchange.InternalTransportCertificate = Get-EDCACertificateStatusFromInventory -Thumbprint $internalTransportCertificateThumbprint -Certificates @($inventory.Certificates)
+                }
+            }
+            catch {
+                $exchEndpointWarnings += ('Get-TransportService via endpoint failed: ' + $_.Exception.Message)
+            }
+
+            $settingOverrides = @()
+            try {
+                $sb = [scriptblock]::Create('Get-SettingOverride')
+                $settingOverrides = @(Invoke-EDCAExchangeEndpointCommand -Server $invokeTarget -ScriptBlock $sb)
+                $settingOverrideNames = @($settingOverrides | ForEach-Object { [string]$_.Name } | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | Sort-Object -Unique)
+                $settingOverrideDetails = @($settingOverrides | ForEach-Object {
+                    $n = if ($_.PSObject.Properties.Name -contains 'Name') { [string]$_.Name } else { '' }
+                    $s = if (($_.PSObject.Properties.Name -contains 'Server') -and ($null -ne $_.Server)) { [string]$_.Server } else { '' }
+                    [pscustomobject]@{ Name = $n; Server = $s }
+                } | Where-Object { -not [string]::IsNullOrWhiteSpace($_.Name) })
+                $inventory.Exchange.SettingOverrides = [pscustomobject]@{
+                    Count   = $settingOverrides.Count
+                    Names   = $settingOverrideNames
+                    Details = $settingOverrideDetails
+                }
+
+                if ($null -ne $inventory.Exchange.Amsi) {
+                    $amsiDisabledBySettingOverride = @($settingOverrides | Where-Object {
+                            $componentName = if ($_.PSObject.Properties.Name -contains 'ComponentName') { [string]$_.ComponentName } else { '' }
+                            $sectionName = if ($_.PSObject.Properties.Name -contains 'SectionName') { [string]$_.SectionName } else { '' }
+                            $parametersText = ''
+                            if ($_.PSObject.Properties.Name -contains 'Parameters' -and $null -ne $_.Parameters) {
+                                $parametersText = [string]::Join(';', @($_.Parameters | ForEach-Object { [string]$_ }))
+                            }
+
+                            $componentName -eq 'Cafe' -and
+                            $sectionName -eq 'HttpRequestFiltering' -and
+                            $parametersText -match 'Enabled\s*=\s*false'
+                        }).Count -gt 0
+
+                    $inventory.Exchange.Amsi = [pscustomobject]@{
+                        ProviderCount             = $inventory.Exchange.Amsi.ProviderCount
+                        ProviderIds               = $inventory.Exchange.Amsi.ProviderIds
+                        DisabledBySettingOverride = $amsiDisabledBySettingOverride
+                    }
+                }
+            }
+            catch {
+                $exchEndpointWarnings += ('Get-SettingOverride via endpoint failed: ' + $_.Exception.Message)
+            }
+
+            # Derive SerializedDataSigningEnabled from SettingOverrides + build version.
+            # Exchange 2016/2019/SE: feature is controlled by SettingOverride (Component=Data,
+            #   Section=EnableSerializationDataSigning, Parameter=Enabled).  Exchange SE and builds
+            #   >= Nov23SU have it enabled by default when no override is present.
+            # Exchange 2013: controlled by registry key (already read in the collection script block).
+            $productLine = if (($inventory.Exchange.PSObject.Properties.Name -contains 'ProductLine')) { [string]$inventory.Exchange.ProductLine } else { '' }
+            if ($productLine -in @('Exchange2016', 'Exchange2019', 'ExchangeSE')) {
+                try {
+                    # Parse build numbers from AdminDisplayVersion ("Version 15.2 (Build 1118.40)").
+                    $adv = if ($inventory.Exchange.PSObject.Properties.Name -contains 'AdminDisplayVersion') { [string]$inventory.Exchange.AdminDisplayVersion } else { '' }
+                    $advBuildMajor = 0
+                    $advBuildMinor = 0
+                    if ($adv -match 'Build\s+(\d+)\.(\d+)') {
+                        $advBuildMajor = [int]$matches[1]
+                        $advBuildMinor = [int]$matches[2]
+                    }
+
+                    # Nov23SU thresholds (first build where feature is on by default):
+                    #   Exchange 2016 CU23 Nov23SU : 15.1.2507.35
+                    #   Exchange 2019 CU13 Nov23SU : 15.2.1118.35
+                    #   Exchange SE                : always on by default
+                    $enabledByDefault = $false
+                    if ($productLine -eq 'ExchangeSE') {
+                        $enabledByDefault = $true
+                    }
+                    elseif ($productLine -eq 'Exchange2016') {
+                        $enabledByDefault = ($advBuildMajor -gt 2507) -or ($advBuildMajor -eq 2507 -and $advBuildMinor -ge 35)
+                    }
+                    elseif ($productLine -eq 'Exchange2019') {
+                        $enabledByDefault = ($advBuildMajor -gt 1118) -or ($advBuildMajor -eq 1118 -and $advBuildMinor -ge 35)
+                    }
+
+                    # Find a SettingOverride that explicitly configures the feature for this server.
+                    $sdsOverride = $settingOverrides | Where-Object {
+                        $cn = if ($_.PSObject.Properties.Name -contains 'ComponentName') { [string]$_.ComponentName } else { '' }
+                        $sn = if ($_.PSObject.Properties.Name -contains 'SectionName') { [string]$_.SectionName } else { '' }
+                        $cn -eq 'Data' -and $sn -eq 'EnableSerializationDataSigning'
+                    } | Select-Object -First 1
+
+                    if ($null -ne $sdsOverride) {
+                        $paramText = ''
+                        if ($sdsOverride.PSObject.Properties.Name -contains 'Parameters' -and $null -ne $sdsOverride.Parameters) {
+                            $paramText = [string]::Join(';', @($sdsOverride.Parameters | ForEach-Object { [string]$_ }))
+                        }
+                        if ($paramText -match 'Enabled\s*=\s*True') {
+                            $inventory.Exchange.SerializedDataSigningEnabled = $true
+                        }
+                        elseif ($paramText -match 'Enabled\s*=\s*False') {
+                            $inventory.Exchange.SerializedDataSigningEnabled = $false
+                        }
+                        # Unknown parameter value — leave as $null so analysis reports Unknown.
+                    }
+                    else {
+                        # No override: use version-derived default.
+                        $inventory.Exchange.SerializedDataSigningEnabled = $enabledByDefault
+                    }
+                }
+                catch {
+                    $exchEndpointWarnings += ('SerializedDataSigning state determination failed: ' + $_.Exception.Message)
+                }
+            }
+            # Exchange 2013: SerializedDataSigningEnabled already set from registry in script block.
+
+            $sharedExchangeOnlineAppId = '00000002-0000-0ff1-ce00-000000000000'
+            $guidPattern = '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+
+            try {
+                $sb = [scriptblock]::Create('Get-AuthServer')
+                $authServers = @(Invoke-EDCAExchangeEndpointCommand -Server $invokeTarget -ScriptBlock $sb)
+                $evoStsAuthServers = @($authServers | Where-Object {
+                        $_.PSObject.Properties.Name -contains 'Name' -and
+                        $_.PSObject.Properties.Name -contains 'Type' -and
+                        $_.PSObject.Properties.Name -contains 'Enabled' -and
+                        ([string]$_.Name -like 'EvoSTS*') -and
+                        ([string]$_.Type -eq 'AzureAD') -and
+                        [bool]$_.Enabled
+                    })
+
+                $acsAuthServers = @($authServers | Where-Object {
+                        $_.PSObject.Properties.Name -contains 'Type' -and
+                        $_.PSObject.Properties.Name -contains 'Enabled' -and
+                        ([string]$_.Type -eq 'MicrosoftACS') -and
+                        [bool]$_.Enabled
+                    })
+
+                $enabledEvoAuthServer = ($evoStsAuthServers.Count -gt 0)
+
+                $exchangeOnlinePartnerApplication = @()
+                try {
+                    $sb = [scriptblock]::Create('Get-PartnerApplication')
+                    $partnerApplications = @(Invoke-EDCAExchangeEndpointCommand -Server $invokeTarget -ScriptBlock $sb)
+                    $exchangeOnlinePartnerApplication = @($partnerApplications | Where-Object {
+                            $applicationIdentifier = if ($_.PSObject.Properties.Name -contains 'ApplicationIdentifier') { [string]$_.ApplicationIdentifier } else { '' }
+                            $enabled = if ($_.PSObject.Properties.Name -contains 'Enabled') { [bool]$_.Enabled } else { $true }
+
+                            $enabled -and ($applicationIdentifier -eq $sharedExchangeOnlineAppId)
+                        })
+                }
+                catch {
+                    $exchEndpointWarnings += ('Get-PartnerApplication via endpoint failed: ' + $_.Exception.Message)
+                }
+
+                $enabledHybridPartnerApplication = ($exchangeOnlinePartnerApplication.Count -gt 0)
+
+                $oAuthConfigured = ((($evoStsAuthServers.Count -or $acsAuthServers.Count) -gt 0) -and ($exchangeOnlinePartnerApplication.Count -gt 0))
+
+                $dedicatedHybridAppOverrides = @($settingOverrides | Where-Object {
+                        $componentName = if ($_.PSObject.Properties.Name -contains 'ComponentName') { [string]$_.ComponentName } else { '' }
+                        $sectionName = if ($_.PSObject.Properties.Name -contains 'SectionName') { [string]$_.SectionName } else { '' }
+                        $componentName -eq 'Global' -and $sectionName -eq 'ExchangeOnpremAsThirdPartyAppId'
+                    })
+
+                $sharedAppAuthServers = @($evoStsAuthServers | Where-Object {
+                        ([string]$_.ApplicationIdentifier) -eq $sharedExchangeOnlineAppId
+                    })
+
+                $dedicatedAppAuthServers = @($evoStsAuthServers | Where-Object {
+                        $applicationIdentifier = [string]$_.ApplicationIdentifier
+                        ($applicationIdentifier -match $guidPattern) -and ($applicationIdentifier -ne $sharedExchangeOnlineAppId)
+                    })
+
+                $dedicatedHybridAppConfigured = ($dedicatedHybridAppOverrides.Count -ge 1) -and ($dedicatedAppAuthServers.Count -ge 1) -and ($sharedAppAuthServers.Count -eq 0)
+
+                $hybridConfigured = $oAuthConfigured
+                $inventory.Exchange.HybridApplication = [pscustomobject]@{
+                    Configured                             = $hybridConfigured
+                    DedicatedHybridAppConfigured           = $dedicatedHybridAppConfigured
+                    DedicatedHybridAppOverrideCount        = $dedicatedHybridAppOverrides.Count
+                    DedicatedHybridAppAuthServerCount      = $dedicatedAppAuthServers.Count
+                    SharedExchangeOnlineAppAuthServerCount = $sharedAppAuthServers.Count
+                    Details                                = ('OAuth hybrid detected: {0}; EvoSTS auth servers: {1}; ACS auth servers: {2}; Exchange Online partner app enabled: {3}; dedicated-hybrid-app override count: {4}; dedicated-app auth server count: {5}; shared-app auth server count: {6}' -f $hybridConfigured, $evoStsAuthServers.Count, $acsAuthServers.Count, $enabledHybridPartnerApplication, $dedicatedHybridAppOverrides.Count, $dedicatedAppAuthServers.Count, $sharedAppAuthServers.Count)
+                }
+            }
+            catch {
+                $exchEndpointWarnings += ('Get-AuthServer via endpoint failed: ' + $_.Exception.Message)
+            }
+        }
+    }
+
+    foreach ($w in $exchEndpointWarnings) {
+        $inventory.Exchange.CollectionWarnings = @($inventory.Exchange.CollectionWarnings) + @($w)
+    }
+
+    return $inventory
+}
+
+function Invoke-EDCAServerCollectionWorker {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Server
+    )
+
+    Write-Verbose ('Starting server worker for {0}.' -f $Server)
+    $connectivity = Test-EDCAServerRemoteConnectivity -Server $Server
+    Write-Verbose ('Precheck result for {0}: CanConnect={1}; CanReadRemoteRegistry={2}' -f $Server, [bool]$connectivity.CanConnect, [bool]$connectivity.CanReadRemoteRegistry)
+    if (-not $connectivity.CanConnect -or -not $connectivity.CanReadRemoteRegistry) {
+        $failureReason = if (-not $connectivity.CanConnect) {
+            'Remote connectivity precheck failed.'
+        }
+        else {
+            'Remote connectivity succeeded but registry access check failed.'
+        }
+
+        Write-EDCALog -Level 'WARN' -Message ('Skipping {0}: {1} {2}' -f $Server, $failureReason, $connectivity.Details)
+        return [pscustomobject]@{
+            Server               = $Server
+            CollectionError      = ('{0} {1}' -f $failureReason, $connectivity.Details).Trim()
+            ConnectivityPrecheck = $connectivity
+        }
+    }
+
+    try {
+        Write-EDCALog -Message ('Collecting from server: {0}' -f $Server)
+        Write-Verbose ('Collecting inventory categories for {0}: OS, TLS, services, certificates, Exchange.' -f $Server)
+        $inventory = Get-EDCAServerInventory -Server $Server
+        $inventory | Add-Member -MemberType NoteProperty -Name ConnectivityPrecheck -Value $connectivity -Force
+        $collectionWarnings = @()
+        if ($inventory.PSObject.Properties.Name -contains 'Exchange' -and $null -ne $inventory.Exchange -and $inventory.Exchange.PSObject.Properties.Name -contains 'CollectionWarnings') {
+            $collectionWarnings = @($inventory.Exchange.CollectionWarnings)
+        }
+
+        if ($collectionWarnings.Count -gt 0) {
+            Write-EDCALog -Level 'WARN' -Message ('Collection on {0} completed with {1} warning(s):' -f $Server, $collectionWarnings.Count)
+            foreach ($w in $collectionWarnings) {
+                Write-EDCALog -Level 'WARN' -Message ('  {0}: {1}' -f $Server, $w)
+            }
+        }
+
+        Write-Verbose ('Server worker completed for {0}.' -f $Server)
+        return $inventory
+    }
+    catch {
+        Write-EDCALog -Level 'WARN' -Message ('Collection failed on {0}: {1}' -f $Server, $_.Exception.Message)
+        return [pscustomobject]@{
+            Server               = $Server
+            CollectionError      = $_.Exception.Message
+            ConnectivityPrecheck = $connectivity
+        }
+    }
+}
+
+function Invoke-EDCAParallelServerCollection {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string[]]$Servers,
+        [ValidateRange(1, 128)]
+        [int]$ThrottleLimit = 4
+    )
+
+    $targetServers = @($Servers | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | ForEach-Object { ([string]$_).Trim() })
+    if ($targetServers.Count -eq 0) {
+        return @()
+    }
+
+    $effectiveThrottle = [Math]::Min([Math]::Max($ThrottleLimit, 1), $targetServers.Count)
+    $canUseThreadJob = ($null -ne (Get-Command -Name Start-ThreadJob -ErrorAction SilentlyContinue))
+    $jobBackend = if ($canUseThreadJob) { 'Start-ThreadJob' } else { 'Start-Job' }
+
+    Write-Verbose ('Using parallel server collection for {0} target(s) with throttle {1} via {2}.' -f $targetServers.Count, $effectiveThrottle, $jobBackend)
+    Write-Host ('Collecting data from {0} server(s) (throttle: {1})...' -f $targetServers.Count, $effectiveThrottle)
+
+    $commonModulePath = Join-Path -Path $PSScriptRoot -ChildPath 'Common.ps1'
+    $collectionModulePath = Join-Path -Path $PSScriptRoot -ChildPath 'Collection.ps1'
+
+    $jobScript = {
+        param(
+            [string]$TargetServer,
+            [string]$CommonPath,
+            [string]$CollectionPath
+        )
+
+        Set-StrictMode -Version Latest
+        . $CommonPath
+        . $CollectionPath
+
+        Invoke-EDCAServerCollectionWorker -Server $TargetServer
+    }
+
+    $pendingQueue = [System.Collections.Queue]::new()
+    for ($index = 0; $index -lt $targetServers.Count; $index++) {
+        $pendingQueue.Enqueue([pscustomobject]@{
+                Index  = $index
+                Server = $targetServers[$index]
+            })
+    }
+
+    $activeJobs = @()
+    $resultsByIndex = @{}
+
+    while ($pendingQueue.Count -gt 0 -or $activeJobs.Count -gt 0) {
+        while ($pendingQueue.Count -gt 0 -and $activeJobs.Count -lt $effectiveThrottle) {
+            $jobTarget = $pendingQueue.Dequeue()
+            $job = if ($canUseThreadJob) {
+                Start-ThreadJob -ScriptBlock $jobScript -ArgumentList @($jobTarget.Server, $commonModulePath, $collectionModulePath)
+            }
+            else {
+                Start-Job -ScriptBlock $jobScript -ArgumentList @($jobTarget.Server, $commonModulePath, $collectionModulePath)
+            }
+
+            $activeJobs += [pscustomobject]@{
+                Index  = $jobTarget.Index
+                Server = $jobTarget.Server
+                Job    = $job
+            }
+            Write-Host ('  [{0}/{1}] Starting collection: {2}' -f ($jobTarget.Index + 1), $targetServers.Count, $jobTarget.Server)
+        }
+
+        if ($activeJobs.Count -eq 0) {
+            continue
+        }
+
+        $completedJob = Wait-Job -Job @($activeJobs | ForEach-Object { $_.Job }) -Any
+        $completedMeta = @($activeJobs | Where-Object { $_.Job.Id -eq $completedJob.Id } | Select-Object -First 1)
+        if ($completedMeta.Count -eq 0) {
+            continue
+        }
+
+        $meta = $completedMeta[0]
+        $result = $null
+        try {
+            $jobOutput = @(Receive-Job -Job $completedJob -ErrorAction Stop)
+            if ($jobOutput.Count -gt 0) {
+                $result = $jobOutput[-1]
+            }
+            else {
+                $result = [pscustomobject]@{
+                    Server               = $meta.Server
+                    CollectionError      = 'Parallel collection worker returned no result.'
+                    ConnectivityPrecheck = $null
+                }
+            }
+        }
+        catch {
+            $result = [pscustomobject]@{
+                Server               = $meta.Server
+                CollectionError      = ('Parallel collection worker failed: {0}' -f $_.Exception.Message)
+                ConnectivityPrecheck = $null
+            }
+        }
+        finally {
+            Remove-Job -Job $completedJob -Force -ErrorAction SilentlyContinue
+        }
+
+        $resultsByIndex[$meta.Index] = $result
+        $activeJobs = @($activeJobs | Where-Object { $_.Job.Id -ne $completedJob.Id })
+        $collectionError = if ($result.PSObject.Properties.Name -contains 'CollectionError') { $result.CollectionError } else { $null }
+        if (-not [string]::IsNullOrWhiteSpace($collectionError)) {
+            Write-Host ('  [{0}/{1}] ERROR {2}: {3}' -f ($meta.Index + 1), $targetServers.Count, $meta.Server, $collectionError) -ForegroundColor Red
+        }
+        else {
+            Write-Host ('  [{0}/{1}] Done:  {2}' -f ($meta.Index + 1), $targetServers.Count, $meta.Server) -ForegroundColor Green
+        }
+    }
+
+    $orderedResults = @()
+    for ($index = 0; $index -lt $targetServers.Count; $index++) {
+        if ($resultsByIndex.ContainsKey($index)) {
+            $orderedResults += $resultsByIndex[$index]
+        }
+        else {
+            $orderedResults += [pscustomobject]@{
+                Server               = $targetServers[$index]
+                CollectionError      = 'Parallel collection worker did not report a result.'
+                ConnectivityPrecheck = $null
+            }
+        }
+    }
+
+    $errorCount = @($orderedResults | Where-Object { ($_.PSObject.Properties.Name -contains 'CollectionError') -and -not [string]::IsNullOrWhiteSpace($_.CollectionError) }).Count
+    if ($errorCount -gt 0) {
+        Write-Host ('Collection complete: {0} succeeded, {1} failed.' -f ($targetServers.Count - $errorCount), $errorCount) -ForegroundColor Yellow
+    }
+    else {
+        Write-Host ('Collection complete: all {0} server(s) succeeded.' -f $targetServers.Count) -ForegroundColor Green
+    }
+
+    return $orderedResults
+}
+
+function Get-EDCAExchangeEnvironmentServers {
+    [CmdletBinding()]
+    param()
+
+    # Discover Exchange servers via the well-known "Exchange Servers" universal security group.
+    # Exchange Setup adds every Exchange server computer account to this group; membership is
+    # authoritative and requires only the ActiveDirectory module (built into Windows Server RSAT).
+    Write-Verbose 'Discovering Exchange servers via AD group membership of "Exchange Servers".'
+
+    if (-not (Get-Module -Name ActiveDirectory -ListAvailable)) {
+        throw 'The ActiveDirectory PowerShell module is not available. Install RSAT-AD-PowerShell or run from a Windows Server with AD DS tools installed.'
+    }
+
+    Import-Module -Name ActiveDirectory -ErrorAction Stop -Verbose:$false
+
+    $members = @()
+    try {
+        $members = @(
+            Get-ADGroup -Identity 'Exchange Servers' -ErrorAction Stop |
+            Get-ADGroupMember -Recursive -ErrorAction Stop |
+            Where-Object { $_.objectClass -eq 'computer' }
+        )
+    }
+    catch {
+        throw ('Exchange server discovery failed: {0}. Provide -Servers explicitly.' -f $_.Exception.Message)
+    }
+
+    Write-Verbose ('"Exchange Servers" group contains {0} computer member(s).' -f $members.Count)
+
+    $serverNames = @(
+        $members | ForEach-Object {
+            try {
+                $computer = Get-ADComputer -Identity $_.distinguishedName -Properties DNSHostName -ErrorAction Stop
+                if (-not [string]::IsNullOrWhiteSpace($computer.DNSHostName)) {
+                    $computer.DNSHostName
+                }
+                else {
+                    $computer.Name
+                }
+            }
+            catch {
+                Write-Verbose ('Could not resolve computer object {0}: {1}' -f $_.distinguishedName, $_.Exception.Message)
+            }
+        } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique
+    )
+
+    if ($serverNames.Count -eq 0) {
+        throw 'The "Exchange Servers" group exists but contains no computer members. Provide -Servers explicitly.'
+    }
+
+    Write-Verbose ('Automatic discovery found {0} server(s): {1}' -f $serverNames.Count, ($serverNames -join ', '))
+
+    return $serverNames
+}
+
+function Invoke-EDCAExchangeEndpointCommand {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Server,
+        [Parameter(Mandatory = $true)]
+        [scriptblock]$ScriptBlock
+    )
+
+    $connectionHost = $Server
+    if ($connectionHost -in @('.', 'localhost')) {
+        $connectionHost = $env:COMPUTERNAME
+    }
+
+    if ($connectionHost.Equals($env:COMPUTERNAME, [System.StringComparison]::OrdinalIgnoreCase)) {
+        $userDnsDomain = [string]$env:USERDNSDOMAIN
+        if (-not [string]::IsNullOrWhiteSpace($userDnsDomain)) {
+            $connectionHost = ('{0}.{1}' -f $env:COMPUTERNAME, $userDnsDomain)
+        }
+    }
+
+    $connectionUri = ('http://{0}/PowerShell' -f $connectionHost)
+
+    return Invoke-Command -ConnectionUri $connectionUri -ConfigurationName Microsoft.Exchange -ScriptBlock $ScriptBlock -Authentication Kerberos -ErrorAction Stop
+}
+
+function Get-EDCAOrganizationInventory {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Server
+    )
+
+    $organization = [pscustomobject]@{
+        Available                   = $false
+        SourceServer                = $Server
+        ExchangeCmdletsAvailable    = $true
+        OAuth2ClientProfileEnabled  = $null
+        AdSplitPermissionEnabled    = $null
+        UpnPrimarySmtpMismatchCount = $null
+        AcceptedDomains             = @()
+        ForestFunctionalLevel       = $null
+        DomainFunctionalLevel       = $null
+        AdSiteCount                 = $null
+        DefaultAuthPolicyName       = $null
+        DefaultAuthPolicyBasicAuth  = $null
+        TransportConfig             = $null
+        RemoteDomains               = @()
+        EdgeServers                 = @()
+        MobileDevicePolicies        = @()
+        IrmConfiguration            = $null
+        CollectionWarnings          = @()
+    }
+
+    Write-EDCALog -Message ('Collecting organization-level Exchange settings on {0} via Exchange endpoint remoting.' -f $Server)
+
+    try {
+        $orgConfigResult = Invoke-EDCAExchangeEndpointCommand -Server $Server -ScriptBlock {
+            Get-OrganizationConfig -ErrorAction Stop | Select-Object -First 1 -Property OAuth2ClientProfileEnabled, AdSplitPermissionEnabled, DefaultAuthenticationPolicy
+        }
+
+        if ($null -ne $orgConfigResult -and $orgConfigResult.PSObject.Properties.Name -contains 'OAuth2ClientProfileEnabled') {
+            $organization.OAuth2ClientProfileEnabled = [bool]$orgConfigResult.OAuth2ClientProfileEnabled
+        }
+
+        if ($null -ne $orgConfigResult -and $orgConfigResult.PSObject.Properties.Name -contains 'AdSplitPermissionEnabled' -and $null -ne $orgConfigResult.AdSplitPermissionEnabled) {
+            $organization.AdSplitPermissionEnabled = [bool]$orgConfigResult.AdSplitPermissionEnabled
+        }
+        elseif ($null -ne $orgConfigResult -and $orgConfigResult.PSObject.Properties.Name -contains 'ADSplitPermissionEnabled' -and $null -ne $orgConfigResult.ADSplitPermissionEnabled) {
+            $organization.AdSplitPermissionEnabled = [bool]$orgConfigResult.ADSplitPermissionEnabled
+        }
+
+        if ($null -ne $orgConfigResult -and $orgConfigResult.PSObject.Properties.Name -contains 'DefaultAuthenticationPolicy' -and -not [string]::IsNullOrWhiteSpace([string]$orgConfigResult.DefaultAuthenticationPolicy)) {
+            $rawPolicyId = [string]$orgConfigResult.DefaultAuthenticationPolicy
+            # DefaultAuthenticationPolicy may be returned as a DN (CN=name,...) — extract just the display name
+            if ($rawPolicyId -match '^CN=([^,]+)') {
+                $organization.DefaultAuthPolicyName = $Matches[1]
+            }
+            else {
+                $organization.DefaultAuthPolicyName = $rawPolicyId
+            }
+        }
+    }
+    catch {
+        $organization.CollectionWarnings += ('Get-OrganizationConfig failed: ' + $_.Exception.Message)
+    }
+
+    try {
+        $acceptedDomainResults = @(Invoke-EDCAExchangeEndpointCommand -Server $Server -ScriptBlock {
+                Get-AcceptedDomain -ErrorAction Stop | Select-Object -Property DomainName, Name
+            })
+
+        $domainSet = @{}
+        foreach ($acceptedDomain in $acceptedDomainResults) {
+            $domainValue = ''
+            if ($acceptedDomain.PSObject.Properties.Name -contains 'DomainName' -and $null -ne $acceptedDomain.DomainName) {
+                $domainValue = [string]$acceptedDomain.DomainName
+            }
+            elseif ($acceptedDomain.PSObject.Properties.Name -contains 'Name') {
+                $domainValue = [string]$acceptedDomain.Name
+            }
+
+            if ([string]::IsNullOrWhiteSpace($domainValue)) {
+                continue
+            }
+
+            $normalizedDomain = $domainValue.Trim().TrimEnd('.').ToLowerInvariant()
+            if ([string]::IsNullOrWhiteSpace($normalizedDomain)) {
+                continue
+            }
+
+            if (-not $domainSet.ContainsKey($normalizedDomain)) {
+                $domainSet[$normalizedDomain] = $true
+                $organization.AcceptedDomains += $normalizedDomain
+            }
+        }
+    }
+    catch {
+        $organization.CollectionWarnings += ('Get-AcceptedDomain failed: ' + $_.Exception.Message)
+    }
+
+    try {
+        $sb = [scriptblock]::Create('Get-AuthenticationPolicy -ErrorAction Stop | Select-Object -Property Name, AllowBasicAuthActiveSync, AllowBasicAuthAutodiscover, AllowBasicAuthImap, AllowBasicAuthMapi, AllowBasicAuthOfflineAddressBook, AllowBasicAuthOutlookService, AllowBasicAuthPop, AllowBasicAuthReportingWebServices, AllowBasicAuthRest, AllowBasicAuthRpc, AllowBasicAuthSmtp, AllowBasicAuthWebServices, AllowBasicAuthWindowsLiveId')
+        $allAuthPolicies = @(Invoke-EDCAExchangeEndpointCommand -Server $Server -ScriptBlock $sb)
+
+        $targetPolicy = $null
+        if (-not [string]::IsNullOrWhiteSpace($organization.DefaultAuthPolicyName)) {
+            $targetPolicy = $allAuthPolicies | Where-Object { [string]$_.Name -eq $organization.DefaultAuthPolicyName } | Select-Object -First 1
+        }
+        if ($null -eq $targetPolicy -and $allAuthPolicies.Count -gt 0) {
+            $targetPolicy = $allAuthPolicies[0]
+        }
+
+        if ($null -ne $targetPolicy) {
+            $basicAuthPropNames = @('AllowBasicAuthActiveSync', 'AllowBasicAuthAutodiscover', 'AllowBasicAuthImap', 'AllowBasicAuthMapi', 'AllowBasicAuthOfflineAddressBook', 'AllowBasicAuthOutlookService', 'AllowBasicAuthPop', 'AllowBasicAuthReportingWebServices', 'AllowBasicAuthRest', 'AllowBasicAuthRpc', 'AllowBasicAuthSmtp', 'AllowBasicAuthWebServices', 'AllowBasicAuthWindowsLiveId')
+            $basicAuthProps = [ordered]@{}
+            foreach ($prop in $basicAuthPropNames) {
+                if ($targetPolicy.PSObject.Properties.Name -contains $prop) {
+                    $basicAuthProps[$prop] = [bool]$targetPolicy.$prop
+                }
+            }
+            if ($basicAuthProps.Keys.Count -gt 0) {
+                $organization.DefaultAuthPolicyBasicAuth = [pscustomobject]$basicAuthProps
+            }
+        }
+    }
+    catch {
+        $organization.CollectionWarnings += ('Get-AuthenticationPolicy failed: ' + $_.Exception.Message)
+    }
+
+    try {
+        $sb = [scriptblock]::Create('Get-Mailbox -ResultSize Unlimited')
+        $orgMailboxes = @(Invoke-EDCAExchangeEndpointCommand -Server $Server -ScriptBlock $sb)
+        $mismatchedUpn = @($orgMailboxes | Where-Object {
+                -not [string]::IsNullOrWhiteSpace([string]$_.UserPrincipalName) -and
+                -not [string]::IsNullOrWhiteSpace([string]$_.WindowsEmailAddress) -and
+                -not [string]::Equals([string]$_.UserPrincipalName, [string]$_.WindowsEmailAddress, [System.StringComparison]::OrdinalIgnoreCase)
+            })
+        $organization.UpnPrimarySmtpMismatchCount = $mismatchedUpn.Count
+    }
+    catch {
+        $organization.CollectionWarnings += ('Get-Mailbox (UPN/SMTP check) failed: ' + $_.Exception.Message)
+    }
+
+    try {
+        $rootDseFL = [ADSI]('LDAP://RootDSE')
+        $forestFL = $rootDseFL.Properties['forestFunctionality']
+        $domainFL = $rootDseFL.Properties['domainFunctionality']
+        if ($null -ne $forestFL -and $forestFL.Count -gt 0) {
+            $organization.ForestFunctionalLevel = [int]([string]$forestFL[0])
+        }
+        if ($null -ne $domainFL -and $domainFL.Count -gt 0) {
+            $organization.DomainFunctionalLevel = [int]([string]$domainFL[0])
+        }
+    }
+    catch {
+        $organization.CollectionWarnings += ('AD functional level collection via RootDSE failed: ' + $_.Exception.Message)
+    }
+
+    try {
+        $rootDse = [ADSI]("LDAP://$([System.DirectoryServices.ActiveDirectory.Domain]::GetComputerDomain().Name)/RootDSE")
+        $sitesContainerPath = ('CN=Sites,' + $rootDse.configurationNamingContext)
+        $sitesContainer = [ADSI]("LDAP://$sitesContainerPath")
+        $siteSearcher = New-Object System.DirectoryServices.DirectorySearcher($sitesContainer, '(objectCategory=site)')
+        $siteSearcher.PageSize = 100
+        $organization.AdSiteCount = ($siteSearcher.FindAll()).Count
+    }
+    catch {
+        $organization.CollectionWarnings += ('AD site count collection failed: ' + $_.Exception.Message)
+    }
+
+    try {
+        $tcResult = Invoke-EDCAExchangeEndpointCommand -Server $Server -ScriptBlock {
+            $c = Get-TransportConfig -ErrorAction Stop
+            $sndBytes = $null
+            $rcvBytes = $null
+            if ($null -ne $c.MaxSendSize) { try { $sndBytes = [int64]$c.MaxSendSize.ToBytes() } catch {} }
+            if ($null -ne $c.MaxReceiveSize) { try { $rcvBytes = [int64]$c.MaxReceiveSize.ToBytes() } catch {} }
+            [pscustomobject]@{
+                MaxSendSizeBytes      = $sndBytes
+                MaxReceiveSizeBytes   = $rcvBytes
+                MaxSendSizeDisplay    = [string]$c.MaxSendSize
+                MaxReceiveSizeDisplay = [string]$c.MaxReceiveSize
+            }
+        }
+        if ($null -ne $tcResult) {
+            $organization.TransportConfig = $tcResult
+        }
+    }
+    catch {
+        $organization.CollectionWarnings += ('Get-TransportConfig failed: ' + $_.Exception.Message)
+    }
+
+    try {
+        $rdResults = @(Invoke-EDCAExchangeEndpointCommand -Server $Server -ScriptBlock {
+                Get-RemoteDomain -ErrorAction Stop | Select-Object Name, DomainName, AutoForwardEnabled, AutoReplyEnabled, NDREnabled, AllowedOOFType
+            })
+        foreach ($rd in $rdResults) {
+            $organization.RemoteDomains += [pscustomobject]@{
+                Name               = [string]$rd.Name
+                DomainName         = if ($rd.PSObject.Properties.Name -contains 'DomainName') { [string]$rd.DomainName } else { [string]$rd.Name }
+                AutoForwardEnabled = if ($rd.PSObject.Properties.Name -contains 'AutoForwardEnabled') { [bool]$rd.AutoForwardEnabled } else { $null }
+                AutoReplyEnabled   = if ($rd.PSObject.Properties.Name -contains 'AutoReplyEnabled') { [bool]$rd.AutoReplyEnabled } else { $null }
+                NDREnabled         = if ($rd.PSObject.Properties.Name -contains 'NDREnabled') { [bool]$rd.NDREnabled } else { $null }
+                AllowedOOFType     = if ($rd.PSObject.Properties.Name -contains 'AllowedOOFType') { [string]$rd.AllowedOOFType } else { $null }
+            }
+        }
+    }
+    catch {
+        $organization.CollectionWarnings += ('Get-RemoteDomain failed: ' + $_.Exception.Message)
+    }
+
+    try {
+        $edgeResults = @(Invoke-EDCAExchangeEndpointCommand -Server $Server -ScriptBlock {
+                Get-ExchangeServer -ErrorAction Stop | Where-Object { [string]$_.ServerRole -like '*Edge*' } | Select-Object Name, AdminDisplayVersion, Edition
+            })
+        foreach ($es in $edgeResults) {
+            $organization.EdgeServers += [pscustomobject]@{
+                Name                = [string]$es.Name
+                AdminDisplayVersion = if ($es.PSObject.Properties.Name -contains 'AdminDisplayVersion') { [string]$es.AdminDisplayVersion } else { $null }
+                Edition             = if ($es.PSObject.Properties.Name -contains 'Edition') { [string]$es.Edition } else { $null }
+            }
+        }
+    }
+    catch {
+        $organization.CollectionWarnings += ('Get-ExchangeServer (Edge detection) failed: ' + $_.Exception.Message)
+    }
+
+    $organization.Available = ($null -ne $organization.OAuth2ClientProfileEnabled) -or ($null -ne $organization.AdSplitPermissionEnabled) -or ($null -ne $organization.UpnPrimarySmtpMismatchCount) -or (@($organization.AcceptedDomains).Count -gt 0) -or ($null -ne $organization.DefaultAuthPolicyBasicAuth)
+
+    try {
+        $sbMdm = [scriptblock]::Create('Get-MobileDeviceMailboxPolicy -ErrorAction Stop')
+        $mdmPolicies = @(Invoke-EDCAExchangeEndpointCommand -Server $Server -ScriptBlock $sbMdm)
+        foreach ($mdmPolicy in $mdmPolicies) {
+            $organization.MobileDevicePolicies += [pscustomobject]@{
+                Name                         = [string]$mdmPolicy.Name
+                IsDefault                    = if ($mdmPolicy.PSObject.Properties.Name -contains 'IsDefault') { [bool]$mdmPolicy.IsDefault } else { $null }
+                AllowSimplePassword          = if ($mdmPolicy.PSObject.Properties.Name -contains 'AllowSimplePassword') { [bool]$mdmPolicy.AllowSimplePassword } else { $null }
+                AllowNonProvisionableDevices = if ($mdmPolicy.PSObject.Properties.Name -contains 'AllowNonProvisionableDevices') { [bool]$mdmPolicy.AllowNonProvisionableDevices } else { $null }
+                PasswordHistory              = if ($mdmPolicy.PSObject.Properties.Name -contains 'PasswordHistory') { $mdmPolicy.PasswordHistory } else { $null }
+                MinPasswordLength            = if ($mdmPolicy.PSObject.Properties.Name -contains 'MinPasswordLength') { $mdmPolicy.MinPasswordLength } else { $null }
+                MaxPasswordFailedAttempts    = if ($mdmPolicy.PSObject.Properties.Name -contains 'MaxPasswordFailedAttempts') { [string]$mdmPolicy.MaxPasswordFailedAttempts } else { $null }
+                PasswordExpiration           = if ($mdmPolicy.PSObject.Properties.Name -contains 'PasswordExpiration') { [string]$mdmPolicy.PasswordExpiration } else { $null }
+                DevicePolicyRefreshInterval  = if ($mdmPolicy.PSObject.Properties.Name -contains 'DevicePolicyRefreshInterval') { [string]$mdmPolicy.DevicePolicyRefreshInterval } else { $null }
+                AlphanumericPasswordRequired = if ($mdmPolicy.PSObject.Properties.Name -contains 'AlphanumericPasswordRequired') { [bool]$mdmPolicy.AlphanumericPasswordRequired } else { $null }
+                RequireDeviceEncryption      = if ($mdmPolicy.PSObject.Properties.Name -contains 'RequireDeviceEncryption') { [bool]$mdmPolicy.RequireDeviceEncryption } else { $null }
+                PasswordEnabled              = if ($mdmPolicy.PSObject.Properties.Name -contains 'PasswordEnabled') { [bool]$mdmPolicy.PasswordEnabled } else { $null }
+                MaxInactivityTimeLock        = if ($mdmPolicy.PSObject.Properties.Name -contains 'MaxInactivityTimeLock') { [string]$mdmPolicy.MaxInactivityTimeLock } else { $null }
+            }
+        }
+    }
+    catch {
+        $organization.CollectionWarnings += ('Get-MobileDeviceMailboxPolicy failed: ' + $_.Exception.Message)
+    }
+
+    try {
+        $irmResult = Invoke-EDCAExchangeEndpointCommand -Server $Server -ScriptBlock {
+            Get-IRMConfiguration -ErrorAction Stop | Select-Object -First 1 -Property InternalLicensingEnabled, ExternalLicensingEnabled, AzureRMSLicensingEnabled
+        }
+        if ($null -ne $irmResult) {
+            $internalEnabled = $null
+            $externalEnabled = $null
+            $azureEnabled = $null
+            if ($irmResult.PSObject.Properties.Name -contains 'InternalLicensingEnabled' -and $null -ne $irmResult.InternalLicensingEnabled) {
+                $internalEnabled = [bool]$irmResult.InternalLicensingEnabled
+            }
+            if ($irmResult.PSObject.Properties.Name -contains 'ExternalLicensingEnabled' -and $null -ne $irmResult.ExternalLicensingEnabled) {
+                $externalEnabled = [bool]$irmResult.ExternalLicensingEnabled
+            }
+            if ($irmResult.PSObject.Properties.Name -contains 'AzureRMSLicensingEnabled' -and $null -ne $irmResult.AzureRMSLicensingEnabled) {
+                $azureEnabled = [bool]$irmResult.AzureRMSLicensingEnabled
+            }
+            $organization.IrmConfiguration = [pscustomobject]@{
+                InternalLicensingEnabled = $internalEnabled
+                ExternalLicensingEnabled = $externalEnabled
+                AzureRMSLicensingEnabled = $azureEnabled
+            }
+        }
+    }
+    catch {
+        $organization.CollectionWarnings += ('Get-IRMConfiguration failed: ' + $_.Exception.Message)
+    }
+
+    return $organization
+}
+
+function Invoke-EDCACollection {
+    [CmdletBinding()]
+    param(
+        [AllowEmptyCollection()]
+        [string[]]$Servers = @(),
+        [ValidateRange(1, 128)]
+        [int]$ThrottleLimit = 4
+    )
+
+    $normalizedServers = @($Servers | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | ForEach-Object { ([string]$_).Trim() } | Sort-Object -Unique)
+    if ($normalizedServers.Count -gt 0) {
+        Write-Verbose ('Input server list normalized to {0} target(s): {1}' -f $normalizedServers.Count, ($normalizedServers -join ', '))
+    }
+
+    if ($normalizedServers.Count -eq 0) {
+        Write-EDCALog -Message 'No servers specified. Discovering all Exchange servers in the current environment.'
+        $normalizedServers = Get-EDCAExchangeEnvironmentServers
+        Write-EDCALog -Message ('Discovered Exchange servers: {0}' -f ($normalizedServers -join ', '))
+    }
+
+    $results = Invoke-EDCAParallelServerCollection -Servers $normalizedServers -ThrottleLimit $ThrottleLimit
+
+    $localExchangeServerCmdlet = Get-Command -Name Get-ExchangeServer -ErrorAction SilentlyContinue
+    if ($null -eq $localExchangeServerCmdlet) {
+        try {
+            Add-PSSnapin -Name Microsoft.Exchange.Management.PowerShell.SnapIn -ErrorAction Stop
+        }
+        catch {
+        }
+        $localExchangeServerCmdlet = Get-Command -Name Get-ExchangeServer -ErrorAction SilentlyContinue
+    }
+
+    $organization = [pscustomobject]@{
+        Available                  = $false
+        SourceServer               = $null
+        ExchangeCmdletsAvailable   = $false
+        OAuth2ClientProfileEnabled = $null
+        AdSplitPermissionEnabled   = $null
+        AcceptedDomains            = @()
+        ForestFunctionalLevel      = $null
+        DomainFunctionalLevel      = $null
+        AdSiteCount                = $null
+        TransportConfig            = $null
+        RemoteDomains              = @()
+        EdgeServers                = @()
+        IrmConfiguration           = $null
+        CollectionWarnings         = @()
+    }
+
+    $organizationSourceServer = $null
+    foreach ($result in $results) {
+        if ($result.PSObject.Properties.Name -contains 'CollectionError') {
+            continue
+        }
+
+        if (($result.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $result.Exchange -and ($result.Exchange.PSObject.Properties.Name -contains 'IsExchangeServer') -and [bool]$result.Exchange.IsExchangeServer) {
+            $organizationSourceServer = [string]$result.Server
+            break
+        }
+    }
+
+    if ([string]::IsNullOrWhiteSpace($organizationSourceServer) -and $normalizedServers.Count -gt 0) {
+        $organizationSourceServer = [string]$normalizedServers[0]
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($organizationSourceServer)) {
+        try {
+            $organization = Get-EDCAOrganizationInventory -Server $organizationSourceServer
+        }
+        catch {
+            $organization.CollectionWarnings = @('Organization-level collection failed: ' + $_.Exception.Message)
+        }
+    }
+
+    if ($null -ne $localExchangeServerCmdlet) {
+        Write-Verbose 'Attempting local Exchange Management Shell fallback enrichment for incomplete server Exchange data.'
+
+        if (($organization.PSObject.Properties.Name -contains 'Available') -and -not [bool]$organization.Available) {
+            Write-Verbose 'Organization-level remote collection unavailable; attempting local Exchange Management Shell fallback for organization settings.'
+
+            try {
+                $orgFallbackWarnings = @()
+                $orgFallbackAcceptedDomains = @()
+                $orgFallbackOAuth2Enabled = $null
+                $orgFallbackAdSplitPermissionEnabled = $null
+
+                if (Get-Command -Name Get-OrganizationConfig -ErrorAction SilentlyContinue) {
+                    try {
+                        $orgConfig = Get-OrganizationConfig -ErrorAction Stop
+                        if ($orgConfig.PSObject.Properties.Name -contains 'OAuth2ClientProfileEnabled') {
+                            $orgFallbackOAuth2Enabled = [bool]$orgConfig.OAuth2ClientProfileEnabled
+                        }
+                        if ($orgConfig.PSObject.Properties.Name -contains 'AdSplitPermissionEnabled' -and $null -ne $orgConfig.AdSplitPermissionEnabled) {
+                            $orgFallbackAdSplitPermissionEnabled = [bool]$orgConfig.AdSplitPermissionEnabled
+                        }
+                        elseif ($orgConfig.PSObject.Properties.Name -contains 'ADSplitPermissionEnabled' -and $null -ne $orgConfig.ADSplitPermissionEnabled) {
+                            $orgFallbackAdSplitPermissionEnabled = [bool]$orgConfig.ADSplitPermissionEnabled
+                        }
+                    }
+                    catch {
+                        $orgFallbackWarnings += ('Local fallback Get-OrganizationConfig failed: ' + $_.Exception.Message)
+                    }
+                }
+
+                if (Get-Command -Name Get-AcceptedDomain -ErrorAction SilentlyContinue) {
+                    try {
+                        foreach ($acceptedDomain in @(Get-AcceptedDomain -ErrorAction Stop)) {
+                            $domainValue = ''
+                            if ($acceptedDomain.PSObject.Properties.Name -contains 'DomainName' -and $null -ne $acceptedDomain.DomainName) {
+                                $domainValue = [string]$acceptedDomain.DomainName
+                            }
+                            elseif ($acceptedDomain.PSObject.Properties.Name -contains 'Name') {
+                                $domainValue = [string]$acceptedDomain.Name
+                            }
+
+                            if (-not [string]::IsNullOrWhiteSpace($domainValue)) {
+                                $orgFallbackAcceptedDomains += $domainValue.Trim().TrimEnd('.').ToLowerInvariant()
+                            }
+                        }
+                    }
+                    catch {
+                        $orgFallbackWarnings += ('Local fallback Get-AcceptedDomain failed: ' + $_.Exception.Message)
+                    }
+                }
+
+                $organization = [pscustomobject]@{
+                    Available                  = ($null -ne $orgFallbackOAuth2Enabled -or $null -ne $orgFallbackAdSplitPermissionEnabled -or @($orgFallbackAcceptedDomains).Count -gt 0)
+                    SourceServer               = $env:COMPUTERNAME
+                    ExchangeCmdletsAvailable   = $true
+                    OAuth2ClientProfileEnabled = $orgFallbackOAuth2Enabled
+                    AdSplitPermissionEnabled   = $orgFallbackAdSplitPermissionEnabled
+                    AcceptedDomains            = @($orgFallbackAcceptedDomains | Sort-Object -Unique)
+                    ForestFunctionalLevel      = $null
+                    DomainFunctionalLevel      = $null
+                    AdSiteCount                = $null
+                    CollectionWarnings         = $orgFallbackWarnings
+                }
+            }
+            catch {
+                $organization.CollectionWarnings = @('Organization-level local fallback failed: ' + $_.Exception.Message)
+            }
+        }
+
+        foreach ($result in $results) {
+            if ($result.PSObject.Properties.Name -contains 'CollectionError') {
+                continue
+            }
+
+            if (-not ($result.PSObject.Properties.Name -contains 'Exchange') -or $null -eq $result.Exchange) {
+                continue
+            }
+
+            $exchangeInfo = $result.Exchange
+            $serverName = [string]$result.Server
+            $warnings = @()
+            if ($exchangeInfo.PSObject.Properties.Name -contains 'CollectionWarnings' -and $null -ne $exchangeInfo.CollectionWarnings) {
+                $warnings = @($exchangeInfo.CollectionWarnings)
+            }
+
+            $needsServerIdentityData = [string]::IsNullOrWhiteSpace([string]$exchangeInfo.AdminDisplayVersion) -or [string]::IsNullOrWhiteSpace([string]$exchangeInfo.Edition) -or [string]::IsNullOrWhiteSpace([string]$exchangeInfo.ProductLine) -or ([string]$exchangeInfo.ProductLine -eq 'Unknown')
+            if ($needsServerIdentityData) {
+                try {
+                    $exchangeServer = Get-ExchangeServer -Identity $serverName -ErrorAction Stop
+                    $exchangeInfo.ExchangeCmdletsAvailable = $true
+                    $exchangeInfo.IsExchangeServer = $true
+
+                    if ($exchangeServer.PSObject.Properties.Name -contains 'Name') {
+                        $exchangeInfo.Name = [string]$exchangeServer.Name
+                    }
+                    if ($exchangeServer.PSObject.Properties.Name -contains 'AdminDisplayVersion' -and $null -ne $exchangeServer.AdminDisplayVersion) {
+                        $exchangeInfo.AdminDisplayVersion = [string]$exchangeServer.AdminDisplayVersion
+                    }
+                    if ($exchangeServer.PSObject.Properties.Name -contains 'Edition') {
+                        $exchangeInfo.Edition = [string]$exchangeServer.Edition
+                    }
+
+                    $versionText = [string]$exchangeInfo.AdminDisplayVersion
+                    if ($versionText -match 'Version 15\.1') {
+                        $exchangeInfo.ProductLine = 'Exchange2016'
+                    }
+                    elseif ($versionText -match 'Version 15\.2') {
+                        $isSe = $false
+                        if ($exchangeServer.PSObject.Properties.Name -contains 'IsExchangeServerSubscriptionEdition') {
+                            $isSe = [bool]$exchangeServer.IsExchangeServerSubscriptionEdition
+                        }
+                        if (-not $isSe -and $versionText -match 'Subscription|SE') {
+                            $isSe = $true
+                        }
+                        if (-not $isSe -and $versionText -match 'Build\s+(\d+)\.') {
+                            if ([int]$matches[1] -ge 2562) {
+                                $isSe = $true
+                            }
+                        }
+                        $exchangeInfo.ProductLine = if ($isSe) { 'ExchangeSE' } else { 'Exchange2019' }
+                    }
+                }
+                catch {
+                    $warnings += ('Local fallback Get-ExchangeServer failed for {0}: {1}' -f $serverName, $_.Exception.Message)
+                }
+            }
+
+            if (($exchangeInfo.PSObject.Properties.Name -contains 'CollectionWarnings') -and $warnings.Count -gt 0) {
+                $exchangeInfo.CollectionWarnings = @($warnings | Select-Object -Unique)
+            }
+        }
+    }
+    else {
+        Write-Verbose 'Local Exchange Management Shell cmdlets are unavailable; skipping local fallback enrichment.'
+    }
+
+    $acceptedDomains = @()
+    if (($organization.PSObject.Properties.Name -contains 'AcceptedDomains') -and $null -ne $organization.AcceptedDomains) {
+        foreach ($acceptedDomain in @($organization.AcceptedDomains)) {
+            if (-not [string]::IsNullOrWhiteSpace([string]$acceptedDomain)) {
+                $acceptedDomains += ([string]$acceptedDomain).Trim().TrimEnd('.').ToLowerInvariant()
+            }
+        }
+    }
+
+    $acceptedDomains = @($acceptedDomains | Sort-Object -Unique)
+    $eligibleAcceptedDomains = @($acceptedDomains | Where-Object {
+            $domainCandidate = [string]$_
+            $domainCandidate -ne 'onmicrosoft.com' -and -not $domainCandidate.EndsWith('.onmicrosoft.com')
+        })
+    $skippedAcceptedDomains = @($acceptedDomains | Where-Object {
+            $domainCandidate = [string]$_
+            $domainCandidate -eq 'onmicrosoft.com' -or $domainCandidate.EndsWith('.onmicrosoft.com')
+        })
+
+    Write-Verbose ('Collected {0} unique accepted domain(s) for email-auth checks.' -f $acceptedDomains.Count)
+    if ($skippedAcceptedDomains.Count -gt 0) {
+        Write-Verbose ('Excluding {0} onmicrosoft.com domain(s) before email-auth checks: {1}' -f $skippedAcceptedDomains.Count, ($skippedAcceptedDomains -join ', '))
+    }
+
+    $emailAuthentication = Invoke-EDCAEmailAuthenticationChecks -AcceptedDomains $eligibleAcceptedDomains
+    Write-Verbose 'Email authentication checks completed.'
+
+    return [pscustomobject]@{
+        Metadata            = [pscustomobject]@{
+            ToolName            = 'EDCA'
+            ToolVersion         = '0.1.0'
+            CollectionTimestamp = (Get-Date)
+            ExecutedBy          = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+        }
+        Servers             = $results
+        Organization        = $organization
+        EmailAuthentication = $emailAuthentication
+    }
+}
+
