@@ -1,0 +1,120 @@
+name: Update Exchange Builds
+
+on:
+  schedule:
+    # Daily at 06:00 UTC
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-exchange-builds
+  cancel-in-progress: false
+
+jobs:
+  update-builds:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Fetch and update Exchange builds JSON
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          $sourceUrl = 'https://raw.githubusercontent.com/microsoft/CSS-Exchange/main/Shared/Get-ExchangeBuildVersionInformation.ps1'
+          $jsonPath  = 'Config/exchange.builds.json'
+
+          Write-Host "Downloading source script from: $sourceUrl"
+          $content = Invoke-RestMethod -Uri $sourceUrl -Method Get
+
+          $targetProducts = @('Exchange2016', 'Exchange2019', 'ExchangeSE')
+          $latest = @{}
+
+          foreach ($product in $targetProducts) {
+            $productStart = [regex]::Match($content, "(?s)`"$product`"\s*=\s*@\{")
+            if (-not $productStart.Success) {
+              throw "Could not find product block for $product"
+            }
+
+            # Slice from this product to before the next top-level Exchange product block
+            $startIndex = $productStart.Index
+            $remaining = $content.Substring($startIndex)
+
+            $nextProductRegex = '(?s)\r?\n\s*"(Exchange2013|Exchange2016|Exchange2019|ExchangeSE)"\s*=\s*@\{'
+            $nextMatches = [regex]::Matches($remaining, $nextProductRegex)
+
+            # first match is current product; second match (if present) is next product boundary
+            if ($nextMatches.Count -gt 1) {
+              $endIndex = $nextMatches[1].Index
+              $productBlock = $remaining.Substring(0, $endIndex)
+            } else {
+              $productBlock = $remaining
+            }
+
+            # Capture CU build and optional SU/HU block
+            $cuMatches = [regex]::Matches(
+              $productBlock,
+              '(?s)NewCUAndSUObject\s*"(?<cu>\d+\.\d+\.\d+\.\d+)"\s*(?<su>@\{.*?\})?\s*\)'
+            )
+
+            if ($cuMatches.Count -eq 0) {
+              throw "No CU entries found for $product"
+            }
+
+            $maxVersion = $null
+
+            foreach ($m in $cuMatches) {
+              $versions = New-Object System.Collections.Generic.List[System.Version]
+              [void]$versions.Add([version]$m.Groups['cu'].Value)
+
+              $suBlock = $m.Groups['su'].Value
+              if (-not [string]::IsNullOrWhiteSpace($suBlock)) {
+                $suMatches = [regex]::Matches(
+                  $suBlock,
+                  '"[^"]+"\s*=\s*"(?<build>\d+\.\d+\.\d+\.\d+)"'
+                )
+                foreach ($su in $suMatches) {
+                  [void]$versions.Add([version]$su.Groups['build'].Value)
+                }
+              }
+
+              $localMax = $versions | Sort-Object -Descending | Select-Object -First 1
+              if ($null -eq $maxVersion -or $localMax -gt $maxVersion) {
+                $maxVersion = $localMax
+              }
+            }
+
+            $latest[$product] = $maxVersion.ToString()
+          }
+
+          Write-Host "Detected latest builds:"
+          $latest.GetEnumerator() | Sort-Object Name | ForEach-Object {
+            Write-Host "  $($_.Name): $($_.Value)"
+          }
+
+          $newObject = [ordered]@{
+            Exchange2016 = $latest['Exchange2016']
+            Exchange2019 = $latest['Exchange2019']
+            ExchangeSE   = $latest['ExchangeSE']
+          }
+
+          $newJson = $newObject | ConvertTo-Json -Depth 3
+          Set-Content -Path $jsonPath -Value $newJson -Encoding UTF8
+
+      - name: Commit and push if changed
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if git diff --quiet -- Config/exchange.builds.json; then
+            echo "No changes detected."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
