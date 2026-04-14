@@ -2,12 +2,12 @@ name: Update Exchange Builds
 
 on:
   schedule:
-    - cron: '0 6 * * *' # daily at 06:00 UTC
+    # Daily at 06:00 UTC
+    - cron: '0 6 * * *'
   workflow_dispatch:
 
 permissions:
   contents: write
-  pull-requests: write
 
 jobs:
   update-builds:
@@ -42,12 +42,14 @@ jobs:
               throw "Could not find product block for $product"
             }
 
+            # Slice from this product to before the next top-level Exchange product block
             $startIndex = $productStart.Index
             $remaining = $content.Substring($startIndex)
 
             $nextProductRegex = '(?s)\r?\n\s*"(Exchange2013|Exchange2016|Exchange2019|ExchangeSE)"\s*=\s*@\{'
             $nextMatches = [regex]::Matches($remaining, $nextProductRegex)
 
+            # first match is current product; second match (if present) is next product boundary
             if ($nextMatches.Count -gt 1) {
               $endIndex = $nextMatches[1].Index
               $productBlock = $remaining.Substring(0, $endIndex)
@@ -55,7 +57,12 @@ jobs:
               $productBlock = $remaining
             }
 
-            $cuMatches = [regex]::Matches($productBlock, '(?s)NewCUAndSUObject\s*"(?<cu>\d+\.\d+\.\d+\.\d+)"\s*(?<su>@\{.*?\})?\s*\)')
+            # Capture CU build and optional SU/HU block
+            $cuMatches = [regex]::Matches(
+              $productBlock,
+              '(?s)NewCUAndSUObject\s*"(?<cu>\d+\.\d+\.\d+\.\d+)"\s*(?<su>@\{.*?\})?\s*\)'
+            )
+
             if ($cuMatches.Count -eq 0) {
               throw "No CU entries found for $product"
             }
@@ -63,13 +70,15 @@ jobs:
             $maxVersion = $null
 
             foreach ($m in $cuMatches) {
-              $cuBuild = $m.Groups['cu'].Value
               $versions = New-Object System.Collections.Generic.List[System.Version]
-              [void]$versions.Add([version]$cuBuild)
+              [void]$versions.Add([version]$m.Groups['cu'].Value)
 
               $suBlock = $m.Groups['su'].Value
               if (-not [string]::IsNullOrWhiteSpace($suBlock)) {
-                $suMatches = [regex]::Matches($suBlock, '"[^"]+"\s*=\s*"(?<build>\d+\.\d+\.\d+\.\d+)"')
+                $suMatches = [regex]::Matches(
+                  $suBlock,
+                  '"[^"]+"\s*=\s*"(?<build>\d+\.\d+\.\d+\.\d+)"'
+                )
                 foreach ($su in $suMatches) {
                   [void]$versions.Add([version]$su.Groups['build'].Value)
                 }
@@ -84,31 +93,32 @@ jobs:
             $latest[$product] = $maxVersion.ToString()
           }
 
+          Write-Host "Detected latest builds:"
+          $latest.GetEnumerator() | Sort-Object Name | ForEach-Object {
+            Write-Host "  $($_.Name): $($_.Value)"
+          }
+
           $newObject = [ordered]@{
             Exchange2016 = $latest['Exchange2016']
             Exchange2019 = $latest['Exchange2019']
             ExchangeSE   = $latest['ExchangeSE']
           }
 
-          $newJson = ($newObject | ConvertTo-Json -Depth 3)
+          $newJson = $newObject | ConvertTo-Json -Depth 3
           Set-Content -Path $jsonPath -Value $newJson -Encoding UTF8
 
-      - name: Create Pull Request
-        uses: peter-evans/create-pull-request@v7
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          branch: automation/update-exchange-builds
-          delete-branch: true
-          commit-message: "chore: update Exchange build versions"
-          title: "chore: update Exchange build versions"
-          body: |
-            Automated daily update of `Config/exchange.builds.json` from:
-            - https://github.com/microsoft/CSS-Exchange/blob/main/Shared/Get-ExchangeBuildVersionInformation.ps1
+      - name: Commit and push if changed
+        shell: bash
+        run: |
+          set -euo pipefail
 
-            This PR updates:
-            - Exchange2016
-            - Exchange2019
-            - ExchangeSE
-          labels: |
-            automation
-            dependencies
+          if git diff --quiet -- Config/exchange.builds.json; then
+            echo "No changes detected."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Config/exchange.builds.json
+          git commit -m "chore: update Exchange build versions"
+          git push
