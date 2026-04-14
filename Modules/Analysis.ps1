@@ -223,11 +223,49 @@ function Test-EDCAControl {
         [pscustomobject]$CollectionData
     )
 
-    if ($Control.id -in @('EX-BP-007', 'EX-BP-049', 'EX-BP-083', 'EX-BP-034', 'EX-BP-031', 'EX-BP-033', 'EX-BP-032', 'EX-BP-004', 'EX-BP-003', 'EX-BP-009', 'EX-BP-069', 'EX-BP-087', 'EX-BP-040', 'EX-BP-085', 'EX-BP-095', 'EX-BP-096', 'EX-BP-097', 'EX-BP-098', 'EX-BP-099', 'EX-BP-100', 'EX-BP-114', 'EX-BP-115', 'EX-BP-116', 'EX-BP-117', 'EX-BP-118', 'EX-BP-119', 'EX-BP-120', 'EX-BP-121', 'EX-BP-122', 'EX-BP-123', 'EX-BP-124', 'EX-BP-153')) {
+    if ($Control.id -in @('EX-BP-005', 'EX-BP-007', 'EX-BP-036', 'EX-BP-049', 'EX-BP-083', 'EX-BP-084', 'EX-BP-034', 'EX-BP-031', 'EX-BP-033', 'EX-BP-032', 'EX-BP-004', 'EX-BP-003', 'EX-BP-009', 'EX-BP-069', 'EX-BP-087', 'EX-BP-040', 'EX-BP-085', 'EX-BP-095', 'EX-BP-096', 'EX-BP-097', 'EX-BP-098', 'EX-BP-099', 'EX-BP-100', 'EX-BP-102', 'EX-BP-103', 'EX-BP-104', 'EX-BP-111', 'EX-BP-114', 'EX-BP-115', 'EX-BP-116', 'EX-BP-117', 'EX-BP-118', 'EX-BP-119', 'EX-BP-120', 'EX-BP-121', 'EX-BP-122', 'EX-BP-123', 'EX-BP-124', 'EX-BP-109', 'EX-BP-139', 'EX-BP-141', 'EX-BP-153', 'EX-BP-158')) {
         $status = 'Unknown'
         $evidence = ''
+        $domainServerResults = $null
+        $subjectLabel = 'Server'
 
         switch ($Control.id) {
+            'EX-BP-084' {
+                $settingOverrides = $null
+                foreach ($srv in @($CollectionData.Servers)) {
+                    if (($srv.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $srv.Exchange -and
+                        ($srv.Exchange.PSObject.Properties.Name -contains 'SettingOverrides') -and
+                        $null -ne $srv.Exchange.SettingOverrides) {
+                        $settingOverrides = $srv.Exchange.SettingOverrides
+                        break
+                    }
+                }
+                if ($null -eq $settingOverrides) {
+                    $status = 'Unknown'
+                    $evidence = 'Setting override telemetry unavailable; cannot verify P2 FROM detection state.'
+                }
+                else {
+                    $overrideNames = @()
+                    if (($settingOverrides.PSObject.Properties.Name -contains 'Names') -and $null -ne $settingOverrides.Names) {
+                        $overrideNames = @($settingOverrides.Names | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
+                    }
+                    $disableOverrides = @($overrideNames | Where-Object { $_ -match '(?i)DisableP2FromRegexMatch' })
+                    if ($disableOverrides.Count -gt 0) {
+                        $status = 'Fail'
+                        $summary = ('Detected {0} P2 FROM detection override(s) that disable default protections.' -f $disableOverrides.Count)
+                        $evidence = Format-EDCAEvidenceWithElements -Summary $summary -Elements $disableOverrides
+                    }
+                    else {
+                        $status = 'Pass'
+                        if ($overrideNames.Count -eq 0) {
+                            $evidence = 'No Exchange setting overrides detected; P2 FROM detection defaults are preserved.'
+                        }
+                        else {
+                            $evidence = 'No P2 FROM detection disabling overrides detected in Exchange setting overrides.'
+                        }
+                    }
+                }
+            }
             'EX-BP-007' {
                 if (($CollectionData.PSObject.Properties.Name -contains 'Organization') -and $null -ne $CollectionData.Organization -and ($CollectionData.Organization.PSObject.Properties.Name -contains 'UpnPrimarySmtpMismatchCount') -and $null -ne $CollectionData.Organization.UpnPrimarySmtpMismatchCount) {
                     $count = [int]$CollectionData.Organization.UpnPrimarySmtpMismatchCount
@@ -286,23 +324,37 @@ function Test-EDCAControl {
                     }
                 }
                 else {
-                    $failed = @($domainResults | Where-Object { $_.Spf.Status -eq 'Fail' })
-                    $unknown = @($domainResults | Where-Object { $_.Spf.Status -eq 'Unknown' })
+                    $domainServerResults = @($domainResults | ForEach-Object {
+                            if ([string]$_.Domain -match '(?i)\.(local|lan|internal|corp|home|localdomain|localhost)$') {
+                                [pscustomobject]@{ Server = $_.Domain; Status = 'Skipped'; Evidence = 'Non-internet-routable domain — SPF check not applicable.' }
+                            }
+                            else {
+                                $spfEvidence = [string]$_.Spf.Evidence
+                                $spfCount = $null
+                                if ($_.Spf.PSObject.Properties.Name -contains 'PotentialDnsLookupCount') {
+                                    $spfCount = $_.Spf.PotentialDnsLookupCount
+                                }
+                                if ($null -ne $spfCount -and [int]$spfCount -gt 10) {
+                                    $spfEvidence += ("`nNote: DNS lookup count ({0}) exceeds RFC 7208 limit of 10; receiving MTAs will likely ignore this SPF record." -f $spfCount)
+                                }
+                                [pscustomobject]@{ Server = $_.Domain; Status = $_.Spf.Status; Evidence = $spfEvidence }
+                            }
+                        })
+                    $failed = @($domainServerResults | Where-Object { $_.Status -eq 'Fail' })
+                    $unknown = @($domainServerResults | Where-Object { $_.Status -eq 'Unknown' })
                     if ($failed.Count -gt 0) {
                         $status = 'Fail'
                     }
                     elseif ($unknown.Count -gt 0) {
                         $status = 'Unknown'
                     }
-                    else {
+                    elseif (@($domainServerResults | Where-Object { $_.Status -eq 'Pass' }).Count -gt 0) {
                         $status = 'Pass'
                     }
-
-                    $evidenceLines = @()
-                    foreach ($dr in $domainResults) {
-                        $evidenceLines += ('{0}: {1} - {2}' -f $dr.Domain, $dr.Spf.Status, [string]$dr.Spf.Evidence)
+                    else {
+                        $status = 'Skipped'
+                        $evidence = 'All accepted domains are non-internet-routable — SPF check not applicable.'
                     }
-                    $evidence = $evidenceLines -join "`n"
                 }
             }
             'EX-BP-031' {
@@ -321,23 +373,29 @@ function Test-EDCAControl {
                     }
                 }
                 else {
-                    $failed = @($domainResults | Where-Object { $_.Dmarc.Status -eq 'Fail' })
-                    $unknown = @($domainResults | Where-Object { $_.Dmarc.Status -eq 'Unknown' })
+                    $domainServerResults = @($domainResults | ForEach-Object {
+                            if ([string]$_.Domain -match '(?i)\.(local|lan|internal|corp|home|localdomain|localhost)$') {
+                                [pscustomobject]@{ Server = $_.Domain; Status = 'Skipped'; Evidence = 'Non-internet-routable domain — DMARC check not applicable.' }
+                            }
+                            else {
+                                [pscustomobject]@{ Server = $_.Domain; Status = $_.Dmarc.Status; Evidence = [string]$_.Dmarc.Evidence }
+                            }
+                        })
+                    $failed = @($domainServerResults | Where-Object { $_.Status -eq 'Fail' })
+                    $unknown = @($domainServerResults | Where-Object { $_.Status -eq 'Unknown' })
                     if ($failed.Count -gt 0) {
                         $status = 'Fail'
                     }
                     elseif ($unknown.Count -gt 0) {
                         $status = 'Unknown'
                     }
-                    else {
+                    elseif (@($domainServerResults | Where-Object { $_.Status -eq 'Pass' }).Count -gt 0) {
                         $status = 'Pass'
                     }
-
-                    $evidenceLines = @()
-                    foreach ($dr in $domainResults) {
-                        $evidenceLines += ('{0}: {1} - {2}' -f $dr.Domain, $dr.Dmarc.Status, [string]$dr.Dmarc.Evidence)
+                    else {
+                        $status = 'Skipped'
+                        $evidence = 'All accepted domains are non-internet-routable — DMARC check not applicable.'
                     }
-                    $evidence = $evidenceLines -join "`n"
                 }
             }
             'EX-BP-033' {
@@ -356,23 +414,29 @@ function Test-EDCAControl {
                     }
                 }
                 else {
-                    $failed = @($domainResults | Where-Object { $_.MtaSts.Status -eq 'Fail' })
-                    $unknown = @($domainResults | Where-Object { $_.MtaSts.Status -eq 'Unknown' })
+                    $domainServerResults = @($domainResults | ForEach-Object {
+                            if ([string]$_.Domain -match '(?i)\.(local|lan|internal|corp|home|localdomain|localhost)$') {
+                                [pscustomobject]@{ Server = $_.Domain; Status = 'Skipped'; Evidence = 'Non-internet-routable domain — MTA-STS check not applicable.' }
+                            }
+                            else {
+                                [pscustomobject]@{ Server = $_.Domain; Status = $_.MtaSts.Status; Evidence = [string]$_.MtaSts.Evidence }
+                            }
+                        })
+                    $failed = @($domainServerResults | Where-Object { $_.Status -eq 'Fail' })
+                    $unknown = @($domainServerResults | Where-Object { $_.Status -eq 'Unknown' })
                     if ($failed.Count -gt 0) {
                         $status = 'Fail'
                     }
                     elseif ($unknown.Count -gt 0) {
                         $status = 'Unknown'
                     }
-                    else {
+                    elseif (@($domainServerResults | Where-Object { $_.Status -eq 'Pass' }).Count -gt 0) {
                         $status = 'Pass'
                     }
-
-                    $evidenceLines = @()
-                    foreach ($dr in $domainResults) {
-                        $evidenceLines += ('{0}: {1} - {2}' -f $dr.Domain, $dr.MtaSts.Status, [string]$dr.MtaSts.Evidence)
+                    else {
+                        $status = 'Skipped'
+                        $evidence = 'All accepted domains are non-internet-routable — MTA-STS check not applicable.'
                     }
-                    $evidence = $evidenceLines -join "`n"
                 }
             }
             'EX-BP-032' {
@@ -391,23 +455,29 @@ function Test-EDCAControl {
                     }
                 }
                 else {
-                    $failed = @($domainResults | Where-Object { $_.Dane.Status -eq 'Fail' })
-                    $unknown = @($domainResults | Where-Object { $_.Dane.Status -eq 'Unknown' })
+                    $domainServerResults = @($domainResults | ForEach-Object {
+                            if ([string]$_.Domain -match '(?i)\.(local|lan|internal|corp|home|localdomain|localhost)$') {
+                                [pscustomobject]@{ Server = $_.Domain; Status = 'Skipped'; Evidence = 'Non-internet-routable domain — SMTP DANE check not applicable.' }
+                            }
+                            else {
+                                [pscustomobject]@{ Server = $_.Domain; Status = $_.Dane.Status; Evidence = [string]$_.Dane.Evidence }
+                            }
+                        })
+                    $failed = @($domainServerResults | Where-Object { $_.Status -eq 'Fail' })
+                    $unknown = @($domainServerResults | Where-Object { $_.Status -eq 'Unknown' })
                     if ($failed.Count -gt 0) {
                         $status = 'Fail'
                     }
                     elseif ($unknown.Count -gt 0) {
                         $status = 'Unknown'
                     }
-                    else {
+                    elseif (@($domainServerResults | Where-Object { $_.Status -eq 'Pass' }).Count -gt 0) {
                         $status = 'Pass'
                     }
-
-                    $evidenceLines = @()
-                    foreach ($dr in $domainResults) {
-                        $evidenceLines += ('{0}: {1} - {2}' -f $dr.Domain, $dr.Dane.Status, [string]$dr.Dane.Evidence)
+                    else {
+                        $status = 'Skipped'
+                        $evidence = 'All accepted domains are non-internet-routable — SMTP DANE check not applicable.'
                     }
-                    $evidence = $evidenceLines -join "`n"
                 }
             }
             'EX-BP-004' {
@@ -558,13 +628,10 @@ function Test-EDCAControl {
                 else {
                     $connectorByIdentity = @{}
                     foreach ($connector in $allSendConnectors) {
-                        $identity = [string]$connector.Identity
-                        if ([string]::IsNullOrWhiteSpace($identity)) {
-                            continue
-                        }
-
-                        if (-not $connectorByIdentity.ContainsKey($identity)) {
-                            $connectorByIdentity[$identity] = $connector
+                        $cId = [string]$connector.Identity
+                        if ([string]::IsNullOrWhiteSpace($cId)) { continue }
+                        if (-not $connectorByIdentity.ContainsKey($cId)) {
+                            $connectorByIdentity[$cId] = $connector
                         }
                     }
 
@@ -579,48 +646,27 @@ function Test-EDCAControl {
                         $evidence = 'No hybrid/EXO-targeted send connectors detected.'
                     }
                     else {
-                        $issues = @()
-                        foreach ($connector in $hybridConnectors) {
-                            $identity = [string]$connector.Identity
-
-                            if ($connector.Enabled -eq $false) {
-                                $issues += ('{0}: connector is disabled.' -f $identity)
-                            }
-                            if ($connector.RequireTLS -ne $true) {
-                                $issues += ('{0}: RequireTLS is not enabled.' -f $identity)
-                            }
-
-                            $tlsAuthLevel = [string]$connector.TlsAuthLevel
-                            if ($tlsAuthLevel -notin @('CertificateValidation', 'DomainValidation')) {
-                                $issues += ('{0}: TlsAuthLevel is {1}; expected CertificateValidation or DomainValidation.' -f $identity, $tlsAuthLevel)
-                            }
-                            elseif ($tlsAuthLevel -eq 'DomainValidation') {
-                                $tlsDomain = [string]$connector.TlsDomain
-                                if ([string]::IsNullOrWhiteSpace($tlsDomain)) {
-                                    $issues += ('{0}: TlsAuthLevel is DomainValidation but TlsDomain is empty.' -f $identity)
+                        $domainServerResults = @($hybridConnectors | ForEach-Object {
+                                $dse = if ($_.PSObject.Properties.Name -contains 'DomainSecureEnabled') { $_.DomainSecureEnabled } else { $null }
+                                $dseDisplay = if ($dse -eq $true) { 'True' } elseif ($dse -eq $false) { 'False' } else { 'unknown' }
+                                $itemStatus = if ($dse -eq $true) { 'Pass' } elseif ($null -eq $dse) { 'Unknown' } else { 'Fail' }
+                                [pscustomobject]@{
+                                    Server   = [string]$_.Identity
+                                    Status   = $itemStatus
+                                    Evidence = ('DomainSecureEnabled: {0}.' -f $dseDisplay)
                                 }
-                                elseif ($tlsDomain -notmatch 'mail\.protection\.outlook\.com') {
-                                    $issues += ('{0}: TlsDomain ({1}) does not match expected EXO service domain pattern.' -f $identity, $tlsDomain)
-                                }
-                            }
+                            })
 
-                            $tlsCertificateName = [string]$connector.TlsCertificateName
-                            if ([string]::IsNullOrWhiteSpace($tlsCertificateName)) {
-                                $issues += ('{0}: TlsCertificateName is not configured.' -f $identity)
-                            }
-                            elseif ($connector.PSObject.Properties.Name -contains 'TlsCertificateSyntaxValid' -and $connector.TlsCertificateSyntaxValid -eq $false) {
-                                $issues += ('{0}: TlsCertificateName syntax is invalid; expected <I>X.500Issuer<S>X.500Subject.' -f $identity)
-                            }
-                        }
-
-                        $summary = ('Hybrid/EXO send connectors evaluated: {0}' -f $hybridConnectors.Count)
-                        if ($issues.Count -gt 0) {
+                        $failCount = @($domainServerResults | Where-Object { $_.Status -eq 'Fail' }).Count
+                        $unknownCount = @($domainServerResults | Where-Object { $_.Status -eq 'Unknown' }).Count
+                        if ($failCount -gt 0) {
                             $status = 'Fail'
-                            $evidence = Format-EDCAEvidenceWithElements -Summary $summary -Elements $issues
+                        }
+                        elseif ($unknownCount -gt 0) {
+                            $status = 'Unknown'
                         }
                         else {
                             $status = 'Pass'
-                            $evidence = $summary
                         }
                     }
                 }
@@ -792,6 +838,7 @@ function Test-EDCAControl {
                 }
             }
             'EX-BP-097' {
+                $subjectLabel = 'Domain'
                 $remoteDomains = @()
                 if (($CollectionData.PSObject.Properties.Name -contains 'Organization') -and $null -ne $CollectionData.Organization -and
                     ($CollectionData.Organization.PSObject.Properties.Name -contains 'RemoteDomains')) {
@@ -802,23 +849,44 @@ function Test-EDCAControl {
                     $evidence = 'Remote domain configuration data unavailable.'
                 }
                 else {
-                    # Exclude onmicrosoft.com remote domains — NDREnabled=True on these is expected for hybrid/EXO coexistence.
-                    $applicableDomains = @($remoteDomains | Where-Object { [string]$_.DomainName -notmatch '\.onmicrosoft\.com$' })
-                    $nonCompliant = @($applicableDomains | Where-Object { $null -ne $_.NDREnabled -and [bool]$_.NDREnabled -eq $true })
-                    if ($nonCompliant.Count -gt 0) {
+                    $domainServerResults = @($remoteDomains | ForEach-Object {
+                            $rdName = [string]$_.Name
+                            $rdDomain = if ($_.PSObject.Properties.Name -contains 'DomainName') { [string]$_.DomainName } else { '' }
+                            $rdDisplay = if ([string]::IsNullOrWhiteSpace($rdDomain)) { $rdName } else { '{0} ({1})' -f $rdName, $rdDomain }
+                            $isOnMicrosoft = [string]$rdDomain -match '\.onmicrosoft\.com$'
+                            $ndrEnabled = if ($_.PSObject.Properties.Name -contains 'NDREnabled') { $_.NDREnabled } else { $null }
+                            if ($isOnMicrosoft) {
+                                [pscustomobject]@{ Server = $rdDisplay; Status = 'Skipped'; Evidence = 'onmicrosoft.com domain — NDREnabled=True is expected for hybrid/EXO coexistence.' }
+                            }
+                            elseif ($null -eq $ndrEnabled) {
+                                [pscustomobject]@{ Server = $rdDisplay; Status = 'Unknown'; Evidence = 'NDREnabled data not available.' }
+                            }
+                            elseif ([bool]$ndrEnabled -eq $true) {
+                                [pscustomobject]@{ Server = $rdDisplay; Status = 'Fail'; Evidence = 'NDREnabled: True (expected False).' }
+                            }
+                            else {
+                                [pscustomobject]@{ Server = $rdDisplay; Status = 'Pass'; Evidence = 'NDREnabled: False.' }
+                            }
+                        })
+                    $failCount = @($domainServerResults | Where-Object { $_.Status -eq 'Fail' }).Count
+                    $unknownCount = @($domainServerResults | Where-Object { $_.Status -eq 'Unknown' }).Count
+                    if ($failCount -gt 0) {
                         $status = 'Fail'
-                        $details = @($nonCompliant | ForEach-Object { '{0} ({1}): NDREnabled=True' -f [string]$_.Name, [string]$_.DomainName })
-                        $evidence = Format-EDCAEvidenceWithElements -Summary ('{0} remote domain(s) have NDREnabled set to True.' -f $nonCompliant.Count) -Elements $details
+                    }
+                    elseif ($unknownCount -gt 0) {
+                        $status = 'Unknown'
+                    }
+                    elseif (@($domainServerResults | Where-Object { $_.Status -eq 'Pass' }).Count -gt 0) {
+                        $status = 'Pass'
                     }
                     else {
-                        $excluded = $remoteDomains.Count - $applicableDomains.Count
-                        $suffix = if ($excluded -gt 0) { (' ({0} onmicrosoft.com domain(s) excluded from check).' -f $excluded) } else { '.' }
-                        $status = 'Pass'
-                        $evidence = ('All {0} applicable remote domain(s) have NDREnabled set to False{1}' -f $applicableDomains.Count, $suffix)
+                        $status = 'Skipped'
+                        $evidence = 'All remote domains are onmicrosoft.com — NDR check not applicable.'
                     }
                 }
             }
             'EX-BP-098' {
+                $subjectLabel = 'Domain'
                 $remoteDomains = @()
                 if (($CollectionData.PSObject.Properties.Name -contains 'Organization') -and $null -ne $CollectionData.Organization -and
                     ($CollectionData.Organization.PSObject.Properties.Name -contains 'RemoteDomains')) {
@@ -829,15 +897,38 @@ function Test-EDCAControl {
                     $evidence = 'Remote domain configuration data unavailable.'
                 }
                 else {
-                    $nonCompliant = @($remoteDomains | Where-Object { $null -ne $_.AllowedOOFType -and [string]$_.AllowedOOFType -ne 'None' })
-                    if ($nonCompliant.Count -gt 0) {
+                    $domainServerResults = @($remoteDomains | ForEach-Object {
+                            $rdName = [string]$_.Name
+                            $rdDomain = if ($_.PSObject.Properties.Name -contains 'DomainName') { [string]$_.DomainName } else { '' }
+                            $rdOofType = if ($_.PSObject.Properties.Name -contains 'AllowedOOFType') { $_.AllowedOOFType } else { $null }
+                            $rdDisplay = if ([string]::IsNullOrWhiteSpace($rdDomain)) { $rdName } else { '{0} ({1})' -f $rdName, $rdDomain }
+                            $isOnMicrosoft = [string]$rdDomain -match '\.onmicrosoft\.com$'
+
+                            if ($isOnMicrosoft) {
+                                $oofDisplay = if ($null -ne $rdOofType) { [string]$rdOofType } else { 'unknown' }
+                                [pscustomobject]@{ Server = $rdDisplay; Status = 'Pass'; Evidence = ('AllowedOOFType: {0} — onmicrosoft.com domain; OOF to Exchange Online is acceptable in hybrid deployments.' -f $oofDisplay) }
+                            }
+                            elseif ($null -eq $rdOofType) {
+                                [pscustomobject]@{ Server = $rdDisplay; Status = 'Unknown'; Evidence = 'AllowedOOFType data not available.' }
+                            }
+                            elseif ([string]$rdOofType -eq 'None') {
+                                [pscustomobject]@{ Server = $rdDisplay; Status = 'Pass'; Evidence = 'AllowedOOFType: None.' }
+                            }
+                            else {
+                                [pscustomobject]@{ Server = $rdDisplay; Status = 'Fail'; Evidence = ('AllowedOOFType: {0} (expected None).' -f [string]$rdOofType) }
+                            }
+                        })
+
+                    $failCount = @($domainServerResults | Where-Object { $_.Status -eq 'Fail' }).Count
+                    $unknownCount = @($domainServerResults | Where-Object { $_.Status -eq 'Unknown' }).Count
+                    if ($failCount -gt 0) {
                         $status = 'Fail'
-                        $details = @($nonCompliant | ForEach-Object { '{0} ({1}): AllowedOOFType={2} (expected None)' -f [string]$_.Name, [string]$_.DomainName, [string]$_.AllowedOOFType })
-                        $evidence = Format-EDCAEvidenceWithElements -Summary ('{0} remote domain(s) have AllowedOOFType set to a value other than None.' -f $nonCompliant.Count) -Elements $details
+                    }
+                    elseif ($unknownCount -gt 0) {
+                        $status = 'Unknown'
                     }
                     else {
                         $status = 'Pass'
-                        $evidence = ('All {0} remote domain(s) have AllowedOOFType set to None.' -f $remoteDomains.Count)
                     }
                 }
             }
@@ -886,6 +977,294 @@ function Test-EDCAControl {
                         $limit = 26214400 # 25 MB in bytes
                         $status = if ($maxReceiveBytes -le $limit) { 'Pass' } else { 'Fail' }
                         $evidence = ('MaxReceiveSize is {0} ({1} bytes); CIS L1 limit is 25 MB ({2} bytes).' -f $maxReceiveDisplay, $maxReceiveBytes, $limit)
+                    }
+                }
+            }
+            'EX-BP-103' {
+                $allConnectors = @{}
+                foreach ($srv in @($CollectionData.Servers)) {
+                    if (($srv.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $srv.Exchange -and
+                        ($srv.Exchange.PSObject.Properties.Name -contains 'SendConnectors')) {
+                        foreach ($c in @($srv.Exchange.SendConnectors)) {
+                            $cId = [string]$c.Identity
+                            if (-not $allConnectors.ContainsKey($cId)) {
+                                $allConnectors[$cId] = $c
+                            }
+                        }
+                    }
+                }
+                $externalConnectors = @($allConnectors.Values | Where-Object {
+                        $spaces = @($_.AddressSpaces)
+                        (@($spaces | Where-Object { [string]$_ -match '\*' })).Count -gt 0
+                    })
+                if ($allConnectors.Count -eq 0) {
+                    $status = 'Unknown'
+                    $evidence = 'Send connector data unavailable.'
+                }
+                elseif ($externalConnectors.Count -eq 0) {
+                    $status = 'Unknown'
+                    $evidence = 'No external send connector (address space containing *) found.'
+                }
+                else {
+                    $domainServerResults = @($externalConnectors | ForEach-Object {
+                            $dnsEnabled = if ($_.PSObject.Properties.Name -contains 'DNSRoutingEnabled' -and $null -ne $_.DNSRoutingEnabled) { [bool]$_.DNSRoutingEnabled } else { $null }
+                            $itemStatus = if ($dnsEnabled -eq $true) { 'Pass' } elseif ($null -eq $dnsEnabled) { 'Unknown' } else { 'Fail' }
+                            $dnsDisplay = if ($dnsEnabled -eq $true) { 'enabled' } elseif ($dnsEnabled -eq $false) { 'disabled' } else { 'unknown' }
+                            $smartHostList = @($_.SmartHosts | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
+                            $connEvidence = 'DNS routing: {0}.' -f $dnsDisplay
+                            if ($dnsEnabled -eq $false -and $smartHostList.Count -gt 0) {
+                                $connEvidence += (' Smart hosts: {0}.' -f ($smartHostList -join ', '))
+                            }
+                            [pscustomobject]@{
+                                Server   = [string]$_.Identity
+                                Status   = $itemStatus
+                                Evidence = $connEvidence
+                            }
+                        })
+                    $failCount = @($domainServerResults | Where-Object { $_.Status -eq 'Fail' }).Count
+                    $unknownCount = @($domainServerResults | Where-Object { $_.Status -eq 'Unknown' }).Count
+                    if ($failCount -gt 0) {
+                        $status = 'Fail'
+                    }
+                    elseif ($unknownCount -gt 0) {
+                        $status = 'Unknown'
+                    }
+                    else {
+                        $status = 'Pass'
+                    }
+                }
+            }
+            'EX-BP-102' {
+                $allConnectors = @{}
+                foreach ($srv in @($CollectionData.Servers)) {
+                    if (($srv.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $srv.Exchange -and
+                        ($srv.Exchange.PSObject.Properties.Name -contains 'SendConnectors')) {
+                        foreach ($c in @($srv.Exchange.SendConnectors)) {
+                            $cId = [string]$c.Identity
+                            if (-not $allConnectors.ContainsKey($cId)) {
+                                $allConnectors[$cId] = $c
+                            }
+                        }
+                    }
+                }
+                if ($allConnectors.Count -eq 0) {
+                    $status = 'Unknown'
+                    $evidence = 'Send connector data unavailable.'
+                }
+                else {
+                    $domainServerResults = @($allConnectors.Values | ForEach-Object {
+                            $lvl = if ($_.PSObject.Properties.Name -contains 'ProtocolLoggingLevel') { [string]$_.ProtocolLoggingLevel } else { $null }
+                            $lvlDisplay = if (-not [string]::IsNullOrWhiteSpace($lvl)) { $lvl } else { 'unknown' }
+                            $itemStatus = if ($lvl -eq 'Verbose') { 'Pass' } elseif ([string]::IsNullOrWhiteSpace($lvl)) { 'Unknown' } else { 'Fail' }
+                            [pscustomobject]@{
+                                Server   = [string]$_.Identity
+                                Status   = $itemStatus
+                                Evidence = ('ProtocolLoggingLevel: {0}.' -f $lvlDisplay)
+                            }
+                        })
+                    $failCount = @($domainServerResults | Where-Object { $_.Status -eq 'Fail' }).Count
+                    $unknownCount = @($domainServerResults | Where-Object { $_.Status -eq 'Unknown' }).Count
+                    if ($failCount -gt 0) {
+                        $status = 'Fail'
+                    }
+                    elseif ($unknownCount -gt 0) {
+                        $status = 'Unknown'
+                    }
+                    else {
+                        $status = 'Pass'
+                    }
+                }
+            }
+            'EX-BP-104' {
+                $allConnectors = @{}
+                foreach ($srv in @($CollectionData.Servers)) {
+                    if (($srv.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $srv.Exchange -and
+                        ($srv.Exchange.PSObject.Properties.Name -contains 'SendConnectors')) {
+                        foreach ($c in @($srv.Exchange.SendConnectors)) {
+                            $cId = [string]$c.Identity
+                            if (-not $allConnectors.ContainsKey($cId)) {
+                                $allConnectors[$cId] = $c
+                            }
+                        }
+                    }
+                }
+                $externalConnectors = @($allConnectors.Values | Where-Object {
+                        $spaces = @($_.AddressSpaces)
+                        (@($spaces | Where-Object { [string]$_ -match '\*' })).Count -gt 0
+                    })
+                if ($allConnectors.Count -eq 0) {
+                    $status = 'Unknown'
+                    $evidence = 'Send connector data unavailable.'
+                }
+                elseif ($externalConnectors.Count -eq 0) {
+                    $status = 'Unknown'
+                    $evidence = 'No external send connector (address space containing *) found.'
+                }
+                else {
+                    $domainServerResults = @($externalConnectors | ForEach-Object {
+                            $ist = if ($_.PSObject.Properties.Name -contains 'IgnoreStartTLS') { $_.IgnoreStartTLS } else { $null }
+                            $istDisplay = if ($ist -eq $true) { 'True' } elseif ($ist -eq $false) { 'False' } else { 'unknown' }
+                            $itemStatus = if ($ist -eq $false) { 'Pass' } elseif ($null -eq $ist) { 'Unknown' } else { 'Fail' }
+                            [pscustomobject]@{
+                                Server   = [string]$_.Identity
+                                Status   = $itemStatus
+                                Evidence = ('IgnoreStartTLS: {0}.' -f $istDisplay)
+                            }
+                        })
+                    $failCount = @($domainServerResults | Where-Object { $_.Status -eq 'Fail' }).Count
+                    $unknownCount = @($domainServerResults | Where-Object { $_.Status -eq 'Unknown' }).Count
+                    if ($failCount -gt 0) {
+                        $status = 'Fail'
+                    }
+                    elseif ($unknownCount -gt 0) {
+                        $status = 'Unknown'
+                    }
+                    else {
+                        $status = 'Pass'
+                    }
+                }
+            }
+            'EX-BP-111' {
+                $allConnectors = @{}
+                foreach ($srv in @($CollectionData.Servers)) {
+                    if (($srv.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $srv.Exchange -and
+                        ($srv.Exchange.PSObject.Properties.Name -contains 'SendConnectors')) {
+                        foreach ($c in @($srv.Exchange.SendConnectors)) {
+                            $cId = [string]$c.Identity
+                            if (-not $allConnectors.ContainsKey($cId)) {
+                                $allConnectors[$cId] = $c
+                            }
+                        }
+                    }
+                }
+                $externalConnectors = @($allConnectors.Values | Where-Object {
+                        $spaces = @($_.AddressSpaces)
+                        (@($spaces | Where-Object { [string]$_ -match '\*' })).Count -gt 0
+                    })
+                if ($allConnectors.Count -eq 0) {
+                    $status = 'Unknown'
+                    $evidence = 'Send connector data unavailable.'
+                }
+                elseif ($externalConnectors.Count -eq 0) {
+                    $status = 'Unknown'
+                    $evidence = 'No external send connector (address space containing *) found.'
+                }
+                else {
+                    $domainServerResults = @($externalConnectors | ForEach-Object {
+                            $dse = if ($_.PSObject.Properties.Name -contains 'DomainSecureEnabled') { $_.DomainSecureEnabled } else { $null }
+                            $reqTls = if ($_.PSObject.Properties.Name -contains 'RequireTLS') { $_.RequireTLS } else { $null }
+                            $tlsAuth = if ($_.PSObject.Properties.Name -contains 'TlsAuthLevel') { [string]$_.TlsAuthLevel } else { $null }
+                            $tlsDomain = if ($_.PSObject.Properties.Name -contains 'TlsDomain') { [string]$_.TlsDomain } else { $null }
+                            $tlsCert = if ($_.PSObject.Properties.Name -contains 'TlsCertificateName') { [string]$_.TlsCertificateName } else { $null }
+                            $dseDisplay = if ($dse -eq $true) { 'True' } elseif ($dse -eq $false) { 'False' } else { 'unknown' }
+                            $reqTlsDisplay = if ($null -ne $reqTls) { [string]$reqTls } else { 'unknown' }
+                            $tlsAuthDisplay = if (-not [string]::IsNullOrWhiteSpace($tlsAuth)) { $tlsAuth } else { 'not set' }
+                            $tlsDomainDisplay = if (-not [string]::IsNullOrWhiteSpace($tlsDomain)) { $tlsDomain } else { 'not set' }
+                            $tlsCertDisplay = if (-not [string]::IsNullOrWhiteSpace($tlsCert)) { $tlsCert } else { 'not set' }
+                            $itemStatus = if ($dse -eq $true) { 'Pass' } elseif ($null -eq $dse) { 'Unknown' } else { 'Fail' }
+                            [pscustomobject]@{
+                                Server   = [string]$_.Identity
+                                Status   = $itemStatus
+                                Evidence = ('DomainSecureEnabled: {0} | RequireTLS: {1} | TlsAuthLevel: {2} | TlsDomain: {3} | TlsCertificateName: {4}.' -f $dseDisplay, $reqTlsDisplay, $tlsAuthDisplay, $tlsDomainDisplay, $tlsCertDisplay)
+                            }
+                        })
+                    $failCount = @($domainServerResults | Where-Object { $_.Status -eq 'Fail' }).Count
+                    $unknownCount = @($domainServerResults | Where-Object { $_.Status -eq 'Unknown' }).Count
+                    if ($failCount -gt 0) {
+                        $status = 'Fail'
+                    }
+                    elseif ($unknownCount -gt 0) {
+                        $status = 'Unknown'
+                    }
+                    else {
+                        $status = 'Pass'
+                    }
+                }
+            }
+            'EX-BP-109' {
+                $allConnectors = @{}
+                foreach ($srv in @($CollectionData.Servers)) {
+                    if (($srv.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $srv.Exchange -and
+                        ($srv.Exchange.PSObject.Properties.Name -contains 'SendConnectors')) {
+                        foreach ($c in @($srv.Exchange.SendConnectors)) {
+                            $cId = [string]$c.Identity
+                            if (-not $allConnectors.ContainsKey($cId)) {
+                                $allConnectors[$cId] = $c
+                            }
+                        }
+                    }
+                }
+                if ($allConnectors.Count -eq 0) {
+                    $status = 'Unknown'
+                    $evidence = 'Send connector data unavailable.'
+                }
+                else {
+                    $limit = 26214400 # 25 MB in bytes
+                    $domainServerResults = @($allConnectors.Values | ForEach-Object {
+                            $bytes = if ($_.PSObject.Properties.Name -contains 'MaxMessageSizeBytes' -and $null -ne $_.MaxMessageSizeBytes) { [long]$_.MaxMessageSizeBytes } else { $null }
+                            $itemStatus = if ($null -eq $bytes) { 'Unknown' } elseif ($bytes -gt $limit) { 'Fail' } else { 'Pass' }
+                            $bytesDisplay = if ($null -ne $bytes) { ('{0:N0} bytes ({1} MB)' -f $bytes, [math]::Round($bytes / 1MB, 2)) } else { 'unknown' }
+                            [pscustomobject]@{
+                                Server   = [string]$_.Identity
+                                Status   = $itemStatus
+                                Evidence = ('MaxMessageSizeBytes: {0}.' -f $bytesDisplay)
+                            }
+                        })
+                    $failCount = @($domainServerResults | Where-Object { $_.Status -eq 'Fail' }).Count
+                    $unknownCount = @($domainServerResults | Where-Object { $_.Status -eq 'Unknown' }).Count
+                    if ($failCount -gt 0) {
+                        $status = 'Fail'
+                    }
+                    elseif ($unknownCount -gt 0) {
+                        $status = 'Unknown'
+                    }
+                    else {
+                        $status = 'Pass'
+                    }
+                }
+            }
+            'EX-BP-139' {
+                $allConnectors = @{}
+                foreach ($srv in @($CollectionData.Servers)) {
+                    if (($srv.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $srv.Exchange -and
+                        ($srv.Exchange.PSObject.Properties.Name -contains 'SendConnectors')) {
+                        foreach ($c in @($srv.Exchange.SendConnectors)) {
+                            $cId = [string]$c.Identity
+                            if (-not $allConnectors.ContainsKey($cId)) {
+                                $allConnectors[$cId] = $c
+                            }
+                        }
+                    }
+                }
+                if ($allConnectors.Count -eq 0) {
+                    $status = 'Unknown'
+                    $evidence = 'Send connector data unavailable.'
+                }
+                else {
+                    $domainServerResults = @($allConnectors.Values | ForEach-Object {
+                            $timeoutStr = if ($_.PSObject.Properties.Name -contains 'ConnectionInactivityTimeOut') { [string]$_.ConnectionInactivityTimeOut } else { $null }
+                            $parsed = $null
+                            if (-not [string]::IsNullOrWhiteSpace($timeoutStr)) {
+                                try { $parsed = [timespan]$timeoutStr } catch {}
+                            }
+                            $itemStatus = if ($null -eq $parsed) { 'Unknown' } elseif ($parsed.TotalMinutes -gt 10) { 'Fail' } else { 'Pass' }
+                            $timeoutDisplay = if (-not [string]::IsNullOrWhiteSpace($timeoutStr)) { $timeoutStr } else { 'unknown' }
+                            [pscustomobject]@{
+                                Server   = [string]$_.Identity
+                                Status   = $itemStatus
+                                Evidence = ('ConnectionInactivityTimeOut: {0}.' -f $timeoutDisplay)
+                            }
+                        })
+                    $failCount = @($domainServerResults | Where-Object { $_.Status -eq 'Fail' }).Count
+                    $unknownCount = @($domainServerResults | Where-Object { $_.Status -eq 'Unknown' }).Count
+                    if ($failCount -gt 0) {
+                        $status = 'Fail'
+                    }
+                    elseif ($unknownCount -gt 0) {
+                        $status = 'Unknown'
+                    }
+                    else {
+                        $status = 'Pass'
                     }
                 }
             }
@@ -1249,6 +1628,135 @@ function Test-EDCAControl {
                     }
                 }
             }
+            'EX-BP-141' {
+                $transportConfig = $null
+                if (($CollectionData.PSObject.Properties.Name -contains 'Organization') -and $null -ne $CollectionData.Organization -and
+                    ($CollectionData.Organization.PSObject.Properties.Name -contains 'TransportConfig')) {
+                    $transportConfig = $CollectionData.Organization.TransportConfig
+                }
+                if ($null -eq $transportConfig -or -not ($transportConfig.PSObject.Properties.Name -contains 'MaxRecipientEnvelopeLimit')) {
+                    $status = 'Unknown'
+                    $evidence = 'MaxRecipientEnvelopeLimit data unavailable.'
+                }
+                else {
+                    $val = [string]$transportConfig.MaxRecipientEnvelopeLimit
+                    if ($val -eq 'Unlimited') {
+                        $status = 'Fail'
+                        $evidence = 'MaxRecipientEnvelopeLimit is set to Unlimited (must be ≤ 5000).'
+                    }
+                    else {
+                        $intVal = 0
+                        if ([int]::TryParse($val, [ref]$intVal)) {
+                            $status = if ($intVal -le 5000) { 'Pass' } else { 'Fail' }
+                            $evidence = ('MaxRecipientEnvelopeLimit is {0} ({1} ≤ 5000).' -f $intVal, $(if ($intVal -le 5000) { 'compliant,' } else { 'non-compliant, exceeds' }))
+                        }
+                        else {
+                            $status = 'Unknown'
+                            $evidence = ('MaxRecipientEnvelopeLimit value could not be parsed: {0}' -f $val)
+                        }
+                    }
+                }
+            }
+            'EX-BP-158' {
+                $serverList = @()
+                if (($CollectionData.PSObject.Properties.Name -contains 'Servers') -and $null -ne $CollectionData.Servers) {
+                    $serverList = @($CollectionData.Servers)
+                }
+                $dagMembers = @($serverList | Where-Object {
+                        ($_.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $_.Exchange -and
+                        ($_.Exchange.PSObject.Properties.Name -contains 'IsDagMember') -and [bool]$_.Exchange.IsDagMember -and
+                        ($_.Exchange.PSObject.Properties.Name -contains 'DagName') -and -not [string]::IsNullOrWhiteSpace([string]$_.Exchange.DagName)
+                    })
+                if ($dagMembers.Count -eq 0) {
+                    $status = 'Skipped'
+                    $evidence = 'No DAG members found in the collected server data. This control is not applicable if no DAG is deployed.'
+                }
+                else {
+                    $dagGroups = $dagMembers | Group-Object -Property { [string]$_.Exchange.DagName }
+                    $nonCompliantDags = @()
+                    $passDags = @()
+                    foreach ($dagGroup in $dagGroups) {
+                        $sites = @($dagGroup.Group | ForEach-Object {
+                                if ($_.Exchange.PSObject.Properties.Name -contains 'AdSite') { [string]$_.Exchange.AdSite } else { '' }
+                            } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique)
+                        if ($sites.Count -lt 2) {
+                            $nonCompliantDags += ('{0}: {1} site(s) [{2}]' -f $dagGroup.Name, $sites.Count, ($sites -join ', '))
+                        }
+                        else {
+                            $passDags += ('{0}: {1} sites [{2}]' -f $dagGroup.Name, $sites.Count, ($sites -join ', '))
+                        }
+                    }
+                    if ($nonCompliantDags.Count -gt 0) {
+                        $status = 'Fail'
+                        $evidence = Format-EDCAEvidenceWithElements -Summary ('{0} of {1} DAG(s) do not span at least two Active Directory sites.' -f $nonCompliantDags.Count, @($dagGroups).Count) -Elements $nonCompliantDags
+                    }
+                    else {
+                        $status = 'Pass'
+                        $evidence = Format-EDCAEvidenceWithElements -Summary ('All {0} DAG(s) span at least two Active Directory sites.' -f @($dagGroups).Count) -Elements $passDags
+                    }
+                }
+            }
+            'EX-BP-157' {
+                $totalDisabled = 0
+                $allDisabled = @()
+                $hasData = $false
+                foreach ($srv in @($CollectionData.Servers)) {
+                    if (($srv.PSObject.Properties.Name -contains 'CollectionError') -and -not [string]::IsNullOrWhiteSpace([string]$srv.CollectionError)) { continue }
+                    if (-not (($srv.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $srv.Exchange -and
+                            ($srv.Exchange.PSObject.Properties.Name -contains 'IsExchangeServer') -and [bool]$srv.Exchange.IsExchangeServer)) { continue }
+                    if ($srv.Exchange.PSObject.Properties.Name -contains 'SingleItemRecoveryDisabledCount' -and $null -ne $srv.Exchange.SingleItemRecoveryDisabledCount) {
+                        $hasData = $true
+                        $totalDisabled += [int]$srv.Exchange.SingleItemRecoveryDisabledCount
+                        if (($srv.Exchange.PSObject.Properties.Name -contains 'SingleItemRecoveryDisabledMailboxes') -and $null -ne $srv.Exchange.SingleItemRecoveryDisabledMailboxes) {
+                            $allDisabled += @($srv.Exchange.SingleItemRecoveryDisabledMailboxes)
+                        }
+                    }
+                }
+                if (-not $hasData) {
+                    $status = 'Unknown'
+                    $evidence = 'Single Item Recovery mailbox data unavailable.'
+                }
+                elseif ($totalDisabled -eq 0) {
+                    $status = 'Pass'
+                    $evidence = 'Compliant — all user mailboxes have Single Item Recovery enabled.'
+                }
+                else {
+                    $status = 'Fail'
+                    $evidence = Format-EDCAEvidenceWithElements -Summary ('{0} user mailbox(es) have Single Item Recovery disabled.' -f $totalDisabled) -Elements $allDisabled
+                }
+            }
+            'EX-BP-036' {
+                $exchServers = @($CollectionData.Servers | Where-Object {
+                        ($_.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $_.Exchange -and
+                        ($_.Exchange.PSObject.Properties.Name -contains 'IsExchangeServer') -and [bool]$_.Exchange.IsExchangeServer
+                    })
+                if ($exchServers.Count -eq 0) {
+                    $status = 'Unknown'
+                    $evidence = 'No Exchange server data available; auth certificate baseline cannot be evaluated.'
+                }
+                else {
+                    $authCert = $null
+                    foreach ($srv in $exchServers) {
+                        if (($srv.Exchange.PSObject.Properties.Name -contains 'AuthCertificate') -and $null -ne $srv.Exchange.AuthCertificate) {
+                            $authCert = $srv.Exchange.AuthCertificate
+                            break
+                        }
+                    }
+                    if ($null -eq $authCert) {
+                        $status = 'Unknown'
+                        $evidence = 'Exchange auth certificate telemetry unavailable.'
+                    }
+                    elseif (-not [bool]$authCert.Found) {
+                        $status = 'Fail'
+                        $evidence = ('Current auth certificate thumbprint not found in LocalMachine\My: {0}' -f [string]$authCert.Thumbprint)
+                    }
+                    else {
+                        $daysRemaining = if ($authCert.PSObject.Properties.Name -contains 'DaysRemaining' -and $null -ne $authCert.DaysRemaining) { [int]$authCert.DaysRemaining } else { $null }
+                        $status = if ([bool]$authCert.IsExpired -or ($null -ne $daysRemaining -and $daysRemaining -lt 30)) { 'Fail' } elseif ($null -ne $daysRemaining -and $daysRemaining -lt 60) { 'Unknown' } else { 'Pass' }
+                        $evidence = if ($status -eq 'Pass') { ('Auth certificate valid; expires {0} ({1} days remaining).' -f [string]$authCert.NotAfter, [string]$daysRemaining) } else { ('Auth certificate {0}; expires: {1}; remaining days: {2}.' -f [string]$authCert.Thumbprint, [string]$authCert.NotAfter, [string]$daysRemaining) }
+                    }
+                }
+            }
         }
 
         return [pscustomobject]@{
@@ -1261,11 +1769,10 @@ function Test-EDCAControl {
             Frameworks     = @($Control.frameworks)
             Verify         = [bool]$Control.verify
             OverallStatus  = $status
-            ServerResults  = @([pscustomobject]@{
-                    Server   = 'Organization'
-                    Status   = $status
-                    Evidence = $evidence
-                })
+            ServerResults  = if ($null -ne $domainServerResults) { $domainServerResults } else {
+                @([pscustomobject]@{ Server = 'Organization'; Status = $status; Evidence = $evidence })
+            }
+            SubjectLabel   = $subjectLabel
             References     = @($Control.references)
             Remediation    = $Control.remediation
             Considerations = [string]$Control.considerations
@@ -1285,7 +1792,6 @@ function Test-EDCAControl {
         'EX-BP-029',
         'EX-BP-010',
         'EX-BP-030',
-        'EX-BP-005',
         'EX-BP-052',
         'EX-BP-062',
         'EX-BP-001',
@@ -1306,7 +1812,6 @@ function Test-EDCAControl {
         'EX-BP-080',
         'EX-BP-081',
         'EX-BP-082',
-        'EX-BP-084',
         'EX-BP-086',
         'EX-BP-088',
         'EX-BP-089',
@@ -1316,19 +1821,49 @@ function Test-EDCAControl {
         'EX-BP-093',
         'EX-BP-094',
         'EX-BP-101',
-        'EX-BP-102',
-        'EX-BP-103',
-        'EX-BP-104',
         'EX-BP-105',
         'EX-BP-106',
         'EX-BP-107',
         'EX-BP-108',
-        'EX-BP-109',
         'EX-BP-110',
-        'EX-BP-111',
         'EX-BP-112',
-        'EX-BP-113'
+        'EX-BP-113',
+        'EX-BP-125',
+        'EX-BP-127',
+        'EX-BP-128',
+        'EX-BP-129',
+        'EX-BP-130',
+        'EX-BP-131',
+        'EX-BP-133',
+        'EX-BP-134',
+        'EX-BP-135',
+        'EX-BP-136',
+        'EX-BP-137',
+        'EX-BP-138',
+        'EX-BP-140',
+        'EX-BP-142',
+        'EX-BP-143',
+        'EX-BP-144',
+        'EX-BP-145',
+        'EX-BP-146',
+        'EX-BP-147',
+        'EX-BP-148',
+        'EX-BP-149',
+        'EX-BP-150',
+        'EX-BP-151',
+        'EX-BP-152',
+        'EX-BP-154',
+        'EX-BP-155',
+        'EX-BP-156'
     )
+
+    $exchangeBuilds = $null
+    if ($Control.id -in @('EX-BP-008', 'EX-BP-149')) {
+        $exchangeBuildsPath = Join-Path -Path $PSScriptRoot -ChildPath '..\Config\exchange.builds.json'
+        if (Test-Path -LiteralPath $exchangeBuildsPath) {
+            try { $exchangeBuilds = Get-Content -LiteralPath $exchangeBuildsPath -Raw | ConvertFrom-Json } catch {}
+        }
+    }
 
     foreach ($server in $CollectionData.Servers) {
         $serverName = ([string]$server.Server -split '\.')[0]
@@ -1343,6 +1878,7 @@ function Test-EDCAControl {
 
         $status = 'Unknown'
         $evidence = ''
+        $dbServerResults = $null
         $isExchangeServer = (
             ($server.PSObject.Properties.Name -contains 'Exchange') -and
             $null -ne $server.Exchange -and
@@ -1353,7 +1889,7 @@ function Test-EDCAControl {
         if (($Control.id -in $exchangeOnlyControlIds) -and -not $isExchangeServer) {
             $serverResults += [pscustomobject]@{
                 Server   = $serverName
-                Status   = 'Unknown'
+                Status   = 'Skipped'
                 Evidence = 'Exchange not detected on this server; control is not applicable.'
             }
             continue
@@ -1362,22 +1898,33 @@ function Test-EDCAControl {
         switch ($Control.id) {
             'EX-BP-041' {
                 $entries = @($server.Exchange.ExtendedProtectionStatus)
+                $oaItems = @()
+                if ($server.Exchange.PSObject.Properties.Name -contains 'OutlookAnywhereSSLOffloading') {
+                    $oaItems = @($server.Exchange.OutlookAnywhereSSLOffloading)
+                }
+                $sslOffloadingEnabled = @($oaItems | Where-Object { $null -ne $_.SSLOffloading -and [bool]$_.SSLOffloading })
+
                 if ($entries.Count -eq 0) {
                     $status = 'Unknown'
                     $evidence = 'No virtual directory Extended Protection data available.'
                 }
                 else {
                     $nonCompliant = @($entries | Where-Object { $_.ExtendedProtectionTokenChecking -notin @('Allow', 'Require') })
-                    $status = if ($nonCompliant.Count -eq 0) { 'Pass' } else { 'Fail' }
-                    $summary = ('Evaluated {0} virtual directories; non-compliant: {1}.' -f $entries.Count, $nonCompliant.Count)
+                    $issueLines = @()
                     if ($nonCompliant.Count -gt 0) {
-                        $nonCompliantDetails = @($nonCompliant | ForEach-Object {
-                                '{0} | {1} | ExtendedProtectionTokenChecking={2}' -f [string]$_.VirtualDirectoryType, [string]$_.Identity, [string]$_.ExtendedProtectionTokenChecking
-                            })
-                        $evidence = Format-EDCAEvidenceWithElements -Summary $summary -Elements $nonCompliantDetails
+                        $issueLines += @($nonCompliant | ForEach-Object { [string]$_.Identity })
+                    }
+                    if ($sslOffloadingEnabled.Count -gt 0) {
+                        $issueLines += @($sslOffloadingEnabled | ForEach-Object { ('{0} (SSL Offloading enabled — incompatible with Extended Protection)' -f [string]$_.Identity) })
+                    }
+
+                    $status = if ($issueLines.Count -eq 0) { 'Pass' } else { 'Fail' }
+                    if ($issueLines.Count -gt 0) {
+                        $summary = ('{0} virtual director{1} non-compliant.' -f $issueLines.Count, $(if ($issueLines.Count -eq 1) { 'y' } else { 'ies' }))
+                        $evidence = Format-EDCAEvidenceWithElements -Summary $summary -Elements $issueLines
                     }
                     else {
-                        $evidence = ('Compliant — Extended Protection configured on all {0} virtual directories.' -f $entries.Count)
+                        $evidence = ('Compliant — Extended Protection configured on all {0} virtual directories; SSL Offloading disabled.' -f $entries.Count)
                     }
                 }
             }
@@ -1419,29 +1966,123 @@ function Test-EDCAControl {
                 }
             }
             'EX-BP-008' {
-                $build = [string]$server.Exchange.AdminDisplayVersion
                 $productLine = Get-EDCAProductLineFromServerData -Server $server
-                if ([string]::IsNullOrWhiteSpace($build)) {
-                    $status = 'Unknown'
-                    $evidence = 'Exchange build not available.'
+                $buildNumber = $null
+                if (($server.Exchange.PSObject.Properties.Name -contains 'BuildNumber') -and
+                    -not [string]::IsNullOrWhiteSpace([string]$server.Exchange.BuildNumber)) {
+                    $buildNumber = [string]$server.Exchange.BuildNumber
                 }
-                else {
+                if ([string]::IsNullOrWhiteSpace($buildNumber)) {
+                    $status = 'Unknown'
+                    $evidence = ('Exchange build number unavailable (product line: {0}).' -f $productLine)
+                }
+                elseif ($null -eq $exchangeBuilds -or -not ($exchangeBuilds.PSObject.Properties.Name -contains $productLine)) {
                     switch ($productLine) {
                         'ExchangeSE' {
                             $status = 'Pass'
-                            $evidence = ('Detected product line: {0}; build: {1}. Lifecycle status: supported baseline.' -f $productLine, $build)
+                            $evidence = ('Running build: {0}. Product line: ExchangeSE (supported).' -f $buildNumber)
                         }
                         'Exchange2016' {
                             $status = 'Unknown'
-                            $evidence = ('Detected product line: {0}; build: {1}. Lifecycle status: out of support. Migration to Exchange SE is recommended.' -f $productLine, $build)
+                            $evidence = ('Running build: {0}. Exchange2016 is out of support; migration to Exchange SE is recommended.' -f $buildNumber)
                         }
                         'Exchange2019' {
                             $status = 'Unknown'
-                            $evidence = ('Detected product line: {0}; build: {1}. Lifecycle status: out of support. Migration to Exchange SE is recommended.' -f $productLine, $build)
+                            $evidence = ('Running build: {0}. Exchange2019 is out of support; migration to Exchange SE is recommended.' -f $buildNumber)
                         }
                         default {
                             $status = 'Fail'
-                            $evidence = ('Detected product line: {0}; build: {1}. This version is not supported by this tool baseline (target: Exchange 2016/2019/SE).' -f $productLine, $build)
+                            $evidence = ('Running build: {0}. Unrecognized product line: {1}.' -f $buildNumber, $productLine)
+                        }
+                    }
+                }
+                else {
+                    $latestBuild = [string]$exchangeBuilds.$productLine
+                    $runningVersion = $null
+                    $latestVersion = $null
+                    try { $runningVersion = [System.Version]$buildNumber } catch {}
+                    try { $latestVersion = [System.Version]$latestBuild } catch {}
+                    if ($null -eq $runningVersion) {
+                        $status = 'Unknown'
+                        $evidence = ('Build number could not be parsed as a version: {0}.' -f $buildNumber)
+                    }
+                    elseif ($null -eq $latestVersion) {
+                        $status = 'Unknown'
+                        $evidence = ('Running build: {0}; latest build not available in exchange.builds.json for {1}.' -f $buildNumber, $productLine)
+                    }
+                    else {
+                        $eolSuffix = if ($productLine -in @('Exchange2016', 'Exchange2019')) {
+                            (' Note: {0} is out of extended support; migration to Exchange SE is recommended.' -f $productLine)
+                        }
+                        else { '' }
+                        if ($runningVersion -ge $latestVersion) {
+                            $status = if ($productLine -in @('Exchange2016', 'Exchange2019')) { 'Unknown' } else { 'Pass' }
+                            $evidence = ('Running build {0} matches or exceeds the latest known approved update ({1}).{2}' -f $buildNumber, $latestBuild, $eolSuffix)
+                        }
+                        else {
+                            $status = 'Fail'
+                            $evidence = ('Running build {0} is not the latest approved update. Latest known: {1}.{2}' -f $buildNumber, $latestBuild, $eolSuffix)
+                        }
+                    }
+                }
+            }
+            'EX-BP-149' {
+                $productLine = Get-EDCAProductLineFromServerData -Server $server
+                $buildNumber = $null
+                if (($server.Exchange.PSObject.Properties.Name -contains 'BuildNumber') -and
+                    -not [string]::IsNullOrWhiteSpace([string]$server.Exchange.BuildNumber)) {
+                    $buildNumber = [string]$server.Exchange.BuildNumber
+                }
+                if ([string]::IsNullOrWhiteSpace($buildNumber)) {
+                    $status = 'Unknown'
+                    $evidence = ('Exchange build number unavailable (product line: {0}).' -f $productLine)
+                }
+                elseif ($null -eq $exchangeBuilds -or -not ($exchangeBuilds.PSObject.Properties.Name -contains $productLine)) {
+                    switch ($productLine) {
+                        'ExchangeSE' {
+                            $status = 'Pass'
+                            $evidence = ('Running build: {0}. Product line: ExchangeSE (supported).' -f $buildNumber)
+                        }
+                        'Exchange2016' {
+                            $status = 'Unknown'
+                            $evidence = ('Running build: {0}. Exchange2016 is out of support; migration to Exchange SE is recommended.' -f $buildNumber)
+                        }
+                        'Exchange2019' {
+                            $status = 'Unknown'
+                            $evidence = ('Running build: {0}. Exchange2019 is out of support; migration to Exchange SE is recommended.' -f $buildNumber)
+                        }
+                        default {
+                            $status = 'Fail'
+                            $evidence = ('Running build: {0}. Unrecognized product line: {1}.' -f $buildNumber, $productLine)
+                        }
+                    }
+                }
+                else {
+                    $latestBuild = [string]$exchangeBuilds.$productLine
+                    $runningVersion = $null
+                    $latestVersion = $null
+                    try { $runningVersion = [System.Version]$buildNumber } catch {}
+                    try { $latestVersion = [System.Version]$latestBuild } catch {}
+                    if ($null -eq $runningVersion) {
+                        $status = 'Unknown'
+                        $evidence = ('Build number could not be parsed as a version: {0}.' -f $buildNumber)
+                    }
+                    elseif ($null -eq $latestVersion) {
+                        $status = 'Unknown'
+                        $evidence = ('Running build: {0}; latest build not available in exchange.builds.json for {1}.' -f $buildNumber, $productLine)
+                    }
+                    else {
+                        $eolSuffix = if ($productLine -in @('Exchange2016', 'Exchange2019')) {
+                            (' Note: {0} is out of extended support; migration to Exchange SE is recommended.' -f $productLine)
+                        }
+                        else { '' }
+                        if ($runningVersion -ge $latestVersion) {
+                            $status = if ($productLine -in @('Exchange2016', 'Exchange2019')) { 'Unknown' } else { 'Pass' }
+                            $evidence = ('Running build {0} matches or exceeds the latest known approved update ({1}).{2}' -f $buildNumber, $latestBuild, $eolSuffix)
+                        }
+                        else {
+                            $status = 'Fail'
+                            $evidence = ('Running build {0} is not the latest approved update. Latest known: {1}.{2}' -f $buildNumber, $latestBuild, $eolSuffix)
                         }
                     }
                 }
@@ -1505,7 +2146,7 @@ function Test-EDCAControl {
                 }
 
                 if ($hasNoDagWarning -or ($isDagMember -eq $false) -or (($null -eq $isDagMember) -and ($exchangeServerCount -le 1) -and ($server.Exchange.ReplicationHealthPassed -ne $true))) {
-                    $status = 'Pass'
+                    $status = 'Skipped'
                     $evidence = 'No DAG detected for this server scope; replication health control is not applicable.'
                 }
                 elseif ($null -eq $server.Exchange.ReplicationHealthPassed) {
@@ -1520,17 +2161,6 @@ function Test-EDCAControl {
                 else {
                     $status = if ($server.Exchange.ReplicationHealthPassed) { 'Pass' } else { 'Fail' }
                     $evidence = ('Replication health has {0}.' -f (Get-EDCAStateDescriptor -Value ([bool]$server.Exchange.ReplicationHealthPassed) -Expectation 'Passed'))
-                }
-            }
-            'EX-BP-005' {
-                if ($null -eq $server.Exchange.AdminAuditLogEnabled) {
-                    $status = 'Unknown'
-                    $evidence = 'Admin audit logging state unavailable.'
-                }
-                else {
-                    $enabled = [bool]$server.Exchange.AdminAuditLogEnabled
-                    $status = if ($enabled) { 'Pass' } else { 'Fail' }
-                    $evidence = ('Admin audit logging is {0}.' -f (Get-EDCAStateDescriptor -Value $enabled -Expectation 'Enabled'))
                 }
             }
             'EX-BP-053' {
@@ -2055,7 +2685,7 @@ function Test-EDCAControl {
                     $evidence = ('TLS 1.3 applicability unknown. {0}' -f $tls13Support.Evidence)
                 }
                 elseif (-not $tls13Support.IsSupported) {
-                    $status = 'Unknown'
+                    $status = 'Skipped'
                     $evidence = ('TLS 1.3 not applicable on this OS baseline. {0}' -f $tls13Support.Evidence)
                 }
                 else {
@@ -2088,7 +2718,7 @@ function Test-EDCAControl {
                     $evidence = ('PowerShell Script Block Logging applicability unknown. {0}' -f $osInfo.Evidence)
                 }
                 elseif ([int]$osInfo.Build -lt 17763) {
-                    $status = 'Unknown'
+                    $status = 'Skipped'
                     $evidence = ('Not applicable for this baseline. {0}; expected Windows Server 2019/2022/2025 benchmark scope.' -f $osInfo.Evidence)
                 }
                 else {
@@ -2116,7 +2746,7 @@ function Test-EDCAControl {
                     $evidence = ('WDigest applicability unknown. {0}' -f $osInfo.Evidence)
                 }
                 elseif ([int]$osInfo.Build -lt 17763) {
-                    $status = 'Unknown'
+                    $status = 'Skipped'
                     $evidence = ('Not applicable for this baseline. {0}; expected Windows Server 2019/2022/2025 benchmark scope.' -f $osInfo.Evidence)
                 }
                 else {
@@ -2142,7 +2772,7 @@ function Test-EDCAControl {
                     $evidence = ('RDP NLA applicability unknown. {0}' -f $osInfo.Evidence)
                 }
                 elseif ([int]$osInfo.Build -lt 17763) {
-                    $status = 'Unknown'
+                    $status = 'Skipped'
                     $evidence = ('Not applicable for this baseline. {0}; expected Windows Server 2019/2022/2025 benchmark scope.' -f $osInfo.Evidence)
                 }
                 else {
@@ -2170,7 +2800,7 @@ function Test-EDCAControl {
                     $evidence = ('Windows Defender applicability unknown. {0}' -f $osInfo.Evidence)
                 }
                 elseif ([int]$osInfo.Build -lt 17763) {
-                    $status = 'Unknown'
+                    $status = 'Skipped'
                     $evidence = ('Not applicable for this baseline. {0}; expected Windows Server 2019/2022/2025 benchmark scope.' -f $osInfo.Evidence)
                 }
                 else {
@@ -2208,7 +2838,7 @@ function Test-EDCAControl {
                     $evidence = ('Credential Guard applicability unknown. {0}' -f $osInfo.Evidence)
                 }
                 elseif ([int]$osInfo.Build -lt 17763) {
-                    $status = 'Unknown'
+                    $status = 'Skipped'
                     $evidence = ('Not applicable for this baseline. {0}; expected Windows Server 2019/2022/2025 benchmark scope.' -f $osInfo.Evidence)
                 }
                 else {
@@ -2296,70 +2926,6 @@ function Test-EDCAControl {
                     $evidence = $evidenceLines -join "`n"
                 }
             }
-            'EX-BP-033' {
-                $domainResults = @()
-                if (($CollectionData.PSObject.Properties.Name -contains 'EmailAuthentication') -and $null -ne $CollectionData.EmailAuthentication -and ($CollectionData.EmailAuthentication.PSObject.Properties.Name -contains 'DomainResults')) {
-                    $domainResults = @($CollectionData.EmailAuthentication.DomainResults)
-                }
-
-                if ($domainResults.Count -eq 0) {
-                    $status = 'Unknown'
-                    if (($CollectionData.PSObject.Properties.Name -contains 'EmailAuthentication') -and ($CollectionData.EmailAuthentication.PSObject.Properties.Name -contains 'Reason')) {
-                        $evidence = ('No domain-level MTA-STS evidence available. {0}' -f [string]$CollectionData.EmailAuthentication.Reason)
-                    }
-                    else {
-                        $evidence = 'No domain-level MTA-STS evidence available.'
-                    }
-                }
-                else {
-                    $failed = @($domainResults | Where-Object { $_.MtaSts.Status -eq 'Fail' })
-                    $unknown = @($domainResults | Where-Object { $_.MtaSts.Status -eq 'Unknown' })
-                    if ($failed.Count -gt 0) {
-                        $status = 'Fail'
-                    }
-                    elseif ($unknown.Count -gt 0) {
-                        $status = 'Unknown'
-                    }
-                    else {
-                        $status = 'Pass'
-                    }
-
-                    $failedDomains = @($failed | ForEach-Object { $_.Domain })
-                    $evidence = ('MTA-STS domains evaluated: {0}; fail: {1}; unknown: {2}; failed domains: {3}' -f $domainResults.Count, $failed.Count, $unknown.Count, ($failedDomains -join ', '))
-                }
-            }
-            'EX-BP-032' {
-                $domainResults = @()
-                if (($CollectionData.PSObject.Properties.Name -contains 'EmailAuthentication') -and $null -ne $CollectionData.EmailAuthentication -and ($CollectionData.EmailAuthentication.PSObject.Properties.Name -contains 'DomainResults')) {
-                    $domainResults = @($CollectionData.EmailAuthentication.DomainResults)
-                }
-
-                if ($domainResults.Count -eq 0) {
-                    $status = 'Unknown'
-                    if (($CollectionData.PSObject.Properties.Name -contains 'EmailAuthentication') -and ($CollectionData.EmailAuthentication.PSObject.Properties.Name -contains 'Reason')) {
-                        $evidence = ('No domain-level SMTP DANE evidence available. {0}' -f [string]$CollectionData.EmailAuthentication.Reason)
-                    }
-                    else {
-                        $evidence = 'No domain-level SMTP DANE evidence available.'
-                    }
-                }
-                else {
-                    $failed = @($domainResults | Where-Object { $_.Dane.Status -eq 'Fail' })
-                    $unknown = @($domainResults | Where-Object { $_.Dane.Status -eq 'Unknown' })
-                    if ($failed.Count -gt 0) {
-                        $status = 'Fail'
-                    }
-                    elseif ($unknown.Count -gt 0) {
-                        $status = 'Unknown'
-                    }
-                    else {
-                        $status = 'Pass'
-                    }
-
-                    $failedDomains = @($failed | ForEach-Object { $_.Domain })
-                    $evidence = ('SMTP DANE domains evaluated: {0}; fail: {1}; unknown: {2}; failed domains: {3}' -f $domainResults.Count, $failed.Count, $unknown.Count, ($failedDomains -join ', '))
-                }
-            }
             'EX-BP-048' {
                 $defenderAvailable = $false
                 $rtpEnabled = $null
@@ -2373,7 +2939,7 @@ function Test-EDCAControl {
                 }
 
                 if (-not $defenderAvailable) {
-                    $status = 'Unknown'
+                    $status = 'Skipped'
                     $evidence = 'Defender not available on this server; antivirus exclusion check skipped.'
                 }
                 elseif ($null -eq $rtpEnabled -or -not [bool]$rtpEnabled) {
@@ -2381,7 +2947,7 @@ function Test-EDCAControl {
                     $evidence = 'Defender real-time protection is not enabled; antivirus exclusion check not applicable.'
                 }
                 elseif (-not ($server.PSObject.Properties.Name -contains 'Exchange') -or -not [bool]$server.Exchange.IsExchangeServer) {
-                    $status = 'Unknown'
+                    $status = 'Skipped'
                     $evidence = 'Exchange not detected on this server; antivirus exclusion check skipped.'
                 }
                 else {
@@ -2515,7 +3081,7 @@ function Test-EDCAControl {
             }
             'EX-BP-024' {
                 if (-not $isExchangeServer) {
-                    $status = 'Unknown'
+                    $status = 'Skipped'
                     $evidence = 'Exchange not detected on this server; RPC minimum connection timeout baseline is not applicable.'
                     break
                 }
@@ -2540,7 +3106,7 @@ function Test-EDCAControl {
             }
             'EX-BP-027' {
                 if (-not $isExchangeServer) {
-                    $status = 'Unknown'
+                    $status = 'Skipped'
                     $evidence = 'Exchange not detected on this server; TCP/IP Exchange baseline is not applicable.'
                     break
                 }
@@ -2565,7 +3131,7 @@ function Test-EDCAControl {
             }
             'EX-BP-020' {
                 if (-not $isExchangeServer) {
-                    $status = 'Unknown'
+                    $status = 'Skipped'
                     $evidence = 'Exchange not detected on this server; NUMA baseline is not applicable.'
                     break
                 }
@@ -2590,7 +3156,7 @@ function Test-EDCAControl {
             }
             'EX-BP-022' {
                 if (-not $isExchangeServer) {
-                    $status = 'Unknown'
+                    $status = 'Skipped'
                     $evidence = 'Exchange not detected on this server; processor baseline is not applicable.'
                     break
                 }
@@ -2619,7 +3185,7 @@ function Test-EDCAControl {
             }
             'EX-BP-045' {
                 if (-not $isExchangeServer) {
-                    $status = 'Unknown'
+                    $status = 'Skipped'
                     $evidence = 'Exchange not detected on this server; IPv6 Exchange baseline is not applicable.'
                     break
                 }
@@ -2648,7 +3214,7 @@ function Test-EDCAControl {
             }
             'EX-BP-026' {
                 if (-not $isExchangeServer) {
-                    $status = 'Unknown'
+                    $status = 'Skipped'
                     $evidence = 'Exchange not detected on this server; Sleepy NIC baseline is not applicable.'
                     break
                 }
@@ -2685,7 +3251,7 @@ function Test-EDCAControl {
             }
             'EX-BP-019' {
                 if (-not $isExchangeServer) {
-                    $status = 'Unknown'
+                    $status = 'Skipped'
                     $evidence = 'Exchange not detected on this server; NodeRunner baseline is not applicable.'
                     break
                 }
@@ -2726,7 +3292,7 @@ function Test-EDCAControl {
             }
             'EX-BP-013' {
                 if (-not $isExchangeServer) {
-                    $status = 'Unknown'
+                    $status = 'Skipped'
                     $evidence = 'Exchange not detected on this server; Visual C++ Exchange baseline is not applicable.'
                     break
                 }
@@ -2756,48 +3322,9 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-036' {
-                if (-not $isExchangeServer) {
-                    $status = 'Unknown'
-                    $evidence = 'Exchange not detected on this server; auth certificate baseline is not applicable.'
-                    break
-                }
-
-                $authCertificate = $null
-                if (($server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $server.Exchange -and ($server.Exchange.PSObject.Properties.Name -contains 'AuthCertificate')) {
-                    $authCertificate = $server.Exchange.AuthCertificate
-                }
-
-                if ($null -eq $authCertificate) {
-                    $status = 'Unknown'
-                    $evidence = 'Exchange auth certificate telemetry unavailable.'
-                }
-                elseif (-not [bool]$authCertificate.Found) {
-                    $status = 'Fail'
-                    $evidence = ('Current auth certificate thumbprint not found in LocalMachine\My: {0}' -f [string]$authCertificate.Thumbprint)
-                }
-                else {
-                    $daysRemaining = $null
-                    if ($authCertificate.PSObject.Properties.Name -contains 'DaysRemaining' -and $null -ne $authCertificate.DaysRemaining) {
-                        $daysRemaining = [int]$authCertificate.DaysRemaining
-                    }
-
-                    if ([bool]$authCertificate.IsExpired -or ($null -ne $daysRemaining -and $daysRemaining -lt 30)) {
-                        $status = 'Fail'
-                    }
-                    elseif ($null -ne $daysRemaining -and $daysRemaining -lt 60) {
-                        $status = 'Unknown'
-                    }
-                    else {
-                        $status = 'Pass'
-                    }
-
-                    $evidence = if ($status -eq 'Pass') { ('Compliant — auth certificate valid; expires {0} ({1} days remaining).' -f [string]$authCertificate.NotAfter, [string]$daysRemaining) } else { ('Auth certificate {0}; expires: {1}; remaining days: {2}' -f [string]$authCertificate.Thumbprint, [string]$authCertificate.NotAfter, [string]$daysRemaining) }
-                }
-            }
             'EX-BP-054' {
                 if (-not $isExchangeServer) {
-                    $status = 'Unknown'
+                    $status = 'Skipped'
                     $evidence = 'Exchange not detected on this server; serialized data signing baseline is not applicable.'
                     break
                 }
@@ -2819,7 +3346,7 @@ function Test-EDCAControl {
             }
             'EX-BP-011' {
                 if (-not $isExchangeServer) {
-                    $status = 'Unknown'
+                    $status = 'Skipped'
                     $evidence = 'Exchange not detected on this server; setting override baseline is not applicable.'
                     break
                 }
@@ -2905,7 +3432,7 @@ function Test-EDCAControl {
             }
             'EX-BP-044' {
                 if (-not $isExchangeServer) {
-                    $status = 'Unknown'
+                    $status = 'Skipped'
                     $evidence = 'Exchange not detected on this server; internal transport certificate baseline is not applicable.'
                     break
                 }
@@ -2944,7 +3471,7 @@ function Test-EDCAControl {
             }
             'EX-BP-059' {
                 if (-not $isExchangeServer) {
-                    $status = 'Unknown'
+                    $status = 'Skipped'
                     $evidence = 'Exchange not detected on this server; trusted root certificate baseline is not applicable.'
                     break
                 }
@@ -2973,7 +3500,7 @@ function Test-EDCAControl {
             }
             'EX-BP-038' {
                 if (-not $isExchangeServer) {
-                    $status = 'Unknown'
+                    $status = 'Skipped'
                     $evidence = 'Exchange not detected on this server; EEMS baseline is not applicable.'
                     break
                 }
@@ -3011,7 +3538,7 @@ function Test-EDCAControl {
             }
             'EX-BP-035' {
                 if (-not $isExchangeServer) {
-                    $status = 'Unknown'
+                    $status = 'Skipped'
                     $evidence = 'Exchange not detected on this server; AMSI Exchange baseline is not applicable.'
                     break
                 }
@@ -3056,7 +3583,7 @@ function Test-EDCAControl {
             }
             'EX-BP-060' {
                 if (-not $isExchangeServer) {
-                    $status = 'Unknown'
+                    $status = 'Skipped'
                     $evidence = 'Exchange not detected on this server; vulnerability baseline is not applicable.'
                     break
                 }
@@ -3083,7 +3610,7 @@ function Test-EDCAControl {
             }
             'EX-BP-042' {
                 if (-not $isExchangeServer) {
-                    $status = 'Unknown'
+                    $status = 'Skipped'
                     $evidence = 'Exchange not detected on this server; FIP-FS baseline is not applicable.'
                     break
                 }
@@ -3113,7 +3640,7 @@ function Test-EDCAControl {
             }
             'EX-BP-043' {
                 if (-not $isExchangeServer) {
-                    $status = 'Unknown'
+                    $status = 'Skipped'
                     $evidence = 'Exchange not detected on this server; IIS web.config baseline is not applicable.'
                     break
                 }
@@ -3157,7 +3684,7 @@ function Test-EDCAControl {
             }
             'EX-BP-039' {
                 if (-not $isExchangeServer) {
-                    $status = 'Unknown'
+                    $status = 'Skipped'
                     $evidence = 'Exchange not detected on this server; computer membership baseline is not applicable.'
                     break
                 }
@@ -3194,7 +3721,7 @@ function Test-EDCAControl {
             }
             'EX-BP-012' {
                 if (-not $isExchangeServer) {
-                    $status = 'Unknown'
+                    $status = 'Skipped'
                     $evidence = 'Exchange not detected on this server; UnifiedContent cleanup baseline is not applicable.'
                     break
                 }
@@ -3750,8 +4277,8 @@ function Test-EDCAControl {
                         }
 
                         if ($configured -eq $false) {
-                            $status = 'Pass'
-                            $evidence = 'No Alternate Service Account credentials detected. Best practice: only configure ASA for Kerberos on load-balanced Client Access namespaces.'
+                            $status = 'Skipped'
+                            $evidence = 'No Alternate Service Account (ASA) credentials detected. ASA is only required in load-balanced Client Access deployments using Kerberos; this control is not applicable when ASA is not in use.'
                         }
                         elseif ($configured -eq $true) {
                             $summary = ('ASA is configured via {0}; parsed effective credentials: {1}.' -f $sourceCommand, $credentialCount)
@@ -3823,39 +4350,6 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-084' {
-                $settingOverrides = $null
-                if (($server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $server.Exchange -and ($server.Exchange.PSObject.Properties.Name -contains 'SettingOverrides')) {
-                    $settingOverrides = $server.Exchange.SettingOverrides
-                }
-
-                if ($null -eq $settingOverrides) {
-                    $status = 'Unknown'
-                    $evidence = 'Setting override telemetry unavailable; cannot verify P2 FROM detection state.'
-                }
-                else {
-                    $overrideNames = @()
-                    if (($settingOverrides.PSObject.Properties.Name -contains 'Names') -and $null -ne $settingOverrides.Names) {
-                        $overrideNames = @($settingOverrides.Names | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
-                    }
-
-                    $disableOverrides = @($overrideNames | Where-Object { $_ -match '(?i)DisableP2FromRegexMatch' })
-                    if ($disableOverrides.Count -gt 0) {
-                        $status = 'Fail'
-                        $summary = ('Detected {0} P2 FROM detection override(s) that disable default protections.' -f $disableOverrides.Count)
-                        $evidence = Format-EDCAEvidenceWithElements -Summary $summary -Elements $disableOverrides
-                    }
-                    else {
-                        $status = 'Pass'
-                        if ($overrideNames.Count -eq 0) {
-                            $evidence = 'No Exchange setting overrides detected; P2 FROM detection defaults are preserved.'
-                        }
-                        else {
-                            $evidence = 'No P2 FROM detection disabling overrides detected in Exchange setting overrides.'
-                        }
-                    }
-                }
-            }
             'EX-BP-092' {
                 $databases = @()
                 if (($server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $server.Exchange -and
@@ -3867,16 +4361,17 @@ function Test-EDCAControl {
                     $evidence = 'No mailbox database data available for this server.'
                 }
                 else {
-                    $nonCompliant = @($databases | Where-Object { $null -eq $_.ItemRetentionDays -or [int]$_.ItemRetentionDays -lt 14 })
-                    if ($nonCompliant.Count -gt 0) {
-                        $status = 'Fail'
-                        $details = @($nonCompliant | ForEach-Object { ('{0}: ItemRetentionDays={1} (expected >= 14)' -f [string]$_.Name, $_.ItemRetentionDays) })
-                        $evidence = Format-EDCAEvidenceWithElements -Summary ('{0} of {1} mailbox database(s) have deleted item retention < 14 days.' -f $nonCompliant.Count, $databases.Count) -Elements $details
-                    }
-                    else {
-                        $status = 'Pass'
-                        $evidence = ('All {0} mailbox database(s) have deleted item retention >= 14 days.' -f $databases.Count)
-                    }
+                    $dbServerResults = @($databases | ForEach-Object {
+                            $db = $_
+                            $dbStatus = if ($null -eq $db.ItemRetentionDays -or [int]$db.ItemRetentionDays -lt 14) { 'Fail' } else { 'Pass' }
+                            $dbEvidence = if ($dbStatus -eq 'Pass') {
+                                ('ItemRetentionDays={0} — compliant (>= 14 days).' -f $db.ItemRetentionDays)
+                            }
+                            else {
+                                ('ItemRetentionDays={0} — non-compliant (expected >= 14 days).' -f $db.ItemRetentionDays)
+                            }
+                            [pscustomobject]@{ Server = [string]$db.Name; Status = $dbStatus; Evidence = $dbEvidence }
+                        })
                 }
             }
             'EX-BP-093' {
@@ -3890,16 +4385,17 @@ function Test-EDCAControl {
                     $evidence = 'No mailbox database data available for this server.'
                 }
                 else {
-                    $nonCompliant = @($databases | Where-Object { $null -eq $_.MailboxRetentionDays -or [int]$_.MailboxRetentionDays -lt 30 })
-                    if ($nonCompliant.Count -gt 0) {
-                        $status = 'Fail'
-                        $details = @($nonCompliant | ForEach-Object { ('{0}: MailboxRetentionDays={1} (expected >= 30)' -f [string]$_.Name, $_.MailboxRetentionDays) })
-                        $evidence = Format-EDCAEvidenceWithElements -Summary ('{0} of {1} mailbox database(s) have deleted mailbox retention < 30 days.' -f $nonCompliant.Count, $databases.Count) -Elements $details
-                    }
-                    else {
-                        $status = 'Pass'
-                        $evidence = ('All {0} mailbox database(s) have deleted mailbox retention >= 30 days.' -f $databases.Count)
-                    }
+                    $dbServerResults = @($databases | ForEach-Object {
+                            $db = $_
+                            $dbStatus = if ($null -eq $db.MailboxRetentionDays -or [int]$db.MailboxRetentionDays -lt 30) { 'Fail' } else { 'Pass' }
+                            $dbEvidence = if ($dbStatus -eq 'Pass') {
+                                ('MailboxRetentionDays={0} — compliant (>= 30 days).' -f $db.MailboxRetentionDays)
+                            }
+                            else {
+                                ('MailboxRetentionDays={0} — non-compliant (expected >= 30 days).' -f $db.MailboxRetentionDays)
+                            }
+                            [pscustomobject]@{ Server = [string]$db.Name; Status = $dbStatus; Evidence = $dbEvidence }
+                        })
                 }
             }
             'EX-BP-094' {
@@ -3913,16 +4409,19 @@ function Test-EDCAControl {
                     $evidence = 'No mailbox database data available for this server.'
                 }
                 else {
-                    $nonCompliant = @($databases | Where-Object { $null -eq $_.BackupRestore -or [bool]$_.BackupRestore -ne $true })
-                    if ($nonCompliant.Count -gt 0) {
-                        $status = 'Fail'
-                        $details = @($nonCompliant | ForEach-Object { ('{0}: BackupRestore={1} (expected True)' -f [string]$_.Name, $_.BackupRestore) })
-                        $evidence = Format-EDCAEvidenceWithElements -Summary ('{0} of {1} mailbox database(s) do not have BackupRestore enabled.' -f $nonCompliant.Count, $databases.Count) -Elements $details
-                    }
-                    else {
-                        $status = 'Pass'
-                        $evidence = ('All {0} mailbox database(s) have BackupRestore enabled.' -f $databases.Count)
-                    }
+                    $dbServerResults = @($databases | ForEach-Object {
+                            $db = $_
+                            $retainEnabled = ($db.PSObject.Properties.Name -contains 'RetainDeletedItemsUntilBackup') -and ($null -ne $db.RetainDeletedItemsUntilBackup) -and ([bool]$db.RetainDeletedItemsUntilBackup -eq $true)
+                            $dbStatus = if ($retainEnabled) { 'Pass' } else { 'Fail' }
+                            $retainValue = if (($db.PSObject.Properties.Name -contains 'RetainDeletedItemsUntilBackup') -and $null -ne $db.RetainDeletedItemsUntilBackup) { [string]$db.RetainDeletedItemsUntilBackup } else { 'N/A' }
+                            $dbEvidence = if ($dbStatus -eq 'Pass') {
+                                'RetainDeletedItemsUntilBackup=True — compliant.'
+                            }
+                            else {
+                                ('RetainDeletedItemsUntilBackup={0} — non-compliant (expected True).' -f $retainValue)
+                            }
+                            [pscustomobject]@{ Server = [string]$db.Name; Status = $dbStatus; Evidence = $dbEvidence }
+                        })
                 }
             }
             'EX-BP-101' {
@@ -3948,83 +4447,6 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-102' {
-                $connectors = @()
-                if (($server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $server.Exchange -and
-                    ($server.Exchange.PSObject.Properties.Name -contains 'SendConnectors')) {
-                    $connectors = @($server.Exchange.SendConnectors)
-                }
-                if ($connectors.Count -eq 0) {
-                    $status = 'Unknown'
-                    $evidence = 'No send connector data available for this server.'
-                }
-                else {
-                    $nonCompliant = @($connectors | Where-Object { $null -eq $_.ProtocolLoggingLevel -or [string]$_.ProtocolLoggingLevel -ne 'Verbose' })
-                    if ($nonCompliant.Count -gt 0) {
-                        $status = 'Fail'
-                        $details = @($nonCompliant | ForEach-Object { ('{0}: ProtocolLoggingLevel={1} (expected Verbose)' -f [string]$_.Identity, [string]$_.ProtocolLoggingLevel) })
-                        $evidence = Format-EDCAEvidenceWithElements -Summary ('{0} of {1} send connector(s) do not have Verbose protocol logging.' -f $nonCompliant.Count, $connectors.Count) -Elements $details
-                    }
-                    else {
-                        $status = 'Pass'
-                        $evidence = ('All {0} send connector(s) have Verbose protocol logging enabled.' -f $connectors.Count)
-                    }
-                }
-            }
-            'EX-BP-103' {
-                $allConnectors = @()
-                if (($server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $server.Exchange -and
-                    ($server.Exchange.PSObject.Properties.Name -contains 'SendConnectors')) {
-                    $allConnectors = @($server.Exchange.SendConnectors)
-                }
-                $externalConnectors = @($allConnectors | Where-Object {
-                        $spaces = @($_.AddressSpaces)
-                        (@($spaces | Where-Object { [string]$_ -match '\*' })).Count -gt 0
-                    })
-                if ($externalConnectors.Count -eq 0) {
-                    $status = 'Unknown'
-                    $evidence = 'No external send connector (address space containing *) found on this server.'
-                }
-                else {
-                    $nonCompliant = @($externalConnectors | Where-Object { $null -eq $_.RequireDNSRouting -or [bool]$_.RequireDNSRouting -ne $true })
-                    if ($nonCompliant.Count -gt 0) {
-                        $status = 'Fail'
-                        $details = @($nonCompliant | ForEach-Object { ('{0}: RequireDNSRouting={1} (expected True)' -f [string]$_.Identity, $_.RequireDNSRouting) })
-                        $evidence = Format-EDCAEvidenceWithElements -Summary ('{0} of {1} external send connector(s) do not use DNS routing.' -f $nonCompliant.Count, $externalConnectors.Count) -Elements $details
-                    }
-                    else {
-                        $status = 'Pass'
-                        $evidence = ('All {0} external send connector(s) use DNS routing.' -f $externalConnectors.Count)
-                    }
-                }
-            }
-            'EX-BP-104' {
-                $allConnectors = @()
-                if (($server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $server.Exchange -and
-                    ($server.Exchange.PSObject.Properties.Name -contains 'SendConnectors')) {
-                    $allConnectors = @($server.Exchange.SendConnectors)
-                }
-                $externalConnectors = @($allConnectors | Where-Object {
-                        $spaces = @($_.AddressSpaces)
-                        (@($spaces | Where-Object { [string]$_ -match '\*' })).Count -gt 0
-                    })
-                if ($externalConnectors.Count -eq 0) {
-                    $status = 'Unknown'
-                    $evidence = 'No external send connector (address space containing *) found on this server.'
-                }
-                else {
-                    $nonCompliant = @($externalConnectors | Where-Object { $null -ne $_.IgnoreStartTLS -and [bool]$_.IgnoreStartTLS -eq $true })
-                    if ($nonCompliant.Count -gt 0) {
-                        $status = 'Fail'
-                        $details = @($nonCompliant | ForEach-Object { ('{0}: IgnoreStartTLS=True (expected False)' -f [string]$_.Identity) })
-                        $evidence = Format-EDCAEvidenceWithElements -Summary ('{0} of {1} external send connector(s) have IgnoreStartTLS set to True.' -f $nonCompliant.Count, $externalConnectors.Count) -Elements $details
-                    }
-                    else {
-                        $status = 'Pass'
-                        $evidence = ('All {0} external send connector(s) have IgnoreStartTLS set to False.' -f $externalConnectors.Count)
-                    }
-                }
-            }
             'EX-BP-105' {
                 $dbs = @()
                 if (($server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $server.Exchange -and
@@ -4036,15 +4458,18 @@ function Test-EDCAControl {
                     $evidence = 'No mailbox databases found on this server.'
                 }
                 else {
-                    $unlimited = @($dbs | Where-Object { ($_.PSObject.Properties.Name -contains 'IssueWarningQuotaIsUnlimited') -and [bool]$_.IssueWarningQuotaIsUnlimited })
-                    if ($unlimited.Count -gt 0) {
-                        $status = 'Fail'
-                        $evidence = Format-EDCAEvidenceWithElements -Summary ('IssueWarningQuota is Unlimited on {0} database(s).' -f $unlimited.Count) -Elements @($unlimited | ForEach-Object { [string]$_.Name })
-                    }
-                    else {
-                        $status = 'Pass'
-                        $evidence = 'IssueWarningQuota is configured (not Unlimited) on all mailbox databases.'
-                    }
+                    $dbServerResults = @($dbs | ForEach-Object {
+                            $db = $_
+                            $isUnlimited = ($db.PSObject.Properties.Name -contains 'IssueWarningQuotaIsUnlimited') -and [bool]$db.IssueWarningQuotaIsUnlimited
+                            $dbStatus = if ($isUnlimited) { 'Fail' } else { 'Pass' }
+                            $dbEvidence = if ($isUnlimited) {
+                                'IssueWarningQuota=Unlimited — non-compliant (a quota must be configured).'
+                            }
+                            else {
+                                'IssueWarningQuota is configured (not Unlimited) — compliant.'
+                            }
+                            [pscustomobject]@{ Server = [string]$db.Name; Status = $dbStatus; Evidence = $dbEvidence }
+                        })
                 }
             }
             'EX-BP-106' {
@@ -4058,15 +4483,18 @@ function Test-EDCAControl {
                     $evidence = 'No mailbox databases found on this server.'
                 }
                 else {
-                    $unlimited = @($dbs | Where-Object { ($_.PSObject.Properties.Name -contains 'ProhibitSendReceiveQuotaIsUnlimited') -and [bool]$_.ProhibitSendReceiveQuotaIsUnlimited })
-                    if ($unlimited.Count -gt 0) {
-                        $status = 'Fail'
-                        $evidence = Format-EDCAEvidenceWithElements -Summary ('ProhibitSendReceiveQuota is Unlimited on {0} database(s).' -f $unlimited.Count) -Elements @($unlimited | ForEach-Object { [string]$_.Name })
-                    }
-                    else {
-                        $status = 'Pass'
-                        $evidence = 'ProhibitSendReceiveQuota is configured (not Unlimited) on all mailbox databases.'
-                    }
+                    $dbServerResults = @($dbs | ForEach-Object {
+                            $db = $_
+                            $isUnlimited = ($db.PSObject.Properties.Name -contains 'ProhibitSendReceiveQuotaIsUnlimited') -and [bool]$db.ProhibitSendReceiveQuotaIsUnlimited
+                            $dbStatus = if ($isUnlimited) { 'Fail' } else { 'Pass' }
+                            $dbEvidence = if ($isUnlimited) {
+                                'ProhibitSendReceiveQuota=Unlimited — non-compliant (a quota must be configured).'
+                            }
+                            else {
+                                'ProhibitSendReceiveQuota is configured (not Unlimited) — compliant.'
+                            }
+                            [pscustomobject]@{ Server = [string]$db.Name; Status = $dbStatus; Evidence = $dbEvidence }
+                        })
                 }
             }
             'EX-BP-107' {
@@ -4080,15 +4508,18 @@ function Test-EDCAControl {
                     $evidence = 'No mailbox databases found on this server.'
                 }
                 else {
-                    $unlimited = @($dbs | Where-Object { ($_.PSObject.Properties.Name -contains 'ProhibitSendQuotaIsUnlimited') -and [bool]$_.ProhibitSendQuotaIsUnlimited })
-                    if ($unlimited.Count -gt 0) {
-                        $status = 'Fail'
-                        $evidence = Format-EDCAEvidenceWithElements -Summary ('ProhibitSendQuota is Unlimited on {0} database(s).' -f $unlimited.Count) -Elements @($unlimited | ForEach-Object { [string]$_.Name })
-                    }
-                    else {
-                        $status = 'Pass'
-                        $evidence = 'ProhibitSendQuota is configured (not Unlimited) on all mailbox databases.'
-                    }
+                    $dbServerResults = @($dbs | ForEach-Object {
+                            $db = $_
+                            $isUnlimited = ($db.PSObject.Properties.Name -contains 'ProhibitSendQuotaIsUnlimited') -and [bool]$db.ProhibitSendQuotaIsUnlimited
+                            $dbStatus = if ($isUnlimited) { 'Fail' } else { 'Pass' }
+                            $dbEvidence = if ($isUnlimited) {
+                                'ProhibitSendQuota=Unlimited — non-compliant (a quota must be configured).'
+                            }
+                            else {
+                                'ProhibitSendQuota is configured (not Unlimited) — compliant.'
+                            }
+                            [pscustomobject]@{ Server = [string]$db.Name; Status = $dbStatus; Evidence = $dbEvidence }
+                        })
                 }
             }
             'EX-BP-108' {
@@ -4105,40 +4536,6 @@ function Test-EDCAControl {
                     $path = if ($trc.PSObject.Properties.Name -contains 'PickupDirectoryPath') { $trc.PickupDirectoryPath } else { $null }
                     $status = if ([string]::IsNullOrWhiteSpace($path)) { 'Pass' } else { 'Fail' }
                     $evidence = if ([string]::IsNullOrWhiteSpace($path)) { 'Compliant — PickupDirectoryPath is not set on this server.' } else { ('PickupDirectoryPath is configured on this server: {0}' -f $path) }
-                }
-            }
-            'EX-BP-109' {
-                $allConnectors = @()
-                if (($server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $server.Exchange -and
-                    ($server.Exchange.PSObject.Properties.Name -contains 'SendConnectors')) {
-                    $allConnectors = @($server.Exchange.SendConnectors)
-                }
-                if ($allConnectors.Count -eq 0) {
-                    $status = 'Unknown'
-                    $evidence = 'No send connectors found on this server.'
-                }
-                else {
-                    $limit = 26214400 # 25 MB in bytes
-                    $nonCompliant = @($allConnectors | Where-Object {
-                            $bytes = if ($_.PSObject.Properties.Name -contains 'MaxMessageSizeBytes') { $_.MaxMessageSizeBytes } else { $null }
-                            ($null -ne $bytes) -and ([long]$bytes -gt $limit)
-                        })
-                    $unknown = @($allConnectors | Where-Object {
-                            -not ($_.PSObject.Properties.Name -contains 'MaxMessageSizeBytes') -or $null -eq $_.MaxMessageSizeBytes
-                        })
-                    if ($nonCompliant.Count -gt 0) {
-                        $status = 'Fail'
-                        $details = @($nonCompliant | ForEach-Object { ('{0}: MaxMessageSize exceeds 25 MB' -f [string]$_.Identity) })
-                        $evidence = Format-EDCAEvidenceWithElements -Summary ('{0} of {1} send connector(s) exceed the 25 MB limit.' -f $nonCompliant.Count, $allConnectors.Count) -Elements $details
-                    }
-                    elseif ($unknown.Count -gt 0) {
-                        $status = 'Unknown'
-                        $evidence = ('MaxMessageSizeBytes data unavailable for {0} send connector(s).' -f $unknown.Count)
-                    }
-                    else {
-                        $status = 'Pass'
-                        $evidence = ('All {0} send connector(s) have MaxMessageSize at or below 25 MB.' -f $allConnectors.Count)
-                    }
                 }
             }
             'EX-BP-110' {
@@ -4180,35 +4577,6 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-111' {
-                $allConnectors = @()
-                if (($server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $server.Exchange -and
-                    ($server.Exchange.PSObject.Properties.Name -contains 'SendConnectors')) {
-                    $allConnectors = @($server.Exchange.SendConnectors)
-                }
-                $externalConnectors = @($allConnectors | Where-Object {
-                        $spaces = @($_.AddressSpaces)
-                        (@($spaces | Where-Object { [string]$_ -match '\*' })).Count -gt 0
-                    })
-                if ($externalConnectors.Count -eq 0) {
-                    $status = 'Unknown'
-                    $evidence = 'No external send connector (address space containing *) found on this server.'
-                }
-                else {
-                    $nonCompliant = @($externalConnectors | Where-Object {
-                            ($_.PSObject.Properties.Name -contains 'DomainSecureEnabled') -and -not [bool]$_.DomainSecureEnabled
-                        })
-                    if ($nonCompliant.Count -gt 0) {
-                        $status = 'Fail'
-                        $details = @($nonCompliant | ForEach-Object { ('{0}: DomainSecureEnabled=False (expected True)' -f [string]$_.Identity) })
-                        $evidence = Format-EDCAEvidenceWithElements -Summary ('{0} of {1} external send connector(s) do not have DomainSecureEnabled set to True.' -f $nonCompliant.Count, $externalConnectors.Count) -Elements $details
-                    }
-                    else {
-                        $status = 'Pass'
-                        $evidence = ('All {0} external send connector(s) have DomainSecureEnabled set to True.' -f $externalConnectors.Count)
-                    }
-                }
-            }
             'EX-BP-112' {
                 $val = $null
                 if (($server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $server.Exchange -and
@@ -4246,23 +4614,521 @@ function Test-EDCAControl {
                     }
                 }
             }
+            'EX-BP-136' {
+                $connectors = @()
+                if (($server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $server.Exchange -and
+                    ($server.Exchange.PSObject.Properties.Name -contains 'ReceiveConnectors')) {
+                    $connectors = @($server.Exchange.ReceiveConnectors)
+                }
+                if ($connectors.Count -eq 0) {
+                    $status = 'Unknown'
+                    $evidence = 'No receive connector data available for this server.'
+                }
+                else {
+                    $nonCompliant = @($connectors | Where-Object {
+                            -not ($_.PSObject.Properties.Name -contains 'MaxHopCount') -or
+                            $null -eq $_.MaxHopCount -or
+                            [int]$_.MaxHopCount -ne 60
+                        })
+                    if ($nonCompliant.Count -gt 0) {
+                        $status = 'Fail'
+                        $details = @($nonCompliant | ForEach-Object { ('{0}: MaxHopCount={1} (expected 60)' -f [string]$_.Identity, $(if ($_.PSObject.Properties.Name -contains 'MaxHopCount') { $_.MaxHopCount } else { 'N/A' })) })
+                        $evidence = Format-EDCAEvidenceWithElements -Summary ('{0} of {1} receive connector(s) do not have MaxHopCount set to 60.' -f $nonCompliant.Count, $connectors.Count) -Elements $details
+                    }
+                    else {
+                        $status = 'Pass'
+                        $evidence = ('All {0} receive connector(s) have MaxHopCount set to 60.' -f $connectors.Count)
+                    }
+                }
+            }
+            'EX-BP-137' {
+                $trc = $null
+                if (($server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $server.Exchange -and
+                    ($server.Exchange.PSObject.Properties.Name -contains 'TransportRetryConfig')) {
+                    $trc = $server.Exchange.TransportRetryConfig
+                }
+                if ($null -eq $trc -or -not ($trc.PSObject.Properties.Name -contains 'MaxOutboundConnections') -or $null -eq $trc.MaxOutboundConnections) {
+                    $status = 'Unknown'
+                    $evidence = 'MaxOutboundConnections data unavailable on this server.'
+                }
+                else {
+                    $val = [int]$trc.MaxOutboundConnections
+                    if ($val -eq -1) {
+                        $status = 'Fail'
+                        $evidence = 'MaxOutboundConnections is Unlimited (expected 1000).'
+                    }
+                    elseif ($val -ne 1000) {
+                        $status = 'Fail'
+                        $evidence = ('MaxOutboundConnections is {0} (expected 1000).' -f $val)
+                    }
+                    else {
+                        $status = 'Pass'
+                        $evidence = 'Compliant — MaxOutboundConnections is 1000.'
+                    }
+                }
+            }
+            'EX-BP-138' {
+                $trc = $null
+                if (($server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $server.Exchange -and
+                    ($server.Exchange.PSObject.Properties.Name -contains 'TransportRetryConfig')) {
+                    $trc = $server.Exchange.TransportRetryConfig
+                }
+                if ($null -eq $trc -or -not ($trc.PSObject.Properties.Name -contains 'MaxPerDomainOutboundConnections') -or $null -eq $trc.MaxPerDomainOutboundConnections) {
+                    $status = 'Unknown'
+                    $evidence = 'MaxPerDomainOutboundConnections data unavailable on this server.'
+                }
+                else {
+                    $val = [int]$trc.MaxPerDomainOutboundConnections
+                    if ($val -ne 20) {
+                        $status = 'Fail'
+                        $evidence = ('MaxPerDomainOutboundConnections is {0} (expected 20).' -f $val)
+                    }
+                    else {
+                        $status = 'Pass'
+                        $evidence = 'Compliant — MaxPerDomainOutboundConnections is 20.'
+                    }
+                }
+            }
+            'EX-BP-125' {
+                $owaAuth = @()
+                if (($server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $server.Exchange -and
+                    ($server.Exchange.PSObject.Properties.Name -contains 'OwaFormsAuthentication')) {
+                    $owaAuth = @($server.Exchange.OwaFormsAuthentication)
+                }
+                if ($owaAuth.Count -eq 0) {
+                    $status = 'Unknown'
+                    $evidence = 'OWA virtual directory data unavailable on this server.'
+                }
+                else {
+                    $productLine = Get-EDCAProductLineFromServerData -Server $server
+                    if ($productLine -eq 'Exchange2016') {
+                        $nonCompliant = @($owaAuth | Where-Object { ($_.PSObject.Properties.Name -contains 'FormsAuthentication') -and [bool]$_.FormsAuthentication })
+                        if ($nonCompliant.Count -gt 0) {
+                            $status = 'Fail'
+                            $details = @($nonCompliant | ForEach-Object { ('{0}: FormsAuthentication=True (Exchange 2016 requires False)' -f [string]$_.Identity) })
+                            $evidence = Format-EDCAEvidenceWithElements -Summary ('{0} of {1} OWA virtual director(ies) have forms-based authentication enabled (Exchange 2016 requires disabled).' -f $nonCompliant.Count, $owaAuth.Count) -Elements $details
+                        }
+                        else {
+                            $status = 'Pass'
+                            $evidence = ('Compliant — all {0} OWA virtual director(ies) have forms-based authentication disabled (Exchange 2016).' -f $owaAuth.Count)
+                        }
+                    }
+                    else {
+                        $nonCompliant = @($owaAuth | Where-Object { -not ($_.PSObject.Properties.Name -contains 'FormsAuthentication') -or -not [bool]$_.FormsAuthentication })
+                        if ($nonCompliant.Count -gt 0) {
+                            $status = 'Fail'
+                            $details = @($nonCompliant | ForEach-Object { ('{0}: FormsAuthentication=False (Exchange 2019/SE requires True)' -f [string]$_.Identity) })
+                            $evidence = Format-EDCAEvidenceWithElements -Summary ('{0} of {1} OWA virtual director(ies) do not have forms-based authentication enabled (Exchange 2019/SE requires enabled).' -f $nonCompliant.Count, $owaAuth.Count) -Elements $details
+                        }
+                        else {
+                            $status = 'Pass'
+                            $evidence = ('Compliant — all {0} OWA virtual director(ies) have forms-based authentication enabled (Exchange 2019/SE).' -f $owaAuth.Count)
+                        }
+                    }
+                }
+            }
+            'EX-BP-127' {
+                $databases = @()
+                if (($server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $server.Exchange -and
+                    ($server.Exchange.PSObject.Properties.Name -contains 'MailboxDatabases')) {
+                    $databases = @($server.Exchange.MailboxDatabases)
+                }
+                if ($databases.Count -eq 0) {
+                    $status = 'Unknown'
+                    $evidence = 'No mailbox database data available for this server.'
+                }
+                else {
+                    $dbServerResults = @($databases | ForEach-Object {
+                            $db = $_
+                            $hasProperty = $db.PSObject.Properties.Name -contains 'CircularLoggingEnabled'
+                            if (-not $hasProperty -or $null -eq $db.CircularLoggingEnabled) {
+                                $dbStatus = 'Unknown'
+                                $dbEvidence = 'CircularLoggingEnabled data unavailable.'
+                            }
+                            elseif ([bool]$db.CircularLoggingEnabled) {
+                                $dbStatus = 'Fail'
+                                $dbEvidence = 'CircularLoggingEnabled=True — non-compliant (expected False).'
+                            }
+                            else {
+                                $dbStatus = 'Pass'
+                                $dbEvidence = 'CircularLoggingEnabled=False — compliant.'
+                            }
+                            [pscustomobject]@{ Server = [string]$db.Name; Status = $dbStatus; Evidence = $dbEvidence }
+                        })
+                }
+            }
+            'EX-BP-134' {
+                $databases = @()
+                if (($server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $server.Exchange -and
+                    ($server.Exchange.PSObject.Properties.Name -contains 'MailboxDatabases')) {
+                    $databases = @($server.Exchange.MailboxDatabases)
+                }
+                if ($databases.Count -eq 0) {
+                    $status = 'Unknown'
+                    $evidence = 'No mailbox database data available for this server.'
+                }
+                else {
+                    $dbServerResults = @($databases | ForEach-Object {
+                            $db = $_
+                            $mountAtStartup = ($db.PSObject.Properties.Name -contains 'MountAtStartup') -and ($null -ne $db.MountAtStartup) -and ([bool]$db.MountAtStartup)
+                            $dbStatus = if ($mountAtStartup) { 'Pass' } else { 'Fail' }
+                            $mountValue = if (($db.PSObject.Properties.Name -contains 'MountAtStartup') -and $null -ne $db.MountAtStartup) { [string]$db.MountAtStartup } else { 'N/A' }
+                            $dbEvidence = if ($dbStatus -eq 'Pass') {
+                                'MountAtStartup=True — compliant.'
+                            }
+                            else {
+                                ('MountAtStartup={0} — non-compliant (expected True).' -f $mountValue)
+                            }
+                            [pscustomobject]@{ Server = [string]$db.Name; Status = $dbStatus; Evidence = $dbEvidence }
+                        })
+                }
+            }
+            'EX-BP-140' {
+                $agents = @()
+                if (($server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $server.Exchange -and
+                    ($server.Exchange.PSObject.Properties.Name -contains 'TransportAgents')) {
+                    $agents = @($server.Exchange.TransportAgents)
+                }
+                if ($agents.Count -eq 0) {
+                    $status = 'Unknown'
+                    $evidence = 'Transport agent data unavailable on this server.'
+                }
+                else {
+                    $required = @('Content Filter Agent', 'Sender Id Agent', 'Sender Reputation Filter Agent')
+                    $missing = @()
+                    $disabled = @()
+                    foreach ($agentName in $required) {
+                        $found = @($agents | Where-Object { [string]$_.Identity -eq $agentName })
+                        if ($found.Count -eq 0) { $missing += $agentName }
+                        elseif (-not [bool]$found[0].Enabled) { $disabled += $agentName }
+                    }
+                    if ($missing.Count -gt 0 -or $disabled.Count -gt 0) {
+                        $status = 'Fail'
+                        $issues = @()
+                        if ($missing.Count -gt 0) { $issues += ('Missing agents: {0}' -f ($missing -join ', ')) }
+                        if ($disabled.Count -gt 0) { $issues += ('Disabled agents: {0}' -f ($disabled -join ', ')) }
+                        $evidence = Format-EDCAEvidenceWithElements -Summary 'One or more required anti-spam transport agents are missing or disabled.' -Elements $issues
+                    }
+                    else {
+                        $status = 'Pass'
+                        $evidence = 'All required anti-spam agents (Content Filter, Sender ID, Sender Reputation) are present and enabled.'
+                    }
+                }
+            }
+            'EX-BP-142' {
+                $connectors = @()
+                if (($server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $server.Exchange -and
+                    ($server.Exchange.PSObject.Properties.Name -contains 'ReceiveConnectors')) {
+                    $connectors = @($server.Exchange.ReceiveConnectors)
+                }
+                if ($connectors.Count -eq 0) {
+                    $status = 'Unknown'
+                    $evidence = 'No receive connector data available for this server.'
+                }
+                else {
+                    $nonCompliant = @($connectors | Where-Object {
+                            $ts = if ($_.PSObject.Properties.Name -contains 'ConnectionTimeout') { [string]$_.ConnectionTimeout } else { $null }
+                            if ([string]::IsNullOrWhiteSpace($ts)) { $false }
+                            else { $parsed = $null; try { $parsed = [timespan]$ts } catch {}; ($null -ne $parsed) -and ($parsed.TotalMinutes -gt 5) }
+                        })
+                    $unknown = @($connectors | Where-Object {
+                            -not ($_.PSObject.Properties.Name -contains 'ConnectionTimeout') -or [string]::IsNullOrWhiteSpace([string]$_.ConnectionTimeout)
+                        })
+                    if ($nonCompliant.Count -gt 0) {
+                        $status = 'Fail'
+                        $details = @($nonCompliant | ForEach-Object { ('{0}: ConnectionTimeout={1} (must be ≤ 00:05:00)' -f [string]$_.Identity, [string]$_.ConnectionTimeout) })
+                        $evidence = Format-EDCAEvidenceWithElements -Summary ('{0} of {1} receive connector(s) have ConnectionTimeout exceeding 5 minutes.' -f $nonCompliant.Count, $connectors.Count) -Elements $details
+                    }
+                    elseif ($unknown.Count -gt 0) {
+                        $status = 'Unknown'
+                        $evidence = ('ConnectionTimeout data unavailable for {0} of {1} receive connector(s).' -f $unknown.Count, $connectors.Count)
+                    }
+                    else {
+                        $status = 'Pass'
+                        $evidence = ('All {0} receive connector(s) have ConnectionTimeout set to 5 minutes or less.' -f $connectors.Count)
+                    }
+                }
+            }
+            'EX-BP-147' {
+                $connectors = @()
+                if (($server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $server.Exchange -and
+                    ($server.Exchange.PSObject.Properties.Name -contains 'ReceiveConnectors')) {
+                    $connectors = @($server.Exchange.ReceiveConnectors)
+                }
+                if ($connectors.Count -eq 0) {
+                    $status = 'Unknown'
+                    $evidence = 'No receive connector data available for this server.'
+                }
+                else {
+                    $revealing = @($connectors | Where-Object {
+                            $banner = if ($_.PSObject.Properties.Name -contains 'Banner') { [string]$_.Banner } else { $null }
+                            (-not [string]::IsNullOrWhiteSpace($banner)) -and ($banner -match '(?i)\bexchange\b|15\.[0-9]+\.[0-9]')
+                        })
+                    $emptyBanner = @($connectors | Where-Object {
+                            -not ($_.PSObject.Properties.Name -contains 'Banner') -or [string]::IsNullOrWhiteSpace([string]$_.Banner)
+                        })
+                    if ($revealing.Count -gt 0) {
+                        $status = 'Fail'
+                        $details = @($revealing | ForEach-Object { ('{0}: Banner="{1}"' -f [string]$_.Identity, [string]$_.Banner) })
+                        $evidence = Format-EDCAEvidenceWithElements -Summary ('{0} of {1} receive connector(s) have an SMTP banner that reveals server identity.' -f $revealing.Count, $connectors.Count) -Elements $details
+                    }
+                    elseif ($emptyBanner.Count -gt 0) {
+                        $status = 'Unknown'
+                        $details = @($emptyBanner | ForEach-Object { [string]$_.Identity })
+                        $evidence = Format-EDCAEvidenceWithElements -Summary ('{0} of {1} receive connector(s) have no custom SMTP banner; the default banner may reveal software identity.' -f $emptyBanner.Count, $connectors.Count) -Elements $details
+                    }
+                    else {
+                        $status = 'Pass'
+                        $evidence = ('All {0} receive connector(s) have a custom SMTP banner that does not reveal server identity.' -f $connectors.Count)
+                    }
+                }
+            }
+            'EX-BP-148' {
+                $databases = @()
+                if (($server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $server.Exchange -and
+                    ($server.Exchange.PSObject.Properties.Name -contains 'MailboxDatabases')) {
+                    $databases = @($server.Exchange.MailboxDatabases)
+                }
+                if ($databases.Count -eq 0) {
+                    $status = 'Unknown'
+                    $evidence = 'No mailbox database data available for this server.'
+                }
+                else {
+                    $dbServerResults = @($databases | ForEach-Object {
+                            $db = $_
+                            $hasEnoughCopies = ($db.PSObject.Properties.Name -contains 'DatabaseCopiesCount') -and ($null -ne $db.DatabaseCopiesCount) -and ([int]$db.DatabaseCopiesCount -ge 2)
+                            $dbStatus = if ($hasEnoughCopies) { 'Pass' } else { 'Fail' }
+                            $copiesValue = if (($db.PSObject.Properties.Name -contains 'DatabaseCopiesCount') -and $null -ne $db.DatabaseCopiesCount) { [string]$db.DatabaseCopiesCount } else { 'N/A' }
+                            $dbEvidence = if ($dbStatus -eq 'Pass') {
+                                ('DatabaseCopiesCount={0} — compliant (>= 2 copies).' -f $copiesValue)
+                            }
+                            else {
+                                ('DatabaseCopiesCount={0} — non-compliant (expected >= 2 copies for high availability).' -f $copiesValue)
+                            }
+                            [pscustomobject]@{ Server = [string]$db.Name; Status = $dbStatus; Evidence = $dbEvidence }
+                        })
+                }
+            }
+            'EX-BP-150' {
+                $connectors = @()
+                if (($server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $server.Exchange -and
+                    ($server.Exchange.PSObject.Properties.Name -contains 'ReceiveConnectors')) {
+                    $connectors = @($server.Exchange.ReceiveConnectors)
+                }
+                $internalConnectors = @($connectors | Where-Object {
+                        $role = if ($_.PSObject.Properties.Name -contains 'TransportRole') { [string]$_.TransportRole } else { '' }
+                        $role -ne 'FrontendTransport'
+                    })
+                if ($internalConnectors.Count -eq 0) {
+                    $status = 'Unknown'
+                    $evidence = 'No internal (non-FrontendTransport) receive connectors found on this server.'
+                }
+                else {
+                    $nonCompliant = @($internalConnectors | Where-Object { -not ($_.PSObject.Properties.Name -contains 'RequireTLS') -or $null -eq $_.RequireTLS -or -not [bool]$_.RequireTLS })
+                    if ($nonCompliant.Count -gt 0) {
+                        $status = 'Fail'
+                        $details = @($nonCompliant | ForEach-Object { ('{0}: RequireTLS=False (expected True)' -f [string]$_.Identity) })
+                        $evidence = Format-EDCAEvidenceWithElements -Summary ('{0} of {1} internal receive connector(s) do not require TLS.' -f $nonCompliant.Count, $internalConnectors.Count) -Elements $details
+                    }
+                    else {
+                        $status = 'Pass'
+                        $evidence = ('All {0} internal receive connector(s) require TLS.' -f $internalConnectors.Count)
+                    }
+                }
+            }
+            'EX-BP-151' {
+                $connectors = @()
+                if (($server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $server.Exchange -and
+                    ($server.Exchange.PSObject.Properties.Name -contains 'ReceiveConnectors')) {
+                    $connectors = @($server.Exchange.ReceiveConnectors)
+                }
+                if ($connectors.Count -eq 0) {
+                    $status = 'Unknown'
+                    $evidence = 'No receive connector data available for this server.'
+                }
+                else {
+                    $nonCompliant = @($connectors | Where-Object {
+                            $val = if ($_.PSObject.Properties.Name -contains 'MaxRecipientsPerMessage') { [string]$_.MaxRecipientsPerMessage } else { $null }
+                            [string]::IsNullOrWhiteSpace($val) -or $val -eq 'Unlimited' -or ($val -match '^\d+$' -and [int]$val -eq 0)
+                        })
+                    if ($nonCompliant.Count -gt 0) {
+                        $status = 'Fail'
+                        $details = @($nonCompliant | ForEach-Object { ('{0}: MaxRecipientsPerMessage={1} (must not be Unlimited or 0)' -f [string]$_.Identity, $(if ($_.PSObject.Properties.Name -contains 'MaxRecipientsPerMessage') { [string]$_.MaxRecipientsPerMessage } else { 'N/A' })) })
+                        $evidence = Format-EDCAEvidenceWithElements -Summary ('{0} of {1} receive connector(s) have MaxRecipientsPerMessage set to Unlimited or 0.' -f $nonCompliant.Count, $connectors.Count) -Elements $details
+                    }
+                    else {
+                        $status = 'Pass'
+                        $evidence = ('All {0} receive connector(s) have MaxRecipientsPerMessage set to a specific limit.' -f $connectors.Count)
+                    }
+                }
+            }
+            'EX-BP-152' {
+                $agents = @()
+                if (($server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $server.Exchange -and
+                    ($server.Exchange.PSObject.Properties.Name -contains 'TransportAgents')) {
+                    $agents = @($server.Exchange.TransportAgents)
+                }
+                if ($agents.Count -eq 0) {
+                    $status = 'Unknown'
+                    $evidence = 'Transport agent data unavailable on this server.'
+                }
+                else {
+                    $malwareAgent = @($agents | Where-Object { [string]$_.Identity -eq 'Malware Agent' }) | Select-Object -First 1
+                    if ($null -eq $malwareAgent) {
+                        $status = 'Unknown'
+                        $evidence = 'Malware Agent not found in the transport agent list; third-party scanning software may be in use or the agent may not be installed.'
+                    }
+                    elseif ([bool]$malwareAgent.Enabled) {
+                        $status = 'Pass'
+                        $evidence = 'Compliant — Malware Agent is present and enabled.'
+                    }
+                    else {
+                        $status = 'Fail'
+                        $evidence = 'Malware Agent is present but disabled. Enable it with Enable-TransportAgent -Identity ''Malware Agent'' or run Enable-AntimalwareScanning.ps1.'
+                    }
+                }
+            }
+            'EX-BP-154' {
+                $levels = @()
+                if (($server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $server.Exchange -and
+                    ($server.Exchange.PSObject.Properties.Name -contains 'EventLogLevels')) {
+                    $levels = @($server.Exchange.EventLogLevels)
+                }
+                if ($levels.Count -eq 0) {
+                    $status = 'Unknown'
+                    $evidence = 'Event log level data unavailable on this server.'
+                }
+                else {
+                    $nonCompliant = @($levels | Where-Object { ($_.PSObject.Properties.Name -contains 'EventLevel') -and [string]$_.EventLevel -ne 'Lowest' })
+                    if ($nonCompliant.Count -gt 0) {
+                        $status = 'Fail'
+                        $details = @($nonCompliant | ForEach-Object { ('{0}: EventLevel={1} (expected Lowest)' -f [string]$_.Identity, [string]$_.EventLevel) })
+                        $evidence = Format-EDCAEvidenceWithElements -Summary ('{0} of {1} Exchange event log categor(ies) are not set to Lowest.' -f $nonCompliant.Count, $levels.Count) -Elements $details
+                    }
+                    else {
+                        $status = 'Pass'
+                        $evidence = ('All {0} Exchange event log categories are set to Lowest.' -f $levels.Count)
+                    }
+                }
+            }
+            'EX-BP-155' {
+                $databaseStoragePaths = @()
+                if (($server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $server.Exchange -and
+                    ($server.Exchange.PSObject.Properties.Name -contains 'DatabaseStoragePaths')) {
+                    $databaseStoragePaths = @($server.Exchange.DatabaseStoragePaths)
+                }
+                if ($databaseStoragePaths.Count -eq 0) {
+                    $status = 'Unknown'
+                    $evidence = 'No mailbox database or log storage paths found (may not be a mailbox server role).'
+                }
+                else {
+                    $dbDrives = @($databaseStoragePaths | ForEach-Object {
+                            if ([string]$_ -match '^([A-Za-z]:)') { $matches[1].ToUpperInvariant() }
+                        } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique)
+                    if ($dbDrives.Count -eq 0) {
+                        $status = 'Unknown'
+                        $evidence = 'Could not resolve drive letters from database or log storage paths.'
+                    }
+                    else {
+                        $volumes = @()
+                        if (($server.PSObject.Properties.Name -contains 'OS') -and $null -ne $server.OS -and
+                            ($server.OS.PSObject.Properties.Name -contains 'Volumes')) {
+                            $volumes = @($server.OS.Volumes)
+                        }
+                        $notProtected = @()
+                        $unmapped = @()
+                        foreach ($drive in $dbDrives) {
+                            $vol = @($volumes | Where-Object { ([string]$_.DriveLetter).TrimEnd('\').TrimEnd('/').Equals($drive, [System.StringComparison]::OrdinalIgnoreCase) }) | Select-Object -First 1
+                            if ($null -eq $vol) { $unmapped += $drive; continue }
+                            if (-not [bool]$vol.BitLockerProtected) { $notProtected += $drive }
+                        }
+                        if ($notProtected.Count -gt 0) {
+                            $status = 'Fail'
+                            $evidence = Format-EDCAEvidenceWithElements -Summary ('{0} of {1} database or log volume(s) are not BitLocker-protected.' -f $notProtected.Count, $dbDrives.Count) -Elements $notProtected
+                        }
+                        elseif ($unmapped.Count -gt 0) {
+                            $status = 'Unknown'
+                            $evidence = ('Could not map the following drive(s) to volume metadata: {0}' -f ($unmapped -join ', '))
+                        }
+                        else {
+                            $status = 'Pass'
+                            $evidence = ('All database and log volumes are BitLocker-protected: {0}' -f ($dbDrives -join ', '))
+                        }
+                    }
+                }
+            }
+            'EX-BP-156' {
+                $databaseStoragePaths = @()
+                if (($server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $server.Exchange -and
+                    ($server.Exchange.PSObject.Properties.Name -contains 'DatabaseStoragePaths')) {
+                    $databaseStoragePaths = @($server.Exchange.DatabaseStoragePaths)
+                }
+                if ($databaseStoragePaths.Count -eq 0) {
+                    $status = 'Unknown'
+                    $evidence = 'No mailbox database or log storage paths found (may not be a mailbox server role).'
+                }
+                else {
+                    $dbDrives = @($databaseStoragePaths | ForEach-Object {
+                            if ([string]$_ -match '^([A-Za-z]:)') { $matches[1].ToUpperInvariant() }
+                        } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique)
+                    if ($dbDrives.Count -eq 0) {
+                        $status = 'Unknown'
+                        $evidence = 'Could not resolve drive letters from database or log storage paths.'
+                    }
+                    else {
+                        $volumes = @()
+                        if (($server.PSObject.Properties.Name -contains 'OS') -and $null -ne $server.OS -and
+                            ($server.OS.PSObject.Properties.Name -contains 'Volumes')) {
+                            $volumes = @($server.OS.Volumes)
+                        }
+                        $notReFS = @()
+                        $unmapped = @()
+                        foreach ($drive in $dbDrives) {
+                            $vol = @($volumes | Where-Object { ([string]$_.DriveLetter).TrimEnd('\').TrimEnd('/').Equals($drive, [System.StringComparison]::OrdinalIgnoreCase) }) | Select-Object -First 1
+                            if ($null -eq $vol) { $unmapped += $drive; continue }
+                            if ([string]$vol.FileSystem -ne 'ReFS') { $notReFS += ('{0}: {1}' -f $drive, [string]$vol.FileSystem) }
+                        }
+                        if ($notReFS.Count -gt 0) {
+                            $status = 'Fail'
+                            $evidence = Format-EDCAEvidenceWithElements -Summary ('{0} of {1} database or log volume(s) are not formatted with ReFS.' -f $notReFS.Count, $dbDrives.Count) -Elements $notReFS
+                        }
+                        elseif ($unmapped.Count -gt 0) {
+                            $status = 'Unknown'
+                            $evidence = ('Could not map the following drive(s) to volume metadata: {0}' -f ($unmapped -join ', '))
+                        }
+                        else {
+                            $status = 'Pass'
+                            $evidence = ('All database and log volumes are formatted with ReFS: {0}' -f ($dbDrives -join ', '))
+                        }
+                    }
+                }
+            }
             default {
                 $status = 'Unknown'
                 $evidence = 'Control evaluator not implemented.'
             }
         }
 
-        $serverResults += [pscustomobject]@{
-            Server   = $serverName
-            Status   = $status
-            Evidence = $evidence
+        if ($null -ne $dbServerResults) {
+            $serverResults += $dbServerResults
+        }
+        else {
+            $serverResults += [pscustomobject]@{
+                Server   = $serverName
+                Status   = $status
+                Evidence = $evidence
+            }
         }
     }
 
-    $hasFail = (@($serverResults | Where-Object { $_.Status -eq 'Fail' }).Count -gt 0)
-    $hasUnknown = (@($serverResults | Where-Object { $_.Status -eq 'Unknown' }).Count -gt 0)
+    $nonSkipped = @($serverResults | Where-Object { $_.Status -ne 'Skipped' })
+    $hasFail = (@($nonSkipped | Where-Object { $_.Status -eq 'Fail' }).Count -gt 0)
+    $hasUnknown = (@($nonSkipped | Where-Object { $_.Status -eq 'Unknown' }).Count -gt 0)
 
-    $overallStatus = if ($hasFail) {
+    $overallStatus = if ($nonSkipped.Count -eq 0) {
+        'Skipped'
+    }
+    elseif ($hasFail) {
         'Fail'
     }
     elseif ($hasUnknown) {
@@ -4296,11 +5162,12 @@ function Get-EDCAScores {
         [object[]]$Findings
     )
 
-    $frameworks = @('BestPractice', 'CIS', 'CISA', 'NIS2', 'DISA')
+    $frameworks = @('Best Practice', 'CIS', 'CISA', 'ENISA', 'DISA')
     $scores = @()
 
-    # Overall score across all verifiable controls (each counted once)
-    $allEligible = @($Findings | Where-Object { $_.Verify })
+    # Overall score across all verifiable controls (each counted once); Skipped excluded from denominator
+    $allSkipped = @($Findings | Where-Object { $_.Verify -and $_.OverallStatus -eq 'Skipped' })
+    $allEligible = @($Findings | Where-Object { $_.Verify -and $_.OverallStatus -ne 'Skipped' })
     $allTotalWeight = 0
     $allPassedWeight = 0
     foreach ($item in $allEligible) {
@@ -4320,12 +5187,15 @@ function Get-EDCAScores {
         TotalControls   = $allEligible.Count
         FailedControls  = @($allEligible | Where-Object { $_.OverallStatus -eq 'Fail' }).Count
         UnknownControls = @($allEligible | Where-Object { $_.OverallStatus -eq 'Unknown' }).Count
+        SkippedControls = $allSkipped.Count
     }
 
     foreach ($framework in $frameworks) {
-        $eligible = @($Findings | Where-Object {
+        $allFramework = @($Findings | Where-Object {
                 $_.Verify -and ($_.Frameworks -contains $framework)
             })
+        $skippedCount = @($allFramework | Where-Object { $_.OverallStatus -eq 'Skipped' }).Count
+        $eligible = @($allFramework | Where-Object { $_.OverallStatus -ne 'Skipped' })
 
         $totalWeight = 0
         foreach ($item in $eligible) {
@@ -4360,6 +5230,7 @@ function Get-EDCAScores {
             TotalControls   = $eligible.Count
             FailedControls  = $failedCount
             UnknownControls = $unknownCount
+            SkippedControls = $skippedCount
         }
     }
 

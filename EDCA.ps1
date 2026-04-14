@@ -4,8 +4,8 @@
 
     Version: 0.1 Preview
     Author:  Michel de Rooij
+    Source:  https://github.com/michelderooij/EDCA
     Website: https://eightwone.com
-
 
 .DESCRIPTION
     EDCA (Exchange Deployment & Compliance Assessment) collects configuration data from Exchange 2016,
@@ -13,15 +13,17 @@
     and security controls, and produces a detailed HTML report with pass/fail findings, severity
     ratings, and remediation guidance.
 
-    Two modes are supported:
+    Three modes are supported:
+      Both    — (default) collects data from the specified Exchange servers and immediately generates
+                a report, combining the Collect and Report phases in a single run.
       Collect — connects to one or more Exchange servers, gathers configuration telemetry, and
-                exports the raw data to a timestamped JSON file in the Output folder.
+                exports the raw data to a timestamped JSON file in the Data folder.
       Report  — imports a previously collected JSON file, runs the analysis engine against the loaded
                 controls library, generates an HTML report, and optionally outputs a PowerShell
                 remediation script.
 
 .PARAMETER Mode
-    Operating mode: Collect (default) or Report.
+    Operating mode: Both (default), Collect, or Report.
 
 .PARAMETER Servers
     List of Exchange server names to target during collection (Collect mode only).
@@ -39,7 +41,7 @@
     Directory for collected JSON data files (default: .\Data). One JSON file is written per
     server, named <fqdn>_<timestamp>.json.
 
-.PARAMETER ImportJson
+.PARAMETER ImportPath
     One or more paths to previously collected per-server JSON files, or a folder path whose
     JSON files are all processed (Report mode only). Multiple values may be comma-separated
     or passed via the pipeline. When a folder is supplied every *.json file it contains is
@@ -51,32 +53,43 @@
 .PARAMETER SkipHtml
     When specified, skips HTML report generation (analysis JSON is still written).
 
+.PARAMETER Update
+    When specified, downloads the latest exchange.builds.json from GitHub and saves it to
+    the Config directory, then continues with the requested operation.
+
+.EXAMPLE
+    .\EDCA.ps1 -Update
+
+.EXAMPLE
+    .\EDCA.ps1 -Servers EX01,EX02
+
 .EXAMPLE
     .\EDCA.ps1 -Mode Collect -Servers EX01,EX02
 
 .EXAMPLE
-    .\EDCA.ps1 -Mode Report -ImportJson .\Data\ex01.contoso.com_20250101_120000.json
+    .\EDCA.ps1 -Mode Report -ImportPath .\Data\ex01.contoso.com_20250101_120000.json
 
 .EXAMPLE
-    .\EDCA.ps1 -Mode Report -ImportJson .\Data\ex01.contoso.com_20250101_120000.json,.\Data\ex02.contoso.com_20250101_120000.json
+    .\EDCA.ps1 -Mode Report -ImportPath .\Data\ex01.contoso.com_20250101_120000.json,.\Data\ex02.contoso.com_20250101_120000.json
 
 .EXAMPLE
-    .\EDCA.ps1 -Mode Report -ImportJson .\Data
+    .\EDCA.ps1 -Mode Report -ImportPath .\Data
 #>
 #requires -version 5.1
 [CmdletBinding()]
 param(
-    [ValidateSet('Collect', 'Report')]
-    [string]$Mode = 'Collect',
+    [ValidateSet('Both', 'Collect', 'Report')]
+    [string]$Mode = 'Both',
     [string[]]$Servers = @(),
     [ValidateRange(1, 128)]
     [int]$ThrottleLimit = 4,
     [string]$ControlFile = '.\Config\controls.json',
     [string]$OutputPath = '.\Output',
     [string]$DataPath = '.\Data',
-    [string[]]$ImportJson,
+    [string[]]$ImportPath,
     [switch]$GenerateRemediationScript,
-    [switch]$SkipHtml
+    [switch]$SkipHtml,
+    [switch]$Update
 )
 
 Set-StrictMode -Version Latest
@@ -115,9 +128,28 @@ if ($null -eq $controls -or @($controls).Count -eq 0) {
 }
 Write-Verbose ('Loaded {0} control definition(s).' -f @($controls).Count)
 
+if ($Update) {
+    Write-EDCALog -Message 'Updating build information.'
+    $buildsUrl = 'https://raw.githubusercontent.com/michelderooij/EDCA/refs/heads/main/Config/exchange.builds.json'
+    $buildsPath = Join-Path -Path $scriptRoot -ChildPath 'Config\exchange.builds.json'
+    try {
+        $content = (Invoke-WebRequest -Uri $buildsUrl -UseBasicParsing -ErrorAction Stop).Content
+        $null = $content | ConvertFrom-Json
+        [System.IO.File]::WriteAllText($buildsPath, $content, [System.Text.UTF8Encoding]::new($false))
+        Write-EDCALog -Message 'exchange.builds.json updated successfully.'
+    }
+    catch {
+        Write-Warning ('Failed to update exchange.builds.json: {0}' -f $_.Exception.Message)
+    }
+    if ($Mode -in @('Collect', 'Both') -and @($Servers).Count -eq 0) {
+        Write-EDCALog -Message 'Execution completed.'
+        return
+    }
+}
+
 $collectionData = $null
 
-if ($Mode -eq 'Collect') {
+if ($Mode -in @('Collect', 'Both')) {
     Write-EDCALog -Message 'Starting collection mode.'
     Write-Verbose ('Collect mode target count from parameters: {0}' -f @($Servers).Count)
     $collectionData = Invoke-EDCACollection -Servers $Servers -ThrottleLimit $ThrottleLimit
@@ -131,6 +163,7 @@ if ($Mode -eq 'Collect') {
         $jsonOut = Join-Path -Path $resolvedDataPath -ChildPath ('{0}_{1}.json' -f $safeName, $stamp)
 
         $perServerMetadata = [pscustomobject]@{
+            FileType            = 'Server'
             ToolName            = $collectionData.Metadata.ToolName
             ToolVersion         = $collectionData.Metadata.ToolVersion
             CollectionTimestamp = $collectionData.Metadata.CollectionTimestamp
@@ -139,10 +172,8 @@ if ($Mode -eq 'Collect') {
         }
 
         $perServerData = [pscustomobject]@{
-            Metadata            = $perServerMetadata
-            Servers             = @($serverRecord)
-            Organization        = $collectionData.Organization
-            EmailAuthentication = $collectionData.EmailAuthentication
+            Metadata = $perServerMetadata
+            Servers  = @($serverRecord)
         }
 
         ConvertTo-EDCAJson -InputObject $perServerData | Set-Content -Path $jsonOut -Encoding UTF8
@@ -150,20 +181,52 @@ if ($Mode -eq 'Collect') {
         Write-Verbose ('Server JSON exported: {0}' -f $jsonOut)
     }
 
-    Write-EDCALog -Message ('Collection complete: {0} server JSON file(s) written to {1}' -f $exportedFiles.Count, $resolvedDataPath)
-    Write-Verbose ('Collection output includes {0} server record(s).' -f @($collectionData.Servers).Count)
+    # Write the organization-wide JSON file (separate from per-server files).
+    $rawOrgId = $null
+    if (($collectionData.Organization.PSObject.Properties.Name -contains 'OrganizationIdentity') -and
+        -not [string]::IsNullOrWhiteSpace([string]$collectionData.Organization.OrganizationIdentity)) {
+        $rawOrgId = [string]$collectionData.Organization.OrganizationIdentity
+    }
+    $safeOrgId = if ($null -ne $rawOrgId) { $rawOrgId -replace '[^\w\.\-]', '_' } else { 'organization' }
+    $orgJsonOut = Join-Path -Path $resolvedDataPath -ChildPath ('{0}_{1}.json' -f $safeOrgId, $stamp)
+
+    $orgMetadata = [pscustomobject]@{
+        FileType            = 'Organization'
+        ToolName            = $collectionData.Metadata.ToolName
+        ToolVersion         = $collectionData.Metadata.ToolVersion
+        CollectionTimestamp = $collectionData.Metadata.CollectionTimestamp
+        ExecutedBy          = $collectionData.Metadata.ExecutedBy
+        OrganizationId      = $rawOrgId
+    }
+
+    $orgData = [pscustomobject]@{
+        Metadata            = $orgMetadata
+        Organization        = $collectionData.Organization
+        EmailAuthentication = $collectionData.EmailAuthentication
+    }
+
+    ConvertTo-EDCAJson -InputObject $orgData | Set-Content -Path $orgJsonOut -Encoding UTF8
+    $exportedFiles.Add($orgJsonOut)
+    Write-Verbose ('Organization JSON exported: {0}' -f $orgJsonOut)
+
+    Write-EDCALog -Message ('Collection complete: {0} server JSON file(s) and 1 organization JSON file written to {1}' -f ($exportedFiles.Count - 1), $resolvedDataPath)
+    if ($Mode -eq 'Collect') {
+        Write-EDCALog -Message 'Execution completed.'
+        return
+    }
 }
-else {
-    if ($null -eq $ImportJson -or $ImportJson.Count -eq 0) {
-        throw 'Report mode requires -ImportJson.'
+
+if ($Mode -eq 'Report') {
+    if ($null -eq $ImportPath -or $ImportPath.Count -eq 0) {
+        throw 'Report mode requires -ImportPath.'
     }
 
     # Expand each entry: folders become their contained *.json files, files are used as-is.
     $jsonFiles = [System.Collections.Generic.List[string]]::new()
-    foreach ($entry in $ImportJson) {
+    foreach ($entry in $ImportPath) {
         $resolved = Resolve-EDCAPath -Path $entry -BasePath $scriptRoot
         if (Test-Path -Path $resolved -PathType Container) {
-            $found = @(Get-ChildItem -Path $resolved -Filter '*.json' -File | Select-Object -ExpandProperty FullName)
+            $found = [string[]](Get-ChildItem -Path $resolved -Filter '*.json' -File | Select-Object -ExpandProperty FullName)
             if ($found.Count -eq 0) {
                 throw ('No JSON files found in folder: {0}' -f $resolved)
             }
@@ -179,14 +242,11 @@ else {
 
     Write-EDCALog -Message ('Loading {0} collection JSON file(s).' -f $jsonFiles.Count)
 
-    # Parse all files and track metadata alongside each server record.
-    # Each parsed file contributes: its file-level CollectionTimestamp (from Metadata), its
-    # ServerName (from Metadata.ServerName), and the actual server data record.
+    # Parse all files. Organization files (FileType='Organization') are separated from server files.
     $allParsed = [System.Collections.Generic.List[pscustomobject]]::new()
-    $latestOrganization = $null
-    $latestEmailAuth = $null
-    $latestOrgTimestamp = [datetime]::MinValue
+    $allOrgFiles = [System.Collections.Generic.List[pscustomobject]]::new()
     $latestBaseMetadata = $null
+    $latestBaseTimestamp = [datetime]::MinValue
 
     foreach ($jsonFile in $jsonFiles) {
         $parsed = Get-Content -Path $jsonFile -Raw | ConvertFrom-Json
@@ -195,19 +255,41 @@ else {
         if ($parsed.PSObject.Properties.Name -contains 'Metadata') {
             $ts = $parsed.Metadata.CollectionTimestamp
             if ($null -ne $ts) {
-                try { $fileTimestamp = [datetime]$ts } catch { }
-            }
-
-            if ($null -eq $latestBaseMetadata -or $fileTimestamp -gt $latestOrgTimestamp) {
-                $latestBaseMetadata = $parsed.Metadata
+                try {
+                    $tsStr = if ($ts -is [string]) { $ts } else { [string]$ts.value }
+                    $fileTimestamp = [datetime]::Parse($tsStr)
+                }
+                catch { }
             }
         }
 
-        # Track the most recently collected Organization / EmailAuthentication as the shared baseline.
-        if ($fileTimestamp -gt $latestOrgTimestamp) {
-            if ($parsed.PSObject.Properties.Name -contains 'Organization') { $latestOrganization = $parsed.Organization }
-            if ($parsed.PSObject.Properties.Name -contains 'EmailAuthentication') { $latestEmailAuth = $parsed.EmailAuthentication }
-            $latestOrgTimestamp = $fileTimestamp
+        # Detect organization file: explicit FileType or has Organisation/EmailAuth but no Servers.
+        $fileType = ''
+        if ($parsed.PSObject.Properties.Name -contains 'Metadata' -and
+            $parsed.Metadata.PSObject.Properties.Name -contains 'FileType') {
+            $fileType = [string]$parsed.Metadata.FileType
+        }
+        $isOrgFile = ($fileType -eq 'Organization') -or
+        ($parsed.PSObject.Properties.Name -notcontains 'Servers' -and
+        ($parsed.PSObject.Properties.Name -contains 'Organization' -or
+        $parsed.PSObject.Properties.Name -contains 'EmailAuthentication'))
+
+        if ($isOrgFile) {
+            $allOrgFiles.Add([pscustomobject]@{
+                    Timestamp = $fileTimestamp
+                    Parsed    = $parsed
+                    FilePath  = $jsonFile
+                })
+            Write-Verbose ('Parsed org file {0}: timestamp={1}' -f $jsonFile, $fileTimestamp)
+            continue
+        }
+
+        # Server file — track base metadata from the most recent file seen so far.
+        if ($fileTimestamp -gt $latestBaseTimestamp) {
+            if ($parsed.PSObject.Properties.Name -contains 'Metadata') {
+                $latestBaseMetadata = $parsed.Metadata
+            }
+            $latestBaseTimestamp = $fileTimestamp
         }
 
         $serverName = ''
@@ -225,11 +307,20 @@ else {
                 })
         }
 
-        Write-Verbose ('Parsed file {0}: server={1}, timestamp={2}' -f $jsonFile, $serverName, $fileTimestamp)
+        # Legacy server files may still carry Organization/EmailAuthentication — treat as org candidate too.
+        if ($parsed.PSObject.Properties.Name -contains 'Organization' -or
+            $parsed.PSObject.Properties.Name -contains 'EmailAuthentication') {
+            $allOrgFiles.Add([pscustomobject]@{
+                    Timestamp = $fileTimestamp
+                    Parsed    = $parsed
+                    FilePath  = $jsonFile
+                })
+        }
+
+        Write-Verbose ('Parsed server file {0}: server={1}, timestamp={2}' -f $jsonFile, $serverName, $fileTimestamp)
     }
 
-    # Deduplicate: for each unique ServerName, keep only the record from the most recent file.
-    # Files without a ServerName in Metadata are always kept (legacy format / unknown).
+    # Deduplicate server records: for each ServerName keep the most recent file's record.
     $deduplicatedServers = [System.Collections.Generic.List[object]]::new()
     $namedGroups = $allParsed | Where-Object { -not [string]::IsNullOrWhiteSpace($_.ServerName) } |
     Group-Object -Property ServerName
@@ -244,12 +335,35 @@ else {
         }
     }
 
-    # Append records that had no ServerName in Metadata (always include, no dedup possible).
+    # Append records without a ServerName in Metadata (legacy / unknown — always include).
     foreach ($entry in @($allParsed | Where-Object { [string]::IsNullOrWhiteSpace($_.ServerName) })) {
         $deduplicatedServers.Add($entry.Record)
     }
 
-    # Assemble a merged collection object using the most recently collected baseline data.
+    # Pick organization data from the most recently collected org file.
+    $latestOrganization = $null
+    $latestEmailAuth = $null
+    $latestOrgTimestamp = [datetime]::MinValue
+
+    foreach ($orgEntry in $allOrgFiles) {
+        if ($orgEntry.Timestamp -gt $latestOrgTimestamp) {
+            if ($orgEntry.Parsed.PSObject.Properties.Name -contains 'Organization') {
+                $latestOrganization = $orgEntry.Parsed.Organization
+            }
+            if ($orgEntry.Parsed.PSObject.Properties.Name -contains 'EmailAuthentication') {
+                $latestEmailAuth = $orgEntry.Parsed.EmailAuthentication
+            }
+            $latestOrgTimestamp = $orgEntry.Timestamp
+        }
+    }
+
+    if ($allOrgFiles.Count -gt 1) {
+        $skippedOrg = $allOrgFiles.Count - 1
+        $bestOrgFile = ($allOrgFiles | Sort-Object { $_.Timestamp } -Descending | Select-Object -First 1).FilePath
+        Write-EDCALog -Message ('Organization data: {0} file(s) found; using most recent ({1}).' -f $allOrgFiles.Count, $bestOrgFile)
+    }
+
+    # Assemble merged collection object.
     $collectionData = [pscustomobject]@{
         Metadata            = $latestBaseMetadata
         Servers             = $deduplicatedServers.ToArray()
