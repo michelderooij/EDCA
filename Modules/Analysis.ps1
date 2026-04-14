@@ -1726,34 +1726,51 @@ function Test-EDCAControl {
                 }
             }
             'EX-BP-036' {
+                # Evaluate org-level auth cert validity from Organization.AuthCertificate (Get-AuthConfig)
+                $orgCert = $null
+                if (($CollectionData.Organization.PSObject.Properties.Name -contains 'AuthCertificate') -and $null -ne $CollectionData.Organization.AuthCertificate) {
+                    $orgCert = $CollectionData.Organization.AuthCertificate
+                }
+                if ($null -eq $orgCert) {
+                    $status = 'Unknown'
+                    $evidence = 'Auth certificate data unavailable (Get-AuthConfig not collected).'
+                }
+                elseif ([string]::IsNullOrWhiteSpace([string]$orgCert.Thumbprint)) {
+                    $status = 'Fail'
+                    $evidence = 'No current auth certificate thumbprint configured (Get-AuthConfig.CurrentCertificateThumbprint is empty).'
+                }
+                elseif (-not [bool]$orgCert.Found) {
+                    $status = 'Fail'
+                    $evidence = ('Auth certificate thumbprint {0} not found in Exchange certificate store.' -f [string]$orgCert.Thumbprint)
+                }
+                else {
+                    $daysRemaining = if ($orgCert.PSObject.Properties.Name -contains 'DaysRemaining' -and $null -ne $orgCert.DaysRemaining) { [int]$orgCert.DaysRemaining } else { $null }
+                    $status = if ([bool]$orgCert.IsExpired -or ($null -ne $daysRemaining -and $daysRemaining -lt 30)) { 'Fail' } elseif ($null -ne $daysRemaining -and $daysRemaining -lt 60) { 'Unknown' } else { 'Pass' }
+                    $evidence = ('Auth certificate {0}; expires {1} ({2} days remaining).' -f [string]$orgCert.Thumbprint, [string]$orgCert.NotAfter, [string]$daysRemaining)
+                }
+                # Per-server presence check: auth cert must be in each Exchange server's local certificate store
                 $exchServers = @($CollectionData.Servers | Where-Object {
                         ($_.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $_.Exchange -and
                         ($_.Exchange.PSObject.Properties.Name -contains 'IsExchangeServer') -and [bool]$_.Exchange.IsExchangeServer
                     })
-                if ($exchServers.Count -eq 0) {
-                    $status = 'Unknown'
-                    $evidence = 'No Exchange server data available; auth certificate baseline cannot be evaluated.'
-                }
-                else {
-                    $authCert = $null
+                if ($exchServers.Count -gt 0) {
+                    $domainServerResults = @()
                     foreach ($srv in $exchServers) {
+                        $srvName = [string]$srv.Server
+                        $srvCert = $null
                         if (($srv.Exchange.PSObject.Properties.Name -contains 'AuthCertificate') -and $null -ne $srv.Exchange.AuthCertificate) {
-                            $authCert = $srv.Exchange.AuthCertificate
-                            break
+                            $srvCert = $srv.Exchange.AuthCertificate
                         }
-                    }
-                    if ($null -eq $authCert) {
-                        $status = 'Unknown'
-                        $evidence = 'Exchange auth certificate telemetry unavailable.'
-                    }
-                    elseif (-not [bool]$authCert.Found) {
-                        $status = 'Fail'
-                        $evidence = ('Current auth certificate thumbprint not found in LocalMachine\My: {0}' -f [string]$authCert.Thumbprint)
-                    }
-                    else {
-                        $daysRemaining = if ($authCert.PSObject.Properties.Name -contains 'DaysRemaining' -and $null -ne $authCert.DaysRemaining) { [int]$authCert.DaysRemaining } else { $null }
-                        $status = if ([bool]$authCert.IsExpired -or ($null -ne $daysRemaining -and $daysRemaining -lt 30)) { 'Fail' } elseif ($null -ne $daysRemaining -and $daysRemaining -lt 60) { 'Unknown' } else { 'Pass' }
-                        $evidence = if ($status -eq 'Pass') { ('Auth certificate valid; expires {0} ({1} days remaining).' -f [string]$authCert.NotAfter, [string]$daysRemaining) } else { ('Auth certificate {0}; expires: {1}; remaining days: {2}.' -f [string]$authCert.Thumbprint, [string]$authCert.NotAfter, [string]$daysRemaining) }
+                        if ($null -eq $srvCert) {
+                            $domainServerResults += [pscustomobject]@{ Server = $srvName; Status = 'Unknown'; Evidence = 'Auth certificate store data not available for this server.' }
+                        }
+                        elseif ([bool]$srvCert.Found) {
+                            $domainServerResults += [pscustomobject]@{ Server = $srvName; Status = 'Pass'; Evidence = ('Auth certificate {0} found in local certificate store.' -f [string]$srvCert.Thumbprint) }
+                        }
+                        else {
+                            $configuredThumbprint = if (-not [string]::IsNullOrWhiteSpace([string]$srvCert.Thumbprint)) { [string]$srvCert.Thumbprint } elseif ($null -ne $orgCert) { [string]$orgCert.Thumbprint } else { 'unknown' }
+                            $domainServerResults += [pscustomobject]@{ Server = $srvName; Status = 'Fail'; Evidence = ('Auth certificate {0} NOT found in local certificate store — potential misconfiguration.' -f $configuredThumbprint) }
+                        }
                     }
                 }
             }

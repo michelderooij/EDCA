@@ -322,7 +322,7 @@ function New-EDCAHtmlReport {
 <html>
 <head>
     <meta charset="utf-8" />
-    <title>EDCA: Exchange Deployment &amp; Compliance Assessment v0.1 Preview</title>
+    <title>EDCA: Exchange Deployment &amp; Compliance Assessment $($metadata.ToolVersion)</title>
     <style>
         :root {
             --bg:          #f2f6fc;
@@ -431,6 +431,8 @@ function New-EDCAHtmlReport {
         details.category-group { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; margin-bottom: 12px; overflow: hidden; }
         details.category-group > summary { cursor: pointer; list-style: none; padding: 12px 16px; display: flex; gap: 10px; align-items: center; font-weight: 700; user-select: none; }
         details.category-group > summary::-webkit-details-marker { display: none; }
+        details.category-group > summary::before { content: '\25B8'; display: inline-block; margin-right: 2px; font-style: normal; }
+        details.category-group[open] > summary::before { content: '\25BE'; }
         details.category-group.status-pass > summary { background: var(--summary-bg-p); color: var(--summary-fg-p); }
         details.category-group.status-fail > summary { background: var(--summary-bg-f); color: var(--summary-fg-f); }
         details.category-group.status-unknown > summary { background: var(--summary-bg-u); color: var(--summary-fg-u); }
@@ -484,15 +486,32 @@ function New-EDCAHtmlReport {
         body.dark .env-notice { background: #451a03; color: #fde68a; border-left-color: #f59e0b; }
         .env-notice-icon { font-size: 17px; flex-shrink: 0; margin-top: 1px; }
         .env-notice strong { display: block; margin-bottom: 2px; }
+        /* Print button */
+        .print-btn { padding: 5px 14px; border-radius: 8px; border: 1px solid #475569; background: #1e293b; color: #f8fafc; font-size: 12px; cursor: pointer; white-space: nowrap; transition: background .15s; }
+        .print-btn:hover { background: #334155; }
+        .print-btn:focus-visible { outline: 2px solid #60a5fa; outline-offset: 2px; }
+        /* Print / PDF */
+        @media print {
+            .no-print, .filters, .modal-overlay { display: none !important; }
+            header { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            body { background: #fff !important; }
+            .score-grid { page-break-inside: avoid; }
+            details.category-group { display: block !important; page-break-inside: avoid; margin-bottom: 8px; }
+            details.category-group > .category-group-body { display: block !important; }
+            details.category-group .finding-row { display: flex !important; box-shadow: none !important; transform: none !important; cursor: default !important; break-inside: avoid; }
+            .score-card { box-shadow: none !important; cursor: default !important; }
+            a[href]::after { content: none; }
+        }
     </style>
 </head>
 <body>
     <header>
         <div>
-            <h1>EDCA: Exchange Deployment &amp; Compliance Assessment v0.1 Preview</h1>
+            <h1>EDCA: Exchange Deployment &amp; Compliance Assessment $($metadata.ToolVersion)</h1>
             <p>Generated: $($metadata.CollectionTimestamp) | Executed by: $($metadata.ExecutedBy) | Author: <a href="https://eightwone.com" target="_blank" rel="noopener noreferrer" style="color:#93c5fd">Michel de Rooij</a></p>
         </div>
-        <div class="dark-toggle">
+        <div class="dark-toggle no-print">
+            <button class="print-btn" onclick="window.print()" title="Print or save as PDF">&#128438;&nbsp;Print&nbsp;/&nbsp;PDF</button>
             <span class="dark-toggle-label">Dark mode</span>
             <label class="toggle-switch" title="Toggle dark mode">
                 <input type="checkbox" id="darkToggle" />
@@ -813,6 +832,39 @@ function New-EDCAHtmlReport {
             }
             applyFilters();
         })();
+        /* Print: expand all findings then restore after */
+        window.addEventListener('beforeprint', function () {
+            var details = document.querySelectorAll('details.category-group');
+            for (var i = 0; i < details.length; i++) {
+                details[i].setAttribute('data-was-open', details[i].open ? '1' : '0');
+                details[i].open = true;
+                details[i].style.display = 'block';
+            }
+            var rows = document.querySelectorAll('.finding-row');
+            for (var j = 0; j < rows.length; j++) {
+                rows[j].setAttribute('data-print-orig', rows[j].style.display);
+                rows[j].style.display = 'flex';
+            }
+        });
+        window.addEventListener('afterprint', function () {
+            var details = document.querySelectorAll('details.category-group');
+            for (var i = 0; i < details.length; i++) {
+                if (details[i].getAttribute('data-was-open') === '0') { details[i].open = false; }
+            }
+            var rows = document.querySelectorAll('.finding-row');
+            for (var j = 0; j < rows.length; j++) {
+                rows[j].style.display = rows[j].getAttribute('data-print-orig') || '';
+            }
+            var groups = document.querySelectorAll('details.category-group');
+            for (var k = 0; k < groups.length; k++) {
+                var visRows = groups[k].querySelectorAll('.finding-row');
+                var hasVisible = false;
+                for (var m = 0; m < visRows.length; m++) {
+                    if (visRows[m].style.display !== 'none') { hasVisible = true; break; }
+                }
+                groups[k].style.display = hasVisible ? '' : 'none';
+            }
+        });
     </script>
 </body>
 </html>

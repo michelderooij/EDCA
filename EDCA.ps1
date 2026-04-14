@@ -2,7 +2,7 @@
 .SYNOPSIS
     EDCA — Exchange Deployment & Compliance Assessment.
 
-    Version: 0.1 Preview
+    Version: 0.2 Preview
     Author:  Michel de Rooij
     Source:  https://github.com/michelderooij/EDCA
     Website: https://eightwone.com
@@ -95,6 +95,8 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+$EDCAVersion = 'v0.2 Preview'
+
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 
 . (Join-Path -Path $scriptRoot -ChildPath 'Modules\Common.ps1')
@@ -152,7 +154,7 @@ $collectionData = $null
 if ($Mode -in @('Collect', 'Both')) {
     Write-EDCALog -Message 'Starting collection mode.'
     Write-Verbose ('Collect mode target count from parameters: {0}' -f @($Servers).Count)
-    $collectionData = Invoke-EDCACollection -Servers $Servers -ThrottleLimit $ThrottleLimit
+    $collectionData = Invoke-EDCACollection -Servers $Servers -ThrottleLimit $ThrottleLimit -ToolVersion $EDCAVersion
 
     $stamp = Get-Date -Format 'yyyyMMdd_HHmmss'
     $exportedFiles = [System.Collections.Generic.List[string]]::new()

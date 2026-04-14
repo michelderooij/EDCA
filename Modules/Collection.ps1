@@ -5398,7 +5398,8 @@ function Invoke-EDCACollection {
         [AllowEmptyCollection()]
         [string[]]$Servers = @(),
         [ValidateRange(1, 128)]
-        [int]$ThrottleLimit = 4
+        [int]$ThrottleLimit = 4,
+        [string]$ToolVersion = 'v0.2 Preview'
     )
 
     $normalizedServers = @($Servers | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | ForEach-Object { ([string]$_).Trim() } | Sort-Object -Unique)
@@ -5644,7 +5645,7 @@ function Invoke-EDCACollection {
     return [pscustomobject]@{
         Metadata            = [pscustomobject]@{
             ToolName            = 'EDCA'
-            ToolVersion         = '0.1.0'
+            ToolVersion         = $ToolVersion
             CollectionTimestamp = (Get-Date -Format 'o')
             ExecutedBy          = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
         }
