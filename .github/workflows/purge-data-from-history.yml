@@ -30,7 +30,8 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Re-add remote and force-push to main
+      - name: Re-add remote and force-push all branches
         run: |
           git remote add origin "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
-          git push --force origin HEAD:main
+          git push --force --all origin
+          git push --force --tags origin
