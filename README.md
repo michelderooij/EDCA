@@ -101,11 +101,11 @@ EDCA evaluates controls against the following compliance frameworks. Each contro
 
 | Framework | Full name
 |---|---|
-| **Best Practice** | Exchange Server best practices |
+| **Best Practice** | Common best practices for Exchange Server deployments, including [CSS Exchange](https://microsoft.github.io/CSS-Exchange/) a.o. |
 | **CIS** | [CIS Microsoft Exchange Server Benchmark](https://www.cisecurity.org/benchmark/microsoft_exchange_server) |
 | **CISA** | [CISA Microsoft Exchange Server Security Best Practices Guide](https://www.cisa.gov/resources-tools/resources/microsoft-exchange-server-security-best-practices-guide) |
 | **DISA** | [DISA STIG for Microsoft Exchange 2019 Mailbox Server](https://public.cyber.mil/stigs/downloads/) |
-| **ENISA** | [ENISA / NIS2 Directive (EU) 2022/2555](https://www.enisa.europa.eu/topics/cybersecurity-policy/nis-directive-new) — including [NCSC-NL TLS Guidelines](https://www.ncsc.nl/documenten/publicaties/2021/januari/19/ict-beveiligingsrichtlijnen-voor-transport-layer-security-2.1) |
+| **ENISA** | [ENISA / NIS2 Directive (EU) 2022/2555](https://www.enisa.europa.eu/topics/cybersecurity-policy/nis-directive-new), including [NCSC-NL TLS Guidelines](https://www.ncsc.nl/documenten/publicaties/2021/januari/19/ict-beveiligingsrichtlijnen-voor-transport-layer-security-2.1) |
 
 ## Notes
 
