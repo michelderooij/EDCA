@@ -54,4 +54,67 @@ jobs:
               $endIndex = $nextMatches[1].Index
               $productBlock = $remaining.Substring(0, $endIndex)
             } else {
+              $productBlock = $remaining
+            }
 
+            # Capture CU build and optional SU/HU block
+            $cuMatches = [regex]::Matches(
+              $productBlock,
+              '(?s)NewCUAndSUObject\s*"(?<cu>\d+\.\d+\.\d+\.\d+)"\s*(?<su>@\{.*?\})?\s*\)'
+            )
+
+            if ($cuMatches.Count -eq 0) {
+              throw "No CU entries found for $product"
+            }
+
+            $maxVersion = $null
+
+            foreach ($m in $cuMatches) {
+              $versions = New-Object System.Collections.Generic.List[System.Version]
+              [void]$versions.Add([version]$m.Groups['cu'].Value)
+
+              $suBlock = $m.Groups['su'].Value
+              if (-not [string]::IsNullOrWhiteSpace($suBlock)) {
+                $suMatches = [regex]::Matches(
+                  $suBlock,
+                  '"[^"]+"\s*=\s*"(?<build>\d+\.\d+\.\d+\.\d+)"'
+                )
+                foreach ($su in $suMatches) {
+                  [void]$versions.Add([version]$su.Groups['build'].Value)
+                }
+              }
+
+              $localMax = $versions | Sort-Object -Descending | Select-Object -First 1
+              if ($null -eq $maxVersion -or $localMax -gt $maxVersion) {
+                $maxVersion = $localMax
+              }
+            }
+
+            $latest[$product] = $maxVersion.ToString()
+          }
+
+          Write-Host "Detected latest builds:"
+          $latest.GetEnumerator() | Sort-Object Name | ForEach-Object {
+            Write-Host "  $($_.Name): $($_.Value)"
+          }
+
+          $newObject = [ordered]@{
+            Exchange2016 = $latest['Exchange2016']
+            Exchange2019 = $latest['Exchange2019']
+            ExchangeSE   = $latest['ExchangeSE']
+          }
+
+          $newJson = $newObject | ConvertTo-Json -Depth 3
+          Set-Content -Path $jsonPath -Value $newJson -Encoding UTF8
+
+      - name: Commit and push if changed
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if git diff --quiet -- Config/exchange.builds.json; then
+            echo "No changes detected."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
