@@ -1,0 +1,114 @@
+name: Update Exchange Builds
+
+on:
+  schedule:
+    - cron: '0 6 * * *' # daily at 06:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update-builds:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up PowerShell
+        uses: PowerShell/PowerShell@v1
+        with:
+          pwsh-version: '7.4.x'
+
+      - name: Fetch and update Exchange builds JSON
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          $sourceUrl = 'https://raw.githubusercontent.com/microsoft/CSS-Exchange/main/Shared/Get-ExchangeBuildVersionInformation.ps1'
+          $jsonPath  = 'Config/exchange.builds.json'
+
+          Write-Host "Downloading source script from: $sourceUrl"
+          $content = Invoke-RestMethod -Uri $sourceUrl -Method Get
+
+          $targetProducts = @('Exchange2016', 'Exchange2019', 'ExchangeSE')
+          $latest = @{}
+
+          foreach ($product in $targetProducts) {
+            $productStart = [regex]::Match($content, "(?s)`"$product`"\s*=\s*@\{")
+            if (-not $productStart.Success) {
+              throw "Could not find product block for $product"
+            }
+
+            $startIndex = $productStart.Index
+            $remaining = $content.Substring($startIndex)
+
+            $nextProductRegex = '(?s)\r?\n\s*"(Exchange2013|Exchange2016|Exchange2019|ExchangeSE)"\s*=\s*@\{'
+            $nextMatches = [regex]::Matches($remaining, $nextProductRegex)
+
+            if ($nextMatches.Count -gt 1) {
+              $endIndex = $nextMatches[1].Index
+              $productBlock = $remaining.Substring(0, $endIndex)
+            } else {
+              $productBlock = $remaining
+            }
+
+            $cuMatches = [regex]::Matches($productBlock, '(?s)NewCUAndSUObject\s*"(?<cu>\d+\.\d+\.\d+\.\d+)"\s*(?<su>@\{.*?\})?\s*\)')
+            if ($cuMatches.Count -eq 0) {
+              throw "No CU entries found for $product"
+            }
+
+            $maxVersion = $null
+
+            foreach ($m in $cuMatches) {
+              $cuBuild = $m.Groups['cu'].Value
+              $versions = New-Object System.Collections.Generic.List[System.Version]
+              [void]$versions.Add([version]$cuBuild)
+
+              $suBlock = $m.Groups['su'].Value
+              if (-not [string]::IsNullOrWhiteSpace($suBlock)) {
+                $suMatches = [regex]::Matches($suBlock, '"[^"]+"\s*=\s*"(?<build>\d+\.\d+\.\d+\.\d+)"')
+                foreach ($su in $suMatches) {
+                  [void]$versions.Add([version]$su.Groups['build'].Value)
+                }
+              }
+
+              $localMax = $versions | Sort-Object -Descending | Select-Object -First 1
+              if ($null -eq $maxVersion -or $localMax -gt $maxVersion) {
+                $maxVersion = $localMax
+              }
+            }
+
+            $latest[$product] = $maxVersion.ToString()
+          }
+
+          $newObject = [ordered]@{
+            Exchange2016 = $latest['Exchange2016']
+            Exchange2019 = $latest['Exchange2019']
+            ExchangeSE   = $latest['ExchangeSE']
+          }
+
+          $newJson = ($newObject | ConvertTo-Json -Depth 3)
+          Set-Content -Path $jsonPath -Value $newJson -Encoding UTF8
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: automation/update-exchange-builds
+          delete-branch: true
+          commit-message: "chore: update Exchange build versions"
+          title: "chore: update Exchange build versions"
+          body: |
+            Automated daily update of `Config/exchange.builds.json` from:
+            - https://github.com/microsoft/CSS-Exchange/blob/main/Shared/Get-ExchangeBuildVersionInformation.ps1
+
+            This PR updates:
+            - Exchange2016
+            - Exchange2019
+            - ExchangeSE
+          labels: |
+            automation
+            dependencies
