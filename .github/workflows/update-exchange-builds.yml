@@ -9,17 +9,23 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: update-exchange-builds
+  cancel-in-progress: false
+
 jobs:
   update-builds:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
 
       - name: Set up PowerShell
+        uses: PowerShell/PowerShell@v1
         with:
-          pwsh-version: '7.4.x'
+          version: '7.4.x'
 
       - name: Fetch and update Exchange builds JSON
         shell: pwsh
@@ -117,7 +123,4 @@ jobs:
           fi
 
           git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Config/exchange.builds.json
-          git commit -m "chore: update Exchange build versions"
-          git push
+
