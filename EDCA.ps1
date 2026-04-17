@@ -2,7 +2,7 @@
 .SYNOPSIS
     EDCA — Exchange Deployment & Compliance Assessment.
 
-    Version: 0.2 Preview
+    Version: 0.3 Preview
     Author:  Michel de Rooij
     Source:  https://github.com/michelderooij/EDCA
     Website: https://eightwone.com
@@ -13,20 +13,23 @@
     and security controls, and produces a detailed HTML report with pass/fail findings, severity
     ratings, and remediation guidance.
 
-    Three modes are supported:
-      Both    — (default) collects data from the specified Exchange servers and immediately generates
-                a report, combining the Collect and Report phases in a single run.
-      Collect — connects to one or more Exchange servers, gathers configuration telemetry, and
-                exports the raw data to a timestamped JSON file in the Data folder.
-      Report  — imports a previously collected JSON file, runs the analysis engine against the loaded
-                controls library, generates an HTML report, and optionally outputs a PowerShell
-                remediation script.
+    Use -Collect to run the collection phase only, -Report to run the report phase only, or both
+    switches together to run collection and reporting in a single run. When neither switch is
+    specified, both phases run by default (equivalent to specifying -Collect -Report).
 
-.PARAMETER Mode
-    Operating mode: Both (default), Collect, or Report.
+.PARAMETER Collect
+    Runs the collection phase only. Connects to the target Exchange servers, gathers configuration
+    telemetry, and writes per-server and organization JSON files to the Data folder (-DataPath).
+    Cannot be combined with -Report; -Servers and -ThrottleLimit are not available in -Report mode.
+
+.PARAMETER Report
+    Runs the report phase only. Reads all *.json files from the Data folder (-DataPath), runs the
+    analysis engine against the controls library, and generates an HTML report. Cannot be combined
+    with -Collect; -Servers and -ThrottleLimit are not available in this mode. When neither -Collect
+    nor -Report is specified, both phases run sequentially (equivalent to specifying both switches).
 
 .PARAMETER Servers
-    List of Exchange server names to target during collection (Collect mode only).
+    List of Exchange server names to target during the collection phase.
 
 .PARAMETER ThrottleLimit
     Maximum number of parallel collection jobs (default: 4; range 1–128).
@@ -38,20 +41,18 @@
     Directory for analysis JSON and remediation script output files (default: .\Output).
 
 .PARAMETER DataPath
-    Directory for collected JSON data files (default: .\Data). One JSON file is written per
-    server, named <fqdn>_<timestamp>.json.
+    Directory for JSON data files (default: .\Data). During collection, per-server and
+    organization JSON files are written here. During reporting, all *.json files in this
+    directory are read as input for analysis.
 
-.PARAMETER ImportPath
-    One or more paths to previously collected per-server JSON files, or a folder path whose
-    JSON files are all processed (Report mode only). Multiple values may be comma-separated
-    or passed via the pipeline. When a folder is supplied every *.json file it contains is
-    included and the server records are merged before analysis.
-
-.PARAMETER GenerateRemediationScript
+.PARAMETER RemediationScript
     When specified, generates a PowerShell remediation script alongside the HTML report.
 
-.PARAMETER SkipHtml
-    When specified, skips HTML report generation (analysis JSON is still written).
+.PARAMETER Framework
+    One or more framework names to include in the analysis. When specified, only controls tagged
+    with at least one of the supplied frameworks are evaluated. Valid values are:
+    Best Practice, CIS, CISA, DISA, ENISA.
+    When omitted, all controls are evaluated regardless of framework.
 
 .PARAMETER Update
     When specified, downloads the latest exchange.builds.json from GitHub and saves it to
@@ -64,38 +65,60 @@
     .\EDCA.ps1 -Servers EX01,EX02
 
 .EXAMPLE
-    .\EDCA.ps1 -Mode Collect -Servers EX01,EX02
+    .\EDCA.ps1 -Collect -Servers EX01,EX02
 
 .EXAMPLE
-    .\EDCA.ps1 -Mode Report -ImportPath .\Data\ex01.contoso.com_20250101_120000.json
+    .\EDCA.ps1 -Report
 
 .EXAMPLE
-    .\EDCA.ps1 -Mode Report -ImportPath .\Data\ex01.contoso.com_20250101_120000.json,.\Data\ex02.contoso.com_20250101_120000.json
+    .\EDCA.ps1 -Report -DataPath .\CustomData
 
 .EXAMPLE
-    .\EDCA.ps1 -Mode Report -ImportPath .\Data
+    .\EDCA.ps1 -Servers EX01,EX02 -Framework ENISA
+
+.EXAMPLE
+    .\EDCA.ps1 -Report -Framework 'Best Practice'
 #>
 #requires -version 5.1
-[CmdletBinding()]
+[CmdletBinding(DefaultParameterSetName = 'Default')]
 param(
-    [ValidateSet('Both', 'Collect', 'Report')]
-    [string]$Mode = 'Both',
+    [Parameter(ParameterSetName = 'Collect', Mandatory = $true)]
+    [switch]$Collect,
+
+    [Parameter(ParameterSetName = 'Report', Mandatory = $true)]
+    [switch]$Report,
+
+    [Parameter(ParameterSetName = 'Default')]
+    [Parameter(ParameterSetName = 'Collect')]
     [string[]]$Servers = @(),
+
+    [Parameter(ParameterSetName = 'Default')]
+    [Parameter(ParameterSetName = 'Collect')]
     [ValidateRange(1, 128)]
     [int]$ThrottleLimit = 4,
+
     [string]$ControlFile = '.\Config\controls.json',
+
+    [Parameter(ParameterSetName = 'Default')]
+    [Parameter(ParameterSetName = 'Report')]
     [string]$OutputPath = '.\Output',
+
     [string]$DataPath = '.\Data',
-    [string[]]$ImportPath,
-    [switch]$GenerateRemediationScript,
-    [switch]$SkipHtml,
-    [switch]$Update
+
+    [Parameter(ParameterSetName = 'Default')]
+    [Parameter(ParameterSetName = 'Report')]
+    [switch]$RemediationScript,
+
+    [switch]$Update,
+
+    [ValidateSet('Best Practice', 'CIS', 'CISA', 'DISA', 'ENISA')]
+    [string[]]$Framework
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-$EDCAVersion = 'v0.2 Preview'
+$EDCAVersion = 'v0.3 Preview'
 
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 
@@ -105,19 +128,23 @@ $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 . (Join-Path -Path $scriptRoot -ChildPath 'Modules\Reporting.ps1')
 . (Join-Path -Path $scriptRoot -ChildPath 'Modules\Remediation.ps1')
 
-$resolvedOutputPath = Resolve-EDCAPath -Path $OutputPath -BasePath $scriptRoot
-$resolvedDataPath = Resolve-EDCAPath -Path $DataPath -BasePath $scriptRoot
-$resolvedReportPath = Join-Path -Path $scriptRoot -ChildPath 'Reports'
-$resolvedControlFile = Resolve-EDCAPath -Path $ControlFile -BasePath $scriptRoot
-New-EDCADirectoryIfMissing -Path $resolvedOutputPath
-New-EDCADirectoryIfMissing -Path $resolvedDataPath
-New-EDCADirectoryIfMissing -Path $resolvedReportPath
+# Derive phase flags from the active parameter set.
+$doCollect = $PSCmdlet.ParameterSetName -in @('Collect', 'Default')
+$doReport = $PSCmdlet.ParameterSetName -in @('Report', 'Default')
 
-Write-Verbose ('Execution mode: {0}' -f $Mode)
+Write-Host ('=============================================================' )
+Write-Host ('EXCHANGE DEPLOYMENT & COMPLIANCE ASSESSMENT {0}' -f $EDCAVersion)
+Write-Host ('=============================================================' )
+
+$resolvedDataPath = Resolve-EDCAPath -Path $DataPath -BasePath $scriptRoot
+$resolvedOutputPath = Resolve-EDCAPath -Path $OutputPath -BasePath $scriptRoot
+$resolvedControlFile = Resolve-EDCAPath -Path $ControlFile -BasePath $scriptRoot
+New-EDCADirectoryIfMissing -Path $resolvedDataPath
+
+Write-Verbose ('Collect: {0}; Report: {1}' -f $doCollect, $doReport)
 Write-Verbose ('Resolved control file: {0}' -f $resolvedControlFile)
-Write-Verbose ('Resolved output path: {0}' -f $resolvedOutputPath)
 Write-Verbose ('Resolved data path: {0}' -f $resolvedDataPath)
-Write-Verbose ('Resolved report path: {0}' -f $resolvedReportPath)
+Write-Verbose ('Resolved output path: {0}' -f $resolvedOutputPath)
 Write-Verbose ('Collection throttle limit: {0}' -f $ThrottleLimit)
 
 if (-not (Test-Path -Path $resolvedControlFile)) {
@@ -129,6 +156,18 @@ if ($null -eq $controls -or @($controls).Count -eq 0) {
     throw 'No controls loaded from control file.'
 }
 Write-Verbose ('Loaded {0} control definition(s).' -f @($controls).Count)
+
+if ($Framework -and $Framework.Count -gt 0) {
+    $filteredForOutput = @($controls | Where-Object {
+            $ctrl = $_
+            @($ctrl.frameworks) | Where-Object { $Framework -contains $_ }
+        })
+    if ($filteredForOutput.Count -eq 0) {
+        throw ('No controls match the specified framework(s): {0}' -f ($Framework -join ', '))
+    }
+    Write-Verbose ('Framework filter [{0}] will be applied to report and remediation output: {1} control(s) match.' -f ($Framework -join ', '), $filteredForOutput.Count)
+    Write-EDCALog -Message ('Framework filter: {0} — {1} control(s) will appear in report and remediation output.' -f ($Framework -join ', '), $filteredForOutput.Count)
+}
 
 if ($Update) {
     Write-EDCALog -Message 'Updating build information.'
@@ -143,7 +182,7 @@ if ($Update) {
     catch {
         Write-Warning ('Failed to update exchange.builds.json: {0}' -f $_.Exception.Message)
     }
-    if ($Mode -in @('Collect', 'Both') -and @($Servers).Count -eq 0) {
+    if ($doCollect -and @($Servers).Count -eq 0) {
         Write-EDCALog -Message 'Execution completed.'
         return
     }
@@ -151,7 +190,7 @@ if ($Update) {
 
 $collectionData = $null
 
-if ($Mode -in @('Collect', 'Both')) {
+if ($doCollect) {
     Write-EDCALog -Message 'Starting collection mode.'
     Write-Verbose ('Collect mode target count from parameters: {0}' -f @($Servers).Count)
     $collectionData = Invoke-EDCACollection -Servers $Servers -ThrottleLimit $ThrottleLimit -ToolVersion $EDCAVersion
@@ -212,37 +251,20 @@ if ($Mode -in @('Collect', 'Both')) {
     Write-Verbose ('Organization JSON exported: {0}' -f $orgJsonOut)
 
     Write-EDCALog -Message ('Collection complete: {0} server JSON file(s) and 1 organization JSON file written to {1}' -f ($exportedFiles.Count - 1), $resolvedDataPath)
-    if ($Mode -eq 'Collect') {
+    if ($doCollect -and -not $doReport) {
         Write-EDCALog -Message 'Execution completed.'
         return
     }
 }
 
-if ($Mode -eq 'Report') {
-    if ($null -eq $ImportPath -or $ImportPath.Count -eq 0) {
-        throw 'Report mode requires -ImportPath.'
+if ($doReport -and -not $doCollect) {
+    $jsonFiles = [string[]](Get-ChildItem -Path $resolvedDataPath -Filter '*.json' -File |
+        Select-Object -ExpandProperty FullName)
+    if ($jsonFiles.Count -eq 0) {
+        throw ('No JSON files found in data folder: {0}' -f $resolvedDataPath)
     }
 
-    # Expand each entry: folders become their contained *.json files, files are used as-is.
-    $jsonFiles = [System.Collections.Generic.List[string]]::new()
-    foreach ($entry in $ImportPath) {
-        $resolved = Resolve-EDCAPath -Path $entry -BasePath $scriptRoot
-        if (Test-Path -Path $resolved -PathType Container) {
-            $found = [string[]](Get-ChildItem -Path $resolved -Filter '*.json' -File | Select-Object -ExpandProperty FullName)
-            if ($found.Count -eq 0) {
-                throw ('No JSON files found in folder: {0}' -f $resolved)
-            }
-            $jsonFiles.AddRange($found)
-        }
-        elseif (Test-Path -Path $resolved -PathType Leaf) {
-            $jsonFiles.Add($resolved)
-        }
-        else {
-            throw ('Import JSON not found: {0}' -f $resolved)
-        }
-    }
-
-    Write-EDCALog -Message ('Loading {0} collection JSON file(s).' -f $jsonFiles.Count)
+    Write-EDCALog -Message ('Found {0} JSON file(s) to evaluate.' -f $jsonFiles.Count)
 
     # Parse all files. Organization files (FileType='Organization') are separated from server files.
     $allParsed = [System.Collections.Generic.List[pscustomobject]]::new()
@@ -254,15 +276,29 @@ if ($Mode -eq 'Report') {
         $parsed = Get-Content -Path $jsonFile -Raw | ConvertFrom-Json
 
         $fileTimestamp = [datetime]::MinValue
-        if ($parsed.PSObject.Properties.Name -contains 'Metadata') {
+        if ($parsed.PSObject.Properties.Name -contains 'Metadata' -and
+            $parsed.Metadata.PSObject.Properties.Name -contains 'CollectionTimestamp') {
             $ts = $parsed.Metadata.CollectionTimestamp
             if ($null -ne $ts) {
                 try {
-                    $tsStr = if ($ts -is [string]) { $ts } else { [string]$ts.value }
-                    $fileTimestamp = [datetime]::Parse($tsStr)
+                    if ($ts -is [datetime]) {
+                        $fileTimestamp = $ts
+                    }
+                    else {
+                        $fileTimestamp = [datetime]::Parse([string]$ts)
+                    }
                 }
                 catch { }
             }
+        }
+
+        # Skip non-collection files (e.g., analysis_*.json exports written by this tool).
+        $hasCollectionContent = ($parsed.PSObject.Properties.Name -contains 'Servers') -or
+        ($parsed.PSObject.Properties.Name -contains 'Organization') -or
+        ($parsed.PSObject.Properties.Name -contains 'EmailAuthentication')
+        if (-not $hasCollectionContent) {
+            Write-Verbose ('Discarding non-collection file: {0}' -f (Split-Path $jsonFile -Leaf))
+            continue
         }
 
         # Detect organization file: explicit FileType or has Organisation/EmailAuth but no Servers.
@@ -282,7 +318,6 @@ if ($Mode -eq 'Report') {
                     Parsed    = $parsed
                     FilePath  = $jsonFile
                 })
-            Write-Verbose ('Parsed org file {0}: timestamp={1}' -f $jsonFile, $fileTimestamp)
             continue
         }
 
@@ -380,22 +415,36 @@ Write-Verbose 'Starting analysis phase.'
 $analysis = Invoke-EDCAAnalysis -CollectionData $collectionData -Controls $controls
 
 $analysisStamp = Get-Date -Format 'yyyyMMdd_HHmmss'
-$analysisOut = Join-Path -Path $resolvedOutputPath -ChildPath ('analysis_{0}.json' -f $analysisStamp)
+$analysisOut = Join-Path -Path $resolvedDataPath -ChildPath ('analysis_{0}.json' -f $analysisStamp)
 ConvertTo-EDCAJson -InputObject $analysis | Set-Content -Path $analysisOut -Encoding UTF8
 Write-EDCALog -Message ('Analysis JSON exported: {0}' -f $analysisOut)
 Write-Verbose ('Analysis produced {0} finding(s).' -f @($analysis.Findings).Count)
 
-if (-not $SkipHtml) {
-    Write-Verbose 'Starting HTML report generation phase.'
-    $htmlOut = Join-Path -Path $resolvedReportPath -ChildPath ('report_{0}.html' -f $analysisStamp)
-    $resultPath = New-EDCAHtmlReport -CollectionData $collectionData -AnalysisData $analysis -OutputFile $htmlOut
-    Write-EDCALog -Message ('HTML report generated: {0}' -f $resultPath)
+$outputAnalysis = $analysis
+if ($Framework -and $Framework.Count -gt 0) {
+    $filteredFindings = @($analysis.Findings | Where-Object {
+            $f = $_
+            @($f.Frameworks) | Where-Object { $Framework -contains $_ }
+        })
+    $filteredScores = @($analysis.Scores | Where-Object { $_.Framework -eq 'All' -or $Framework -contains $_.Framework })
+    $outputAnalysis = [pscustomobject]@{
+        Metadata = $analysis.Metadata
+        Scores   = $filteredScores
+        Findings = $filteredFindings
+    }
+    Write-Verbose ('Framework filter applied to output: {0} finding(s) included in report and remediation.' -f $filteredFindings.Count)
 }
 
-if ($GenerateRemediationScript) {
+New-EDCADirectoryIfMissing -Path $resolvedOutputPath
+Write-Verbose 'Starting HTML report generation phase.'
+$reportOut = Join-Path -Path $resolvedOutputPath -ChildPath ('report_{0}.html' -f $analysisStamp)
+$reportPath = New-EDCAHtmlReport -CollectionData $collectionData -AnalysisData $outputAnalysis -OutputFile $reportOut
+Write-EDCALog -Message ('HTML report generated: {0}' -f $reportPath)
+
+if ($RemediationScript) {
     Write-Verbose 'Starting remediation script generation phase.'
     $remediationOut = Join-Path -Path $resolvedOutputPath -ChildPath ('remediation_{0}.ps1' -f $analysisStamp)
-    $remediationPath = New-EDCARemediationScript -AnalysisData $analysis -OutputFile $remediationOut
+    $remediationPath = New-EDCARemediationScript -AnalysisData $outputAnalysis -OutputFile $remediationOut
     Write-EDCALog -Message ('Remediation script generated: {0}' -f $remediationPath)
 }
 

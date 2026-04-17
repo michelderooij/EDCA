@@ -223,14 +223,14 @@ function Test-EDCAControl {
         [pscustomobject]$CollectionData
     )
 
-    if ($Control.id -in @('EX-BP-005', 'EX-BP-007', 'EX-BP-036', 'EX-BP-049', 'EX-BP-083', 'EX-BP-084', 'EX-BP-034', 'EX-BP-031', 'EX-BP-033', 'EX-BP-032', 'EX-BP-004', 'EX-BP-003', 'EX-BP-009', 'EX-BP-069', 'EX-BP-087', 'EX-BP-040', 'EX-BP-085', 'EX-BP-095', 'EX-BP-096', 'EX-BP-097', 'EX-BP-098', 'EX-BP-099', 'EX-BP-100', 'EX-BP-102', 'EX-BP-103', 'EX-BP-104', 'EX-BP-111', 'EX-BP-114', 'EX-BP-115', 'EX-BP-116', 'EX-BP-117', 'EX-BP-118', 'EX-BP-119', 'EX-BP-120', 'EX-BP-121', 'EX-BP-122', 'EX-BP-123', 'EX-BP-124', 'EX-BP-109', 'EX-BP-139', 'EX-BP-141', 'EX-BP-153', 'EX-BP-158')) {
+    if ($Control.id -in @('EDCA-MON-001', 'EDCA-IAC-001', 'EDCA-DATA-002', 'EDCA-IAC-004', 'EDCA-IAC-008', 'EDCA-SEC-032', 'EDCA-TLS-026', 'EDCA-TLS-023', 'EDCA-TLS-025', 'EDCA-TLS-024', 'EDCA-SEC-004', 'EDCA-SEC-003', 'EDCA-SEC-005', 'EDCA-TLS-003', 'EDCA-IAC-011', 'EDCA-GOV-004', 'EDCA-IAC-009', 'EDCA-TLS-004', 'EDCA-TLS-005', 'EDCA-TLS-006', 'EDCA-TLS-007', 'EDCA-TLS-008', 'EDCA-TLS-009', 'EDCA-MON-008', 'EDCA-TLS-010', 'EDCA-TLS-011', 'EDCA-TLS-014', 'EDCA-IAC-014', 'EDCA-IAC-015', 'EDCA-IAC-016', 'EDCA-IAC-017', 'EDCA-IAC-018', 'EDCA-IAC-019', 'EDCA-IAC-020', 'EDCA-IAC-021', 'EDCA-IAC-022', 'EDCA-IAC-023', 'EDCA-IAC-024', 'EDCA-IAC-025', 'EDCA-TLS-012', 'EDCA-TLS-018', 'EDCA-TLS-019', 'EDCA-DATA-016', 'EDCA-RES-012', 'EDCA-GOV-009', 'EDCA-PERF-012', 'EDCA-GOV-011', 'EDCA-SEC-036')) {
         $status = 'Unknown'
         $evidence = ''
         $domainServerResults = $null
-        $subjectLabel = 'Server'
+        $subjectLabel = 'Organization'
 
         switch ($Control.id) {
-            'EX-BP-084' {
+            'EDCA-SEC-032' {
                 $settingOverrides = $null
                 foreach ($srv in @($CollectionData.Servers)) {
                     if (($srv.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $srv.Exchange -and
@@ -266,7 +266,7 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-007' {
+            'EDCA-IAC-001' {
                 if (($CollectionData.PSObject.Properties.Name -contains 'Organization') -and $null -ne $CollectionData.Organization -and ($CollectionData.Organization.PSObject.Properties.Name -contains 'UpnPrimarySmtpMismatchCount') -and $null -ne $CollectionData.Organization.UpnPrimarySmtpMismatchCount) {
                     $count = [int]$CollectionData.Organization.UpnPrimarySmtpMismatchCount
                     $status = if ($count -eq 0) { 'Pass' } else { 'Fail' }
@@ -277,7 +277,7 @@ function Test-EDCAControl {
                     $evidence = 'Mailbox UPN/SMTP baseline data unavailable.'
                 }
             }
-            'EX-BP-049' {
+            'EDCA-IAC-004' {
                 if (($CollectionData.PSObject.Properties.Name -contains 'Organization') -and $null -ne $CollectionData.Organization -and ($CollectionData.Organization.PSObject.Properties.Name -contains 'OAuth2ClientProfileEnabled') -and $null -ne $CollectionData.Organization.OAuth2ClientProfileEnabled) {
                     $enabled = [bool]$CollectionData.Organization.OAuth2ClientProfileEnabled
                     $status = if ($enabled) { 'Pass' } else { 'Fail' }
@@ -288,7 +288,7 @@ function Test-EDCAControl {
                     $evidence = 'Modern Authentication organization setting unavailable.'
                 }
             }
-            'EX-BP-083' {
+            'EDCA-IAC-008' {
                 $splitPermissionsEnabled = $null
                 if (($CollectionData.PSObject.Properties.Name -contains 'Organization') -and $null -ne $CollectionData.Organization) {
                     if (($CollectionData.Organization.PSObject.Properties.Name -contains 'AdSplitPermissionEnabled') -and $null -ne $CollectionData.Organization.AdSplitPermissionEnabled) {
@@ -308,7 +308,8 @@ function Test-EDCAControl {
                     $evidence = ('AdSplitPermissionEnabled is {0}.' -f (Get-EDCAStateDescriptor -Value $splitPermissionsEnabled -Expectation 'Enabled'))
                 }
             }
-            'EX-BP-034' {
+            'EDCA-TLS-026' {
+                $subjectLabel = 'Domain'
                 $domainResults = @()
                 if (($CollectionData.PSObject.Properties.Name -contains 'EmailAuthentication') -and $null -ne $CollectionData.EmailAuthentication -and ($CollectionData.EmailAuthentication.PSObject.Properties.Name -contains 'DomainResults')) {
                     $domainResults = @($CollectionData.EmailAuthentication.DomainResults)
@@ -329,15 +330,22 @@ function Test-EDCAControl {
                                 [pscustomobject]@{ Server = $_.Domain; Status = 'Skipped'; Evidence = 'Non-internet-routable domain — SPF check not applicable.' }
                             }
                             else {
-                                $spfEvidence = [string]$_.Spf.Evidence
-                                $spfCount = $null
-                                if ($_.Spf.PSObject.Properties.Name -contains 'PotentialDnsLookupCount') {
-                                    $spfCount = $_.Spf.PotentialDnsLookupCount
+                                $noPublicMx = ($null -eq $_.Dane -or $null -eq $_.Dane.MxHosts -or @($_.Dane.MxHosts).Count -eq 0)
+                                $hasSpfRecords = ($null -ne $_.Spf -and ($_.Spf.PSObject.Properties.Name -contains 'Records') -and @($_.Spf.Records).Count -gt 0)
+                                if ($noPublicMx -and -not $hasSpfRecords) {
+                                    [pscustomobject]@{ Server = $_.Domain; Status = 'Skipped'; Evidence = 'No public MX records found — likely an internal domain; SPF check not applicable.' }
                                 }
-                                if ($null -ne $spfCount -and [int]$spfCount -gt 10) {
-                                    $spfEvidence += ("`nNote: DNS lookup count ({0}) exceeds RFC 7208 limit of 10; receiving MTAs will likely ignore this SPF record." -f $spfCount)
+                                else {
+                                    $spfEvidence = [string]$_.Spf.Evidence
+                                    $spfCount = $null
+                                    if ($_.Spf.PSObject.Properties.Name -contains 'PotentialDnsLookupCount') {
+                                        $spfCount = $_.Spf.PotentialDnsLookupCount
+                                    }
+                                    if ($null -ne $spfCount -and [int]$spfCount -gt 10) {
+                                        $spfEvidence += ("`nNote: DNS lookup count ({0}) exceeds RFC 7208 limit of 10; receiving MTAs will likely ignore this SPF record." -f $spfCount)
+                                    }
+                                    [pscustomobject]@{ Server = $_.Domain; Status = $_.Spf.Status; Evidence = $spfEvidence }
                                 }
-                                [pscustomobject]@{ Server = $_.Domain; Status = $_.Spf.Status; Evidence = $spfEvidence }
                             }
                         })
                     $failed = @($domainServerResults | Where-Object { $_.Status -eq 'Fail' })
@@ -357,7 +365,8 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-031' {
+            'EDCA-TLS-023' {
+                $subjectLabel = 'Domain'
                 $domainResults = @()
                 if (($CollectionData.PSObject.Properties.Name -contains 'EmailAuthentication') -and $null -ne $CollectionData.EmailAuthentication -and ($CollectionData.EmailAuthentication.PSObject.Properties.Name -contains 'DomainResults')) {
                     $domainResults = @($CollectionData.EmailAuthentication.DomainResults)
@@ -378,7 +387,14 @@ function Test-EDCAControl {
                                 [pscustomobject]@{ Server = $_.Domain; Status = 'Skipped'; Evidence = 'Non-internet-routable domain — DMARC check not applicable.' }
                             }
                             else {
-                                [pscustomobject]@{ Server = $_.Domain; Status = $_.Dmarc.Status; Evidence = [string]$_.Dmarc.Evidence }
+                                $noPublicMx = ($null -eq $_.Dane -or $null -eq $_.Dane.MxHosts -or @($_.Dane.MxHosts).Count -eq 0)
+                                $hasSpfRecords = ($null -ne $_.Spf -and ($_.Spf.PSObject.Properties.Name -contains 'Records') -and @($_.Spf.Records).Count -gt 0)
+                                if ($noPublicMx -and -not $hasSpfRecords) {
+                                    [pscustomobject]@{ Server = $_.Domain; Status = 'Skipped'; Evidence = 'No public MX records found — likely an internal domain; DMARC check not applicable.' }
+                                }
+                                else {
+                                    [pscustomobject]@{ Server = $_.Domain; Status = $_.Dmarc.Status; Evidence = [string]$_.Dmarc.Evidence }
+                                }
                             }
                         })
                     $failed = @($domainServerResults | Where-Object { $_.Status -eq 'Fail' })
@@ -398,7 +414,8 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-033' {
+            'EDCA-TLS-025' {
+                $subjectLabel = 'Domain'
                 $domainResults = @()
                 if (($CollectionData.PSObject.Properties.Name -contains 'EmailAuthentication') -and $null -ne $CollectionData.EmailAuthentication -and ($CollectionData.EmailAuthentication.PSObject.Properties.Name -contains 'DomainResults')) {
                     $domainResults = @($CollectionData.EmailAuthentication.DomainResults)
@@ -419,7 +436,14 @@ function Test-EDCAControl {
                                 [pscustomobject]@{ Server = $_.Domain; Status = 'Skipped'; Evidence = 'Non-internet-routable domain — MTA-STS check not applicable.' }
                             }
                             else {
-                                [pscustomobject]@{ Server = $_.Domain; Status = $_.MtaSts.Status; Evidence = [string]$_.MtaSts.Evidence }
+                                $noPublicMx = ($null -eq $_.Dane -or $null -eq $_.Dane.MxHosts -or @($_.Dane.MxHosts).Count -eq 0)
+                                $hasSpfRecords = ($null -ne $_.Spf -and ($_.Spf.PSObject.Properties.Name -contains 'Records') -and @($_.Spf.Records).Count -gt 0)
+                                if ($noPublicMx -and -not $hasSpfRecords) {
+                                    [pscustomobject]@{ Server = $_.Domain; Status = 'Skipped'; Evidence = 'No public MX records found — likely an internal domain; MTA-STS check not applicable.' }
+                                }
+                                else {
+                                    [pscustomobject]@{ Server = $_.Domain; Status = $_.MtaSts.Status; Evidence = [string]$_.MtaSts.Evidence }
+                                }
                             }
                         })
                     $failed = @($domainServerResults | Where-Object { $_.Status -eq 'Fail' })
@@ -439,7 +463,8 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-032' {
+            'EDCA-TLS-024' {
+                $subjectLabel = 'Domain'
                 $domainResults = @()
                 if (($CollectionData.PSObject.Properties.Name -contains 'EmailAuthentication') -and $null -ne $CollectionData.EmailAuthentication -and ($CollectionData.EmailAuthentication.PSObject.Properties.Name -contains 'DomainResults')) {
                     $domainResults = @($CollectionData.EmailAuthentication.DomainResults)
@@ -460,7 +485,14 @@ function Test-EDCAControl {
                                 [pscustomobject]@{ Server = $_.Domain; Status = 'Skipped'; Evidence = 'Non-internet-routable domain — SMTP DANE check not applicable.' }
                             }
                             else {
-                                [pscustomobject]@{ Server = $_.Domain; Status = $_.Dane.Status; Evidence = [string]$_.Dane.Evidence }
+                                $noPublicMx = ($null -eq $_.Dane -or $null -eq $_.Dane.MxHosts -or @($_.Dane.MxHosts).Count -eq 0)
+                                $hasSpfRecords = ($null -ne $_.Spf -and ($_.Spf.PSObject.Properties.Name -contains 'Records') -and @($_.Spf.Records).Count -gt 0)
+                                if ($noPublicMx -and -not $hasSpfRecords) {
+                                    [pscustomobject]@{ Server = $_.Domain; Status = 'Skipped'; Evidence = 'No public MX records found — likely an internal domain; SMTP DANE check not applicable.' }
+                                }
+                                else {
+                                    [pscustomobject]@{ Server = $_.Domain; Status = $_.Dane.Status; Evidence = [string]$_.Dane.Evidence }
+                                }
                             }
                         })
                     $failed = @($domainServerResults | Where-Object { $_.Status -eq 'Fail' })
@@ -480,7 +512,7 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-004' {
+            'EDCA-SEC-004' {
                 $forestLevel = $null
                 if (($CollectionData.PSObject.Properties.Name -contains 'Organization') -and $null -ne $CollectionData.Organization -and ($CollectionData.Organization.PSObject.Properties.Name -contains 'ForestFunctionalLevel') -and $null -ne $CollectionData.Organization.ForestFunctionalLevel) {
                     $forestLevel = [int]$CollectionData.Organization.ForestFunctionalLevel
@@ -525,7 +557,7 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-003' {
+            'EDCA-SEC-003' {
                 $domainLevel = $null
                 if (($CollectionData.PSObject.Properties.Name -contains 'Organization') -and $null -ne $CollectionData.Organization -and ($CollectionData.Organization.PSObject.Properties.Name -contains 'DomainFunctionalLevel') -and $null -ne $CollectionData.Organization.DomainFunctionalLevel) {
                     $domainLevel = [int]$CollectionData.Organization.DomainFunctionalLevel
@@ -570,7 +602,7 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-009' {
+            'EDCA-SEC-005' {
                 $adSiteCount = $null
                 if (($CollectionData.PSObject.Properties.Name -contains 'Organization') -and $null -ne $CollectionData.Organization -and ($CollectionData.Organization.PSObject.Properties.Name -contains 'AdSiteCount') -and $null -ne $CollectionData.Organization.AdSiteCount) {
                     $adSiteCount = [int]$CollectionData.Organization.AdSiteCount
@@ -593,7 +625,7 @@ function Test-EDCAControl {
                     $evidence = ('Compliant — AD site count is {0}, below the warning threshold.' -f $adSiteCount)
                 }
             }
-            'EX-BP-069' {
+            'EDCA-TLS-003' {
                 $allSendConnectors = @()
                 $serverList = @()
                 if (($CollectionData.PSObject.Properties.Name -contains 'Servers') -and $null -ne $CollectionData.Servers) {
@@ -657,6 +689,7 @@ function Test-EDCAControl {
                                 }
                             })
 
+                        $subjectLabel = 'Connector'
                         $failCount = @($domainServerResults | Where-Object { $_.Status -eq 'Fail' }).Count
                         $unknownCount = @($domainServerResults | Where-Object { $_.Status -eq 'Unknown' }).Count
                         if ($failCount -gt 0) {
@@ -671,7 +704,7 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-087' {
+            'EDCA-IAC-011' {
                 $hybridApplication = $null
                 foreach ($srv in $CollectionData.Servers) {
                     if ($srv.PSObject.Properties.Name -contains 'CollectionError') { continue }
@@ -721,7 +754,7 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-040' {
+            'EDCA-GOV-004' {
                 $hybridApplication = $null
                 foreach ($srv in $CollectionData.Servers) {
                     if ($srv.PSObject.Properties.Name -contains 'CollectionError') { continue }
@@ -747,7 +780,7 @@ function Test-EDCAControl {
                     $evidence = if (($hybridApplication.PSObject.Properties.Name -contains 'Details') -and -not [string]::IsNullOrWhiteSpace([string]$hybridApplication.Details)) { [string]$hybridApplication.Details } else { 'Hybrid application state unavailable.' }
                 }
             }
-            'EX-BP-085' {
+            'EDCA-IAC-009' {
                 $basicAuthState = $null
                 $policyName = $null
                 if (($CollectionData.PSObject.Properties.Name -contains 'Organization') -and $null -ne $CollectionData.Organization) {
@@ -783,7 +816,109 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-095' {
+            'EDCA-IAC-025' {
+                $maIssues = @()
+
+                # Check 1: OAuth2ClientProfileEnabled
+                $oauthEnabled = $null
+                if (($CollectionData.PSObject.Properties.Name -contains 'Organization') -and $null -ne $CollectionData.Organization -and
+                    ($CollectionData.Organization.PSObject.Properties.Name -contains 'OAuth2ClientProfileEnabled')) {
+                    $oauthEnabled = $CollectionData.Organization.OAuth2ClientProfileEnabled
+                }
+                if ($null -eq $oauthEnabled) {
+                    $maIssues += 'OAuth2ClientProfileEnabled: data unavailable (cannot verify)'
+                }
+                elseif ([bool]$oauthEnabled -eq $false) {
+                    $maIssues += 'OAuth2ClientProfileEnabled is False — run: Set-OrganizationConfig -OAuth2ClientProfileEnabled $true'
+                }
+
+                # Check 2: auth server with IsDefaultAuthorizationEndpoint = true and a configured AuthMetadataUrl
+                # Detected type: HMA (login.windows.net/login.microsoftonline.com) or ADFS (on-premises endpoint)
+                $detectedModernAuthType = 'None'
+                $detectedAuthMetadataUrl = ''
+                foreach ($srv in @($CollectionData.Servers)) {
+                    if (($srv.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $srv.Exchange -and
+                        ($srv.Exchange.PSObject.Properties.Name -contains 'HybridApplication') -and $null -ne $srv.Exchange.HybridApplication) {
+                        $hybApp = $srv.Exchange.HybridApplication
+                        if (($hybApp.PSObject.Properties.Name -contains 'ModernAuthType') -and
+                            [string]$hybApp.ModernAuthType -ne 'None' -and
+                            -not [string]::IsNullOrWhiteSpace([string]$hybApp.ModernAuthType)) {
+                            $detectedModernAuthType = [string]$hybApp.ModernAuthType
+                            $detectedAuthMetadataUrl = if ($hybApp.PSObject.Properties.Name -contains 'DefaultAuthServerAuthMetadataUrl') {
+                                [string]$hybApp.DefaultAuthServerAuthMetadataUrl
+                            }
+                            else { '' }
+                            break
+                        }
+                    }
+                }
+                if ($detectedModernAuthType -eq 'None') {
+                    $maIssues += 'No auth server has IsDefaultAuthorizationEndpoint = True with a configured AuthMetadataUrl — configure HMA (run: Set-AuthServer -Identity EvoSts -IsDefaultAuthorizationEndpoint $true after running the Hybrid Configuration Wizard) or AD FS (run: New-AuthServer -Type ADFS -Name <name> -AuthMetadataUrl https://<adfs-fqdn>/FederationMetadata/2007-06/FederationMetadata.xml, then Set-AuthServer -Identity <name> -IsDefaultAuthorizationEndpoint $true)'
+                }
+
+                # Check 3: SSL Offloading disabled (incompatible with Modern Authentication)
+                $sslOffloadingServers = @()
+                foreach ($srv in @($CollectionData.Servers)) {
+                    if (($srv.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $srv.Exchange -and
+                        ($srv.Exchange.PSObject.Properties.Name -contains 'OutlookAnywhereSSLOffloading')) {
+                        foreach ($oa in @($srv.Exchange.OutlookAnywhereSSLOffloading)) {
+                            if ($null -ne $oa.SSLOffloading -and [bool]$oa.SSLOffloading -eq $true) {
+                                $sslOffloadingServers += [string]$oa.Identity
+                            }
+                        }
+                    }
+                }
+                if ($sslOffloadingServers.Count -gt 0) {
+                    $maIssues += ('SSL Offloading is enabled on {0} Outlook Anywhere connector(s) — incompatible with Modern Authentication: {1}' -f $sslOffloadingServers.Count, ($sslOffloadingServers -join ', '))
+                }
+
+                # Check 4: OAuth enabled on MAPI, EWS, ActiveSync, Autodiscover vdirs
+                $targetTypes = @('Get-MapiVirtualDirectory', 'Get-WebServicesVirtualDirectory', 'Get-ActiveSyncVirtualDirectory', 'Get-AutodiscoverVirtualDirectory')
+                $nonCompliantVdirs = @()
+                $checkedVdirCount = 0
+                $vdirDataAvailable = $false
+                foreach ($srv in @($CollectionData.Servers)) {
+                    if (($srv.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $srv.Exchange -and
+                        ($srv.Exchange.PSObject.Properties.Name -contains 'ExtendedProtectionStatus') -and
+                        @($srv.Exchange.ExtendedProtectionStatus).Count -gt 0) {
+                        $vdirDataAvailable = $true
+                        foreach ($vdir in @($srv.Exchange.ExtendedProtectionStatus)) {
+                            if ([string]$vdir.VirtualDirectoryType -notin $targetTypes) { continue }
+                            $checkedVdirCount++
+                            $oauthValue = if ($vdir.PSObject.Properties.Name -contains 'OAuthAuthentication') { $vdir.OAuthAuthentication } else { $null }
+                            if ($null -eq $oauthValue) {
+                                $nonCompliantVdirs += ('{0}: OAuthAuthentication data unavailable' -f [string]$vdir.Identity)
+                            }
+                            elseif ([bool]$oauthValue -eq $false) {
+                                $nonCompliantVdirs += ('{0}: OAuthAuthentication = False' -f [string]$vdir.Identity)
+                            }
+                        }
+                    }
+                }
+                if (-not $vdirDataAvailable) {
+                    $maIssues += 'Virtual directory data unavailable — cannot verify OAuthAuthentication on MAPI/EWS/ActiveSync/Autodiscover vdirs'
+                }
+                elseif ($nonCompliantVdirs.Count -gt 0) {
+                    foreach ($vdirIssue in $nonCompliantVdirs) {
+                        $maIssues += ('OAuthAuthentication not enabled: {0}' -f $vdirIssue)
+                    }
+                }
+
+                if ($maIssues.Count -eq 0) {
+                    $authTypeLabel = switch ($detectedModernAuthType) {
+                        'HMA' { 'HMA (Entra/Azure AD)' }
+                        'ADFS' { 'AD FS' }
+                        default { $detectedModernAuthType }
+                    }
+                    $status = 'Pass'
+                    $evidence = ('Modern Authentication prerequisites satisfied: OAuth2ClientProfileEnabled = True, {0} authorization endpoint configured (AuthMetadataUrl: {1}), SSL Offloading disabled, OAuth enabled on all {2} checked virtual directory(s).' -f $authTypeLabel, $detectedAuthMetadataUrl, $checkedVdirCount)
+                }
+                else {
+                    $status = 'Fail'
+                    $evidence = Format-EDCAEvidenceWithElements -Summary ('{0} Modern Authentication prerequisite issue(s) detected:' -f $maIssues.Count) -Elements $maIssues
+                }
+            }
+            'EDCA-TLS-004' {
                 $remoteDomains = @()
                 if (($CollectionData.PSObject.Properties.Name -contains 'Organization') -and $null -ne $CollectionData.Organization -and
                     ($CollectionData.Organization.PSObject.Properties.Name -contains 'RemoteDomains')) {
@@ -810,7 +945,7 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-096' {
+            'EDCA-TLS-005' {
                 $remoteDomains = @()
                 if (($CollectionData.PSObject.Properties.Name -contains 'Organization') -and $null -ne $CollectionData.Organization -and
                     ($CollectionData.Organization.PSObject.Properties.Name -contains 'RemoteDomains')) {
@@ -837,7 +972,7 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-097' {
+            'EDCA-TLS-006' {
                 $subjectLabel = 'Domain'
                 $remoteDomains = @()
                 if (($CollectionData.PSObject.Properties.Name -contains 'Organization') -and $null -ne $CollectionData.Organization -and
@@ -885,7 +1020,7 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-098' {
+            'EDCA-TLS-007' {
                 $subjectLabel = 'Domain'
                 $remoteDomains = @()
                 if (($CollectionData.PSObject.Properties.Name -contains 'Organization') -and $null -ne $CollectionData.Organization -and
@@ -932,7 +1067,7 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-099' {
+            'EDCA-TLS-008' {
                 $transportConfig = $null
                 if (($CollectionData.PSObject.Properties.Name -contains 'Organization') -and $null -ne $CollectionData.Organization -and
                     ($CollectionData.Organization.PSObject.Properties.Name -contains 'TransportConfig')) {
@@ -956,7 +1091,7 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-100' {
+            'EDCA-TLS-009' {
                 $transportConfig = $null
                 if (($CollectionData.PSObject.Properties.Name -contains 'Organization') -and $null -ne $CollectionData.Organization -and
                     ($CollectionData.Organization.PSObject.Properties.Name -contains 'TransportConfig')) {
@@ -980,7 +1115,8 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-103' {
+            'EDCA-TLS-010' {
+                $subjectLabel = 'Connector'
                 $allConnectors = @{}
                 foreach ($srv in @($CollectionData.Servers)) {
                     if (($srv.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $srv.Exchange -and
@@ -1034,7 +1170,8 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-102' {
+            'EDCA-MON-008' {
+                $subjectLabel = 'Connector'
                 $allConnectors = @{}
                 foreach ($srv in @($CollectionData.Servers)) {
                     if (($srv.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $srv.Exchange -and
@@ -1075,7 +1212,8 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-104' {
+            'EDCA-TLS-011' {
+                $subjectLabel = 'Connector'
                 $allConnectors = @{}
                 foreach ($srv in @($CollectionData.Servers)) {
                     if (($srv.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $srv.Exchange -and
@@ -1124,7 +1262,8 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-111' {
+            'EDCA-TLS-014' {
+                $subjectLabel = 'Connector'
                 $allConnectors = @{}
                 foreach ($srv in @($CollectionData.Servers)) {
                     if (($srv.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $srv.Exchange -and
@@ -1181,7 +1320,8 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-109' {
+            'EDCA-TLS-012' {
+                $subjectLabel = 'Connector'
                 $allConnectors = @{}
                 foreach ($srv in @($CollectionData.Servers)) {
                     if (($srv.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $srv.Exchange -and
@@ -1223,7 +1363,8 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-139' {
+            'EDCA-TLS-018' {
+                $subjectLabel = 'Connector'
                 $allConnectors = @{}
                 foreach ($srv in @($CollectionData.Servers)) {
                     if (($srv.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $srv.Exchange -and
@@ -1268,7 +1409,7 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-114' {
+            'EDCA-IAC-014' {
                 $mdmPolicies = @()
                 if (($CollectionData.PSObject.Properties.Name -contains 'Organization') -and $null -ne $CollectionData.Organization -and
                     ($CollectionData.Organization.PSObject.Properties.Name -contains 'MobileDevicePolicies')) {
@@ -1292,7 +1433,7 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-115' {
+            'EDCA-IAC-015' {
                 $mdmPolicies = @()
                 if (($CollectionData.PSObject.Properties.Name -contains 'Organization') -and $null -ne $CollectionData.Organization -and
                     ($CollectionData.Organization.PSObject.Properties.Name -contains 'MobileDevicePolicies')) {
@@ -1316,7 +1457,7 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-116' {
+            'EDCA-IAC-016' {
                 $mdmPolicies = @()
                 if (($CollectionData.PSObject.Properties.Name -contains 'Organization') -and $null -ne $CollectionData.Organization -and
                     ($CollectionData.Organization.PSObject.Properties.Name -contains 'MobileDevicePolicies')) {
@@ -1345,7 +1486,7 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-117' {
+            'EDCA-IAC-017' {
                 $mdmPolicies = @()
                 if (($CollectionData.PSObject.Properties.Name -contains 'Organization') -and $null -ne $CollectionData.Organization -and
                     ($CollectionData.Organization.PSObject.Properties.Name -contains 'MobileDevicePolicies')) {
@@ -1370,7 +1511,7 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-118' {
+            'EDCA-IAC-018' {
                 $mdmPolicies = @()
                 if (($CollectionData.PSObject.Properties.Name -contains 'Organization') -and $null -ne $CollectionData.Organization -and
                     ($CollectionData.Organization.PSObject.Properties.Name -contains 'MobileDevicePolicies')) {
@@ -1399,7 +1540,7 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-119' {
+            'EDCA-IAC-019' {
                 $mdmPolicies = @()
                 if (($CollectionData.PSObject.Properties.Name -contains 'Organization') -and $null -ne $CollectionData.Organization -and
                     ($CollectionData.Organization.PSObject.Properties.Name -contains 'MobileDevicePolicies')) {
@@ -1434,7 +1575,7 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-120' {
+            'EDCA-IAC-020' {
                 $mdmPolicies = @()
                 if (($CollectionData.PSObject.Properties.Name -contains 'Organization') -and $null -ne $CollectionData.Organization -and
                     ($CollectionData.Organization.PSObject.Properties.Name -contains 'MobileDevicePolicies')) {
@@ -1469,7 +1610,7 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-121' {
+            'EDCA-IAC-021' {
                 $mdmPolicies = @()
                 if (($CollectionData.PSObject.Properties.Name -contains 'Organization') -and $null -ne $CollectionData.Organization -and
                     ($CollectionData.Organization.PSObject.Properties.Name -contains 'MobileDevicePolicies')) {
@@ -1493,7 +1634,7 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-122' {
+            'EDCA-IAC-022' {
                 $mdmPolicies = @()
                 if (($CollectionData.PSObject.Properties.Name -contains 'Organization') -and $null -ne $CollectionData.Organization -and
                     ($CollectionData.Organization.PSObject.Properties.Name -contains 'MobileDevicePolicies')) {
@@ -1517,7 +1658,7 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-123' {
+            'EDCA-IAC-023' {
                 $mdmPolicies = @()
                 if (($CollectionData.PSObject.Properties.Name -contains 'Organization') -and $null -ne $CollectionData.Organization -and
                     ($CollectionData.Organization.PSObject.Properties.Name -contains 'MobileDevicePolicies')) {
@@ -1541,7 +1682,7 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-153' {
+            'EDCA-DATA-016' {
                 $irmConfig = $null
                 if (($CollectionData.PSObject.Properties.Name -contains 'Organization') -and $null -ne $CollectionData.Organization -and
                     ($CollectionData.Organization.PSObject.Properties.Name -contains 'IrmConfiguration')) {
@@ -1559,8 +1700,8 @@ function Test-EDCAControl {
                     $irmInUse = $internalEnabled -or $externalEnabled -or $azureEnabled
 
                     if (-not $irmInUse) {
-                        $status = 'Pass'
-                        $evidence = ('IRM is not in use (InternalLicensingEnabled={0}; ExternalLicensingEnabled={1}; AzureRMSLicensingEnabled={2}); AES256-CBC override is not required.' -f $internalEnabled, $externalEnabled, $azureEnabled)
+                        $status = 'Skipped'
+                        $evidence = ('IRM is not in use (InternalLicensingEnabled={0}; ExternalLicensingEnabled={1}; AzureRMSLicensingEnabled={2}); control is not applicable.' -f $internalEnabled, $externalEnabled, $azureEnabled)
                     }
                     else {
                         # Check whether EnableEncryptionAlgorithmCBC override is present on any server.
@@ -1593,7 +1734,7 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-124' {
+            'EDCA-IAC-024' {
                 $mdmPolicies = @()
                 if (($CollectionData.PSObject.Properties.Name -contains 'Organization') -and $null -ne $CollectionData.Organization -and
                     ($CollectionData.Organization.PSObject.Properties.Name -contains 'MobileDevicePolicies')) {
@@ -1628,7 +1769,7 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-141' {
+            'EDCA-TLS-019' {
                 $transportConfig = $null
                 if (($CollectionData.PSObject.Properties.Name -contains 'Organization') -and $null -ne $CollectionData.Organization -and
                     ($CollectionData.Organization.PSObject.Properties.Name -contains 'TransportConfig')) {
@@ -1657,7 +1798,7 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-158' {
+            'EDCA-RES-012' {
                 $serverList = @()
                 if (($CollectionData.PSObject.Properties.Name -contains 'Servers') -and $null -ne $CollectionData.Servers) {
                     $serverList = @($CollectionData.Servers)
@@ -1696,7 +1837,7 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-157' {
+            'EDCA-RES-011' {
                 $totalDisabled = 0
                 $allDisabled = @()
                 $hasData = $false
@@ -1725,7 +1866,8 @@ function Test-EDCAControl {
                     $evidence = Format-EDCAEvidenceWithElements -Summary ('{0} user mailbox(es) have Single Item Recovery disabled.' -f $totalDisabled) -Elements $allDisabled
                 }
             }
-            'EX-BP-036' {
+            'EDCA-DATA-002' {
+                $subjectLabel = 'Server'
                 # Evaluate org-level auth cert validity from Organization.AuthCertificate (Get-AuthConfig)
                 $orgCert = $null
                 if (($CollectionData.Organization.PSObject.Properties.Name -contains 'AuthCertificate') -and $null -ne $CollectionData.Organization.AuthCertificate) {
@@ -1745,8 +1887,22 @@ function Test-EDCAControl {
                 }
                 else {
                     $daysRemaining = if ($orgCert.PSObject.Properties.Name -contains 'DaysRemaining' -and $null -ne $orgCert.DaysRemaining) { [int]$orgCert.DaysRemaining } else { $null }
-                    $status = if ([bool]$orgCert.IsExpired -or ($null -ne $daysRemaining -and $daysRemaining -lt 30)) { 'Fail' } elseif ($null -ne $daysRemaining -and $daysRemaining -lt 60) { 'Unknown' } else { 'Pass' }
-                    $evidence = ('Auth certificate {0}; expires {1} ({2} days remaining).' -f [string]$orgCert.Thumbprint, [string]$orgCert.NotAfter, [string]$daysRemaining)
+                    if ([bool]$orgCert.IsExpired) {
+                        $status = 'Fail'
+                        $evidence = ('Auth certificate {0} has EXPIRED (expired {1}) — renew or replace the auth certificate.' -f [string]$orgCert.Thumbprint, [string]$orgCert.NotAfter)
+                    }
+                    elseif ($null -ne $daysRemaining -and $daysRemaining -lt 30) {
+                        $status = 'Fail'
+                        $evidence = ('Auth certificate {0} expires {1} — only {2} days remaining, within the 30-day expiry threshold. Renew or replace the auth certificate promptly.' -f [string]$orgCert.Thumbprint, [string]$orgCert.NotAfter, $daysRemaining)
+                    }
+                    elseif ($null -ne $daysRemaining -and $daysRemaining -lt 60) {
+                        $status = 'Unknown'
+                        $evidence = ('Auth certificate {0} expires {1} — {2} days remaining, within the 60-day advisory window. Plan renewal.' -f [string]$orgCert.Thumbprint, [string]$orgCert.NotAfter, $daysRemaining)
+                    }
+                    else {
+                        $status = 'Pass'
+                        $evidence = ('Auth certificate {0} is valid; expires {1} ({2} days remaining).' -f [string]$orgCert.Thumbprint, [string]$orgCert.NotAfter, $(if ($null -ne $daysRemaining) { $daysRemaining } else { 'unknown' }))
+                    }
                 }
                 # Per-server presence check: auth cert must be in each Exchange server's local certificate store
                 $exchServers = @($CollectionData.Servers | Where-Object {
@@ -1765,7 +1921,26 @@ function Test-EDCAControl {
                             $domainServerResults += [pscustomobject]@{ Server = $srvName; Status = 'Unknown'; Evidence = 'Auth certificate store data not available for this server.' }
                         }
                         elseif ([bool]$srvCert.Found) {
-                            $domainServerResults += [pscustomobject]@{ Server = $srvName; Status = 'Pass'; Evidence = ('Auth certificate {0} found in local certificate store.' -f [string]$srvCert.Thumbprint) }
+                            $srvDays = if ($srvCert.PSObject.Properties.Name -contains 'DaysRemaining' -and $null -ne $srvCert.DaysRemaining) { [int]$srvCert.DaysRemaining } else { $null }
+                            $srvNotAfter = if ($srvCert.PSObject.Properties.Name -contains 'NotAfter' -and $null -ne $srvCert.NotAfter) { [string]$srvCert.NotAfter } else { 'unknown' }
+                            $srvExpired = ($srvCert.PSObject.Properties.Name -contains 'IsExpired') -and $null -ne $srvCert.IsExpired -and [bool]$srvCert.IsExpired
+                            if ($srvExpired) {
+                                $srvStatus = 'Fail'
+                                $srvEvidence = ('Auth certificate {0} found in local store — EXPIRED (expired {1}).' -f [string]$srvCert.Thumbprint, $srvNotAfter)
+                            }
+                            elseif ($null -ne $srvDays -and $srvDays -lt 30) {
+                                $srvStatus = 'Fail'
+                                $srvEvidence = ('Auth certificate {0} found in local store — expires {1} ({2} days remaining, within 30-day threshold). Renew or replace the auth certificate promptly.' -f [string]$srvCert.Thumbprint, $srvNotAfter, $srvDays)
+                            }
+                            elseif ($null -ne $srvDays -and $srvDays -lt 60) {
+                                $srvStatus = 'Unknown'
+                                $srvEvidence = ('Auth certificate {0} found in local store — expires {1} ({2} days remaining, within 60-day advisory window). Plan renewal.' -f [string]$srvCert.Thumbprint, $srvNotAfter, $srvDays)
+                            }
+                            else {
+                                $srvStatus = 'Pass'
+                                $srvEvidence = ('Auth certificate {0} found in local store; expires {1} ({2} days remaining).' -f [string]$srvCert.Thumbprint, $srvNotAfter, $(if ($null -ne $srvDays) { $srvDays } else { 'unknown' }))
+                            }
+                            $domainServerResults += [pscustomobject]@{ Server = $srvName; Status = $srvStatus; Evidence = $srvEvidence }
                         }
                         else {
                             $configuredThumbprint = if (-not [string]::IsNullOrWhiteSpace([string]$srvCert.Thumbprint)) { [string]$srvCert.Thumbprint } elseif ($null -ne $orgCert) { [string]$orgCert.Thumbprint } else { 'unknown' }
@@ -1773,6 +1948,135 @@ function Test-EDCAControl {
                         }
                     }
                 }
+            }
+            'EDCA-GOV-009' {
+                if (($CollectionData.PSObject.Properties.Name -contains 'Organization') -and $null -ne $CollectionData.Organization -and
+                    ($CollectionData.Organization.PSObject.Properties.Name -contains 'CustomerFeedbackEnabled')) {
+                    $enabled = $CollectionData.Organization.CustomerFeedbackEnabled -eq $true
+                    $cfDesc = if (-not $enabled) { 'non-compliant (must be False)' } else { 'compliant (disabled)' }
+                    $status = if (-not $enabled) { 'Fail' } else { 'Pass' }
+                    $evidence = ('CustomerFeedbackEnabled={0} — {1}.' -f $CollectionData.Organization.CustomerFeedbackEnabled, $cfDesc)
+                }
+                else {
+                    $status = 'Unknown'
+                    $evidence = 'CustomerFeedbackEnabled organization setting is unavailable (collection RBAC failure); cannot confirm compliance.'
+                }
+            }
+            'EDCA-PERF-012' {
+                $siteData = @()
+                if (($CollectionData.PSObject.Properties.Name -contains 'Organization') -and $null -ne $CollectionData.Organization -and
+                    ($CollectionData.Organization.PSObject.Properties.Name -contains 'DcCoreRatio') -and
+                    $null -ne $CollectionData.Organization.DcCoreRatio) {
+                    $siteData = @($CollectionData.Organization.DcCoreRatio)
+                }
+                $availableSites = @($siteData | Where-Object { ($_.PSObject.Properties.Name -contains 'Available') -and [bool]$_.Available })
+                if ($siteData.Count -eq 0 -or $availableSites.Count -eq 0) {
+                    $status = 'Skipped'
+                    $evidence = 'DC/GC core ratio data could not be determined. Perform this check manually: verify that the Exchange-to-DC/GC core ratio does not exceed 8:1 in each AD site that hosts Exchange servers.'
+                }
+                else {
+                    $domainServerResults = @($availableSites | ForEach-Object {
+                            $site = $_
+                            $siteName = if (-not [string]::IsNullOrWhiteSpace([string]$site.AdSite)) { [string]$site.AdSite } else { 'Unknown' }
+                            $dcErr = if (($site.PSObject.Properties.Name -contains 'DcAccessError') -and -not [string]::IsNullOrWhiteSpace([string]$site.DcAccessError)) { [string]$site.DcAccessError } else { $null }
+                            $ratio = if (($site.PSObject.Properties.Name -contains 'Ratio') -and $null -ne $site.Ratio) { [double]$site.Ratio } else { $null }
+                            $exCores = if (($site.PSObject.Properties.Name -contains 'ExchangeCores')) { [int]$site.ExchangeCores } else { 0 }
+                            $dcCores = if (($site.PSObject.Properties.Name -contains 'DcCores')) { [int]$site.DcCores } else { 0 }
+                            if ($null -ne $dcErr) {
+                                [pscustomobject]@{
+                                    Server   = $siteName
+                                    Status   = 'Unknown'
+                                    Evidence = ('AD site {0}: could not query domain controllers — {1}' -f $siteName, $dcErr)
+                                }
+                            }
+                            elseif ($null -eq $ratio) {
+                                $dcDetailEntries = @()
+                                if (($site.PSObject.Properties.Name -contains 'DomainControllers') -and $null -ne $site.DomainControllers) {
+                                    $dcDetailEntries = @($site.DomainControllers)
+                                }
+                                $dcDetailLines = @($dcDetailEntries | ForEach-Object {
+                                        if (-not [string]::IsNullOrWhiteSpace([string]$_.Error)) {
+                                            ('  {0}: Cores={1} — Error: {2}' -f [string]$_.Name, [int]$_.Cores, [string]$_.Error)
+                                        }
+                                        else {
+                                            ('  {0}: Cores={1}' -f [string]$_.Name, [int]$_.Cores)
+                                        }
+                                    })
+                                $dcSummary = if ($dcDetailEntries.Count -eq 0) {
+                                    'No Global Catalog servers were found in this AD site.'
+                                }
+                                elseif ((@($dcDetailEntries | Where-Object { [int]$_.Cores -eq 0 -and [string]::IsNullOrWhiteSpace([string]$_.Error) }).Count) -eq $dcDetailEntries.Count) {
+                                    'CIM (Win32_Processor) returned 0 cores for all DC/GC servers (possible CIM/WMI access permission issue; verify the collection account has remote WMI access on domain controllers and perform this check manually).'
+                                }
+                                else {
+                                    'DC/GC core data was incomplete.'
+                                }
+                                $extraLines = if ($dcDetailLines.Count -gt 0) { ("`n" + ($dcDetailLines -join "`n")) } else { '' }
+                                [pscustomobject]@{
+                                    Server   = $siteName
+                                    Status   = 'Skipped'
+                                    Evidence = ('AD site {0}: ratio could not be computed (ExchangeCores={1}, DcCores={2}). {3}{4} Perform this check manually.' -f $siteName, $exCores, $dcCores, $dcSummary, $extraLines)
+                                }
+                            }
+                            elseif ($ratio -gt 8.0) {
+                                [pscustomobject]@{
+                                    Server   = $siteName
+                                    Status   = 'Fail'
+                                    Evidence = ('AD site {0}: Exchange-to-DC/GC core ratio is {1}:1 (ExchangeCores={2}, DcCores={3}) — exceeds recommended 8:1 maximum.' -f $siteName, $ratio, $exCores, $dcCores)
+                                }
+                            }
+                            else {
+                                [pscustomobject]@{
+                                    Server   = $siteName
+                                    Status   = 'Pass'
+                                    Evidence = ('AD site {0}: Exchange-to-DC/GC core ratio is {1}:1 (ExchangeCores={2}, DcCores={3}) — within 8:1 limit.' -f $siteName, $ratio, $exCores, $dcCores)
+                                }
+                            }
+                        })
+                    if ($domainServerResults | Where-Object { $_.Status -eq 'Fail' }) {
+                        $status = 'Fail'
+                    }
+                    elseif ($domainServerResults | Where-Object { $_.Status -eq 'Unknown' }) {
+                        $status = 'Unknown'
+                    }
+                    elseif ($domainServerResults | Where-Object { $_.Status -eq 'Skipped' }) {
+                        $status = 'Skipped'
+                    }
+                    else {
+                        $status = 'Pass'
+                    }
+                }
+            }
+            'EDCA-MON-001' {
+                $auditEnabled = $null
+                foreach ($srv in @($CollectionData.Servers)) {
+                    if (($srv.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $srv.Exchange -and
+                        ($srv.Exchange.PSObject.Properties.Name -contains 'AdminAuditLogEnabled') -and
+                        $null -ne $srv.Exchange.AdminAuditLogEnabled) {
+                        $auditEnabled = [bool]$srv.Exchange.AdminAuditLogEnabled
+                        break
+                    }
+                }
+                if ($null -eq $auditEnabled) {
+                    $status = 'Unknown'
+                    $evidence = 'Admin audit log configuration data unavailable.'
+                }
+                elseif ($auditEnabled) {
+                    $status = 'Pass'
+                    $evidence = 'AdminAuditLogEnabled is True.'
+                }
+                else {
+                    $status = 'Fail'
+                    $evidence = 'AdminAuditLogEnabled is False — admin audit logging is disabled.'
+                }
+            }
+            'EDCA-GOV-011' {
+                $status = 'Skipped'
+                $evidence = 'Procedural control — assessment is not applicable.'
+            }
+            'EDCA-SEC-036' {
+                $status = 'Skipped'
+                $evidence = 'Partition layout cannot be assessed remotely — manual verification required.'
             }
         }
 
@@ -1804,83 +2108,83 @@ function Test-EDCAControl {
             [bool]$_.Exchange.IsExchangeServer
         }).Count
     $exchangeOnlyControlIds = @(
-        'EX-BP-041',
-        'EX-BP-008',
-        'EX-BP-029',
-        'EX-BP-010',
-        'EX-BP-030',
-        'EX-BP-052',
-        'EX-BP-062',
-        'EX-BP-001',
-        'EX-BP-006',
-        'EX-BP-051',
-        'EX-BP-016',
-        'EX-BP-015',
-        'EX-BP-002',
-        'EX-BP-068',
-        'EX-BP-070',
-        'EX-BP-071',
-        'EX-BP-072',
-        'EX-BP-073',
-        'EX-BP-074',
-        'EX-BP-075',
-        'EX-BP-076',
-        'EX-BP-079',
-        'EX-BP-080',
-        'EX-BP-081',
-        'EX-BP-082',
-        'EX-BP-086',
-        'EX-BP-088',
-        'EX-BP-089',
-        'EX-BP-090',
-        'EX-BP-091',
-        'EX-BP-092',
-        'EX-BP-093',
-        'EX-BP-094',
-        'EX-BP-101',
-        'EX-BP-105',
-        'EX-BP-106',
-        'EX-BP-107',
-        'EX-BP-108',
-        'EX-BP-110',
-        'EX-BP-112',
-        'EX-BP-113',
-        'EX-BP-125',
-        'EX-BP-127',
-        'EX-BP-128',
-        'EX-BP-129',
-        'EX-BP-130',
-        'EX-BP-131',
-        'EX-BP-133',
-        'EX-BP-134',
-        'EX-BP-135',
-        'EX-BP-136',
-        'EX-BP-137',
-        'EX-BP-138',
-        'EX-BP-140',
-        'EX-BP-142',
-        'EX-BP-143',
-        'EX-BP-144',
-        'EX-BP-145',
-        'EX-BP-146',
-        'EX-BP-147',
-        'EX-BP-148',
-        'EX-BP-149',
-        'EX-BP-150',
-        'EX-BP-151',
-        'EX-BP-152',
-        'EX-BP-154',
-        'EX-BP-155',
-        'EX-BP-156'
+        'EDCA-SEC-014',
+        'EDCA-GOV-002',
+        'EDCA-DATA-001',
+        'EDCA-RES-001',
+        'EDCA-RES-003',
+        'EDCA-SEC-021',
+        'EDCA-TLS-001',
+        'EDCA-SEC-001',
+        'EDCA-GOV-001',
+        'EDCA-SEC-020',
+        'EDCA-SEC-009',
+        'EDCA-SEC-008',
+        'EDCA-SEC-002',
+        'EDCA-DATA-009',
+        'EDCA-DATA-010',
+        'EDCA-SEC-027',
+        'EDCA-MON-003',
+        'EDCA-SEC-028',
+        'EDCA-SEC-029',
+        'EDCA-SEC-030',
+        'EDCA-SEC-031',
+        'EDCA-IAC-007',
+        'EDCA-MON-004',
+        'EDCA-MON-005',
+        'EDCA-MON-006',
+        'EDCA-IAC-010',
+        'EDCA-IAC-012',
+        'EDCA-DATA-011',
+        'EDCA-DATA-012',
+        'EDCA-DATA-013',
+        'EDCA-RES-004',
+        'EDCA-RES-005',
+        'EDCA-RES-006',
+        'EDCA-MON-007',
+        'EDCA-GOV-005',
+        'EDCA-GOV-006',
+        'EDCA-GOV-007',
+        'EDCA-SEC-033',
+        'EDCA-TLS-013',
+        'EDCA-DATA-014',
+        'EDCA-DATA-015',
+        'EDCA-IAC-013',
+        'EDCA-RES-007',
+        'EDCA-MON-009',
+        'EDCA-MON-010',
+        'EDCA-MON-011',
+        'EDCA-GOV-008',
+        'EDCA-RES-008',
+        'EDCA-RES-009',
+        'EDCA-GOV-010',
+        'EDCA-TLS-015',
+        'EDCA-TLS-016',
+        'EDCA-TLS-017',
+        'EDCA-SEC-034',
+        'EDCA-TLS-020',
+        'EDCA-SEC-035',
+        'EDCA-GOV-012',
+        'EDCA-SEC-037',
+        'EDCA-RES-010',
+        'EDCA-SEC-038',
+        'EDCA-TLS-021',
+        'EDCA-TLS-022',
+        'EDCA-SEC-039',
+        'EDCA-MON-012',
+        'EDCA-DATA-017',
+        'EDCA-SEC-040'
     )
 
     $exchangeBuilds = $null
-    if ($Control.id -in @('EX-BP-008', 'EX-BP-149')) {
+    if ($Control.id -in @('EDCA-GOV-002', 'EDCA-SEC-038')) {
         $exchangeBuildsPath = Join-Path -Path $PSScriptRoot -ChildPath '..\Config\exchange.builds.json'
         if (Test-Path -LiteralPath $exchangeBuildsPath) {
             try { $exchangeBuilds = Get-Content -LiteralPath $exchangeBuildsPath -Raw | ConvertFrom-Json } catch {}
         }
     }
+
+    $subjectLabel = 'Server'
 
     foreach ($server in $CollectionData.Servers) {
         $serverName = ([string]$server.Server -split '\.')[0]
@@ -1913,7 +2217,7 @@ function Test-EDCAControl {
         }
 
         switch ($Control.id) {
-            'EX-BP-041' {
+            'EDCA-SEC-014' {
                 $entries = @($server.Exchange.ExtendedProtectionStatus)
                 $oaItems = @()
                 if ($server.Exchange.PSObject.Properties.Name -contains 'OutlookAnywhereSSLOffloading') {
@@ -1945,7 +2249,7 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-088' {
+            'EDCA-IAC-012' {
                 $targetVdirTypes = @('Get-MapiVirtualDirectory', 'Get-OwaVirtualDirectory', 'Get-EcpVirtualDirectory', 'Get-WebServicesVirtualDirectory', 'Get-AutodiscoverVirtualDirectory')
                 $entries = @($server.Exchange.ExtendedProtectionStatus | Where-Object { $_.VirtualDirectoryType -in $targetVdirTypes })
                 if ($entries.Count -eq 0) {
@@ -1982,7 +2286,7 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-008' {
+            'EDCA-GOV-002' {
                 $productLine = Get-EDCAProductLineFromServerData -Server $server
                 $buildNumber = $null
                 if (($server.Exchange.PSObject.Properties.Name -contains 'BuildNumber') -and
@@ -2043,7 +2347,7 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-149' {
+            'EDCA-SEC-038' {
                 $productLine = Get-EDCAProductLineFromServerData -Server $server
                 $buildNumber = $null
                 if (($server.Exchange.PSObject.Properties.Name -contains 'BuildNumber') -and
@@ -2104,7 +2408,7 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-056' {
+            'EDCA-DATA-005' {
                 $tls10 = [bool]$server.Tls.Tls10Enabled
                 $tls11 = [bool]$server.Tls.Tls11Enabled
                 $status = if (-not $tls10 -and -not $tls11) { 'Pass' } else { 'Fail' }
@@ -2112,7 +2416,7 @@ function Test-EDCAControl {
                     (Get-EDCAStateDescriptor -Value $tls10 -Expectation 'Disabled'),
                     (Get-EDCAStateDescriptor -Value $tls11 -Expectation 'Disabled'))
             }
-            'EX-BP-057' {
+            'EDCA-DATA-006' {
                 $status = Get-EDCAFindingStatusFromBool -Value $server.Tls.Tls12Enabled
                 if ($null -eq $server.Tls.Tls12Enabled) {
                     $evidence = 'TLS 1.2 state unavailable.'
@@ -2121,7 +2425,7 @@ function Test-EDCAControl {
                     $evidence = ('TLS 1.2 is {0}.' -f (Get-EDCAStateDescriptor -Value ([bool]$server.Tls.Tls12Enabled) -Expectation 'Enabled'))
                 }
             }
-            'EX-BP-029' {
+            'EDCA-DATA-001' {
                 $expired = @($server.Certificates | Where-Object { $_.IsExpired })
                 $status = if ($expired.Count -eq 0) { 'Pass' } else { 'Fail' }
                 $summary = ('Expired certificates: {0}' -f $expired.Count)
@@ -2135,7 +2439,7 @@ function Test-EDCAControl {
                     $evidence = 'Compliant — no expired certificates found.'
                 }
             }
-            'EX-BP-010' {
+            'EDCA-RES-001' {
                 $problem = @($server.Services | Where-Object { $_.Status -ne 'Running' })
                 $status = if ($problem.Count -eq 0) { 'Pass' } else { 'Fail' }
                 $summary = ('Non-running required services: {0}' -f $problem.Count)
@@ -2147,7 +2451,7 @@ function Test-EDCAControl {
                     $evidence = 'Compliant — all required Exchange services are running.'
                 }
             }
-            'EX-BP-030' {
+            'EDCA-RES-003' {
                 $replicationWarnings = @()
                 if (($server.Exchange.PSObject.Properties.Name -contains 'CollectionWarnings') -and $null -ne $server.Exchange.CollectionWarnings) {
                     $replicationWarnings = @($server.Exchange.CollectionWarnings | Where-Object { [string]$_ -match '(?i)^Test-ReplicationHealth failed:' })
@@ -2180,7 +2484,7 @@ function Test-EDCAControl {
                     $evidence = ('Replication health has {0}.' -f (Get-EDCAStateDescriptor -Value ([bool]$server.Exchange.ReplicationHealthPassed) -Expectation 'Passed'))
                 }
             }
-            'EX-BP-053' {
+            'EDCA-SEC-022' {
                 $policy = [string]$server.OS.ExecutionPolicy
                 if ([string]::IsNullOrWhiteSpace($policy)) {
                     $status = 'Unknown'
@@ -2191,7 +2495,7 @@ function Test-EDCAControl {
                     $evidence = if ($status -eq 'Pass') { ('Compliant — execution policy is {0}.' -f $policy) } else { ('Execution policy is {0}; Unrestricted is not recommended.' -f $policy) }
                 }
             }
-            'EX-BP-017' {
+            'EDCA-PERF-002' {
                 $hasPowerPlan = ($server.PSObject.Properties.Name -contains 'OS') -and ($server.OS.PSObject.Properties.Name -contains 'PowerPlan')
                 if (-not $hasPowerPlan -or $null -eq $server.OS.PowerPlan -or -not ($server.OS.PowerPlan.PSObject.Properties.Name -contains 'HighPerformanceSet')) {
                     $status = 'Unknown'
@@ -2202,7 +2506,7 @@ function Test-EDCAControl {
                     $evidence = if ($status -eq 'Pass') { 'Compliant — High Performance power plan is active.' } else { ('Active power plan: {0}; High Performance plan is not active.' -f [string]$server.OS.PowerPlan.ActiveSchemeName) }
                 }
             }
-            'EX-BP-025' {
+            'EDCA-PERF-008' {
                 $pageFileCount = $null
                 if (($server.PSObject.Properties.Name -contains 'OS') -and ($server.OS.PSObject.Properties.Name -contains 'PageFile') -and $null -ne $server.OS.PageFile -and ($server.OS.PageFile.PSObject.Properties.Name -contains 'Count')) {
                     $pageFileCount = [int]$server.OS.PageFile.Count
@@ -2217,7 +2521,7 @@ function Test-EDCAControl {
                     $evidence = if ($status -eq 'Pass') { 'Compliant — single page file configured.' } else { ('Page file entries: {0} (expected exactly 1).' -f $pageFileCount) }
                 }
             }
-            'EX-BP-023' {
+            'EDCA-PERF-007' {
                 $adapterCount = $null
                 $enabledCount = $null
                 if (($server.PSObject.Properties.Name -contains 'OS') -and ($server.OS.PSObject.Properties.Name -contains 'NicRss') -and $null -ne $server.OS.NicRss) {
@@ -2238,7 +2542,7 @@ function Test-EDCAControl {
                     $evidence = if ($status -eq 'Pass') { ('Compliant — {0} of {1} active adapters have RSS enabled.' -f [int]$enabledCount, [int]$adapterCount) } else { ('RSS-enabled adapters: {0} of {1}. RSS is not enabled on any adapter.' -f [int]$enabledCount, [int]$adapterCount) }
                 }
             }
-            'EX-BP-018' {
+            'EDCA-PERF-003' {
                 $cores = 0
                 $logical = 0
                 if ($server.OS.PSObject.Properties.Name -contains 'NumberOfCores') {
@@ -2257,7 +2561,7 @@ function Test-EDCAControl {
                     $evidence = if ($status -eq 'Pass') { ('Compliant — {0} physical cores, Hyper-Threading not detected.' -f $cores) } else { ('Cores: {0}; Logical processors: {1} — Hyper-Threading detected.' -f $cores, $logical) }
                 }
             }
-            'EX-BP-028' {
+            'EDCA-PERF-011' {
                 $vmx = $null
                 if (($server.PSObject.Properties.Name -contains 'OS') -and ($server.OS.PSObject.Properties.Name -contains 'VmxNet3')) {
                     $vmx = $server.OS.VmxNet3
@@ -2274,57 +2578,348 @@ function Test-EDCAControl {
                 else {
                     $adapters = @($vmx.Adapters)
                     if ($adapters.Count -eq 0) {
-                        $status = 'Pass'
-                        $evidence = 'No VMXNET3 adapters found; control is not applicable to non-VMware environments.'
+                        $status = 'Skipped'
+                        $evidence = 'No VMXNET3 adapters found; control is not applicable to this server.'
                     }
                     else {
-                        $problemAdapters = @()
-                        foreach ($adapter in $adapters) {
-                            $adapterIssues = @()
+                        # RAG thresholds per HealthChecker PacketsLossCheck:
+                        #   Good    : PacketsReceivedDiscarded = 0        -> Pass (green)
+                        #   Warning : PacketsReceivedDiscarded < 1000     -> Unknown (amber)
+                        #   Error   : PacketsReceivedDiscarded >= 1000    -> Fail (red)
+                        $redAdapters = @()
+                        $amberAdapters = @()
+                        $passAdapters = @()
 
-                            $discardedPackets = 0
+                        foreach ($adapter in $adapters) {
+                            $adapterName = [string]$adapter.Name
+
+                            # Packet loss indicator
+                            $discardedPackets = [int64]0
                             if ($adapter.PSObject.Properties.Name -contains 'DiscardedPacketsTotal') {
                                 $discardedPackets = [int64]$adapter.DiscardedPacketsTotal
                             }
-                            if ($discardedPackets -gt 0) {
-                                $adapterIssues += ('discarded packets detected ({0})' -f $discardedPackets)
+
+                            # Small Rx Buffers (recommended: 8192)
+                            $smallRxBufDisplay = 'not found'
+                            if (($adapter.PSObject.Properties.Name -contains 'HasBufferProperties') -and [bool]$adapter.HasBufferProperties -and
+                                ($adapter.PSObject.Properties.Name -contains 'BufferProperties')) {
+                                $smallRxEntry = @($adapter.BufferProperties | Where-Object { [string]$_.DisplayName -match 'Small' }) | Select-Object -First 1
+                                if ($null -eq $smallRxEntry) { $smallRxEntry = @($adapter.BufferProperties) | Select-Object -First 1 }
+                                if ($null -ne $smallRxEntry) { $smallRxBufDisplay = ('{0}={1}' -f [string]$smallRxEntry.DisplayName, [string]$smallRxEntry.DisplayValue) }
                             }
 
-                            $hasRingProperties = $false
-                            if ($adapter.PSObject.Properties.Name -contains 'HasRingProperties') {
-                                $hasRingProperties = [bool]$adapter.HasRingProperties
-                            }
-                            if (-not $hasRingProperties) {
-                                $adapterIssues += 'ring size advanced properties not found'
-                            }
-
-                            $hasBufferProperties = $false
-                            if ($adapter.PSObject.Properties.Name -contains 'HasBufferProperties') {
-                                $hasBufferProperties = [bool]$adapter.HasBufferProperties
-                            }
-                            if (-not $hasBufferProperties) {
-                                $adapterIssues += 'buffer advanced properties not found'
+                            # Rx Ring #1 Size (recommended: 4096)
+                            $rxRing1Display = 'not found'
+                            if (($adapter.PSObject.Properties.Name -contains 'HasRingProperties') -and [bool]$adapter.HasRingProperties -and
+                                ($adapter.PSObject.Properties.Name -contains 'RingProperties')) {
+                                $rxRing1Entry = @($adapter.RingProperties | Where-Object { [string]$_.DisplayName -match '#\s*1|Ring\s*1' }) | Select-Object -First 1
+                                if ($null -eq $rxRing1Entry) { $rxRing1Entry = @($adapter.RingProperties) | Select-Object -First 1 }
+                                if ($null -ne $rxRing1Entry) { $rxRing1Display = ('{0}={1}' -f [string]$rxRing1Entry.DisplayName, [string]$rxRing1Entry.DisplayValue) }
                             }
 
-                            if ($adapterIssues.Count -gt 0) {
-                                $problemAdapters += ('{0}: {1}' -f [string]$adapter.Name, ($adapterIssues -join '; '))
+                            $detail = ('{0}: PacketsReceivedDiscarded={1}; Small Rx Buffers: {2} (recommended: 8192); Rx Ring #1 Size: {3} (recommended: 4096)' -f
+                                $adapterName, $discardedPackets, $smallRxBufDisplay, $rxRing1Display)
+
+                            if ($discardedPackets -ge 1000) {
+                                $redAdapters += $detail
+                            }
+                            elseif ($discardedPackets -gt 0) {
+                                # Intentionally warning-oriented (amber) for BestPractice reporting.
+                                $amberAdapters += $detail
+                            }
+                            else {
+                                $passAdapters += $detail
                             }
                         }
 
-                        if ($problemAdapters.Count -gt 0) {
-                            # This is intentionally warning-oriented for BestPractice reporting.
+                        if ($redAdapters.Count -gt 0) {
+                            $status = 'Fail'
+                            $summary = ('VMXNET3 adapters evaluated: {0}; {1} adapter(s) with high packet loss (>= 1000 discards).' -f $adapters.Count, $redAdapters.Count)
+                            $evidence = Format-EDCAEvidenceWithElements -Summary $summary -Elements ($redAdapters + $amberAdapters + $passAdapters)
+                        }
+                        elseif ($amberAdapters.Count -gt 0) {
+                            # Intentionally warning-oriented (amber) for BestPractice reporting.
                             $status = 'Unknown'
-                            $summary = ('VMXNET3 adapters evaluated: {0}; warning conditions on {1} adapter(s).' -f $adapters.Count, $problemAdapters.Count)
-                            $evidence = Format-EDCAEvidenceWithElements -Summary $summary -Elements $problemAdapters
+                            $summary = ('VMXNET3 adapters evaluated: {0}; {1} adapter(s) with packet loss detected (< 1000 discards).' -f $adapters.Count, $amberAdapters.Count)
+                            $evidence = Format-EDCAEvidenceWithElements -Summary $summary -Elements ($amberAdapters + $passAdapters)
                         }
                         else {
                             $status = 'Pass'
-                            $evidence = ('VMXNET3 adapters evaluated: {0}; no discarded packets and ring/buffer properties found.' -f $adapters.Count)
+                            $summary = ('VMXNET3 adapters evaluated: {0}; no discarded packets detected.' -f $adapters.Count)
+                            $evidence = Format-EDCAEvidenceWithElements -Summary $summary -Elements $passAdapters
                         }
                     }
                 }
             }
-            'EX-BP-021' {
+            'EDCA-PERF-013' {
+                $ramGB = $null
+                $pfItems = $null
+                $pfCount = $null
+                if (($server.PSObject.Properties.Name -contains 'OS') -and ($server.OS.PSObject.Properties.Name -contains 'TotalPhysicalMemoryGB')) {
+                    $ramGB = [double]$server.OS.TotalPhysicalMemoryGB
+                }
+                if (($server.PSObject.Properties.Name -contains 'OS') -and ($server.OS.PSObject.Properties.Name -contains 'PageFile') -and $null -ne $server.OS.PageFile) {
+                    if ($server.OS.PageFile.PSObject.Properties.Name -contains 'Items') {
+                        $pfItems = @($server.OS.PageFile.Items)
+                    }
+                    if ($server.OS.PageFile.PSObject.Properties.Name -contains 'Count') {
+                        $pfCount = [int]$server.OS.PageFile.Count
+                    }
+                }
+
+                if ($null -eq $ramGB -or $null -eq $pfItems -or $null -eq $pfCount) {
+                    $status = 'Unknown'
+                    $evidence = 'Page file or memory data unavailable.'
+                }
+                elseif ($pfCount -ne 1) {
+                    $status = 'Skipped'
+                    $evidence = ('Page file count is {0}; EDCA-PERF-013 requires exactly one page file (see EDCA-PERF-008).' -f $pfCount)
+                }
+                else {
+                    $ramMB = [int][math]::Round($ramGB * 1024)
+
+                    # Target size per Exchange version
+                    $productLine = Get-EDCAProductLineFromServerData -Server $server
+                    $targetMB = if ($productLine -eq 'Exchange2016') {
+                        if ($ramMB -ge 32768) { 32778 } else { $ramMB + 10 }
+                    }
+                    else {
+                        [int][math]::Ceiling($ramMB * 0.25)
+                    }
+
+                    $pf = $pfItems[0]
+                    $initialSize = [int]$pf.InitialSize
+                    $maximumSize = [int]$pf.MaximumSize
+                    $pfName = [string]$pf.Name
+                    $fixedSize = ($initialSize -eq $maximumSize)
+                    $correctSize = ($initialSize -eq $targetMB)
+
+                    if ($fixedSize -and $correctSize) {
+                        $status = 'Pass'
+                        $evidence = ('Compliant — page file is fixed-size at {0} MB (target: {1} MB) on {2}.' -f $initialSize, $targetMB, $pfName)
+                    }
+                    else {
+                        $status = 'Fail'
+                        $issues = @()
+                        if (-not $fixedSize) {
+                            $issues += ('Dynamic sizing detected (InitialSize={0} MB, MaximumSize={1} MB)' -f $initialSize, $maximumSize)
+                        }
+                        if (-not $correctSize) {
+                            $issues += ('Non-compliant: Size is {0} MB (expected {1} MB)' -f $initialSize, $targetMB)
+                        }
+                        $evidence = ('{0}; location: {1}.' -f ($issues -join '; '), $pfName)
+                    }
+                }
+            }
+            'EDCA-PERF-014' {
+                $ramGB = $null
+                if (($server.PSObject.Properties.Name -contains 'OS') -and ($server.OS.PSObject.Properties.Name -contains 'TotalPhysicalMemoryGB')) {
+                    $ramGB = [double]$server.OS.TotalPhysicalMemoryGB
+                }
+
+                if ($null -eq $ramGB) {
+                    $status = 'Unknown'
+                    $evidence = 'Memory data unavailable.'
+                }
+                else {
+                    $productLine = Get-EDCAProductLineFromServerData -Server $server
+
+                    if ($productLine -eq 'Unknown') {
+                        $status = 'Unknown'
+                        $evidence = ('Exchange version could not be determined; cannot evaluate memory requirements. Installed RAM: {0} GB.' -f $ramGB)
+                    }
+                    else {
+                        # Detect Edge Transport role via org-level EdgeServers list
+                        # (ServerRole is not stored in per-server collected data)
+                        $isEdge = $false
+                        if (($CollectionData.PSObject.Properties.Name -contains 'Organization') -and
+                            $null -ne $CollectionData.Organization -and
+                            ($CollectionData.Organization.PSObject.Properties.Name -contains 'EdgeServers')) {
+                            $isEdge = @(@($CollectionData.Organization.EdgeServers) | Where-Object { [string]$_.Name -eq $serverName }).Count -gt 0
+                        }
+
+                        $roleLabel = if ($isEdge) { 'Edge Transport' } else { 'Mailbox' }
+
+                        # Thresholds by version and role
+                        # Edge Transport: Microsoft only documents a minimum; no upper limit published
+                        if ($productLine -eq 'Exchange2016') {
+                            $minGB = if ($isEdge) { 4 } else { 8 }
+                            $maxGB = if ($isEdge) { $null } else { 192 }
+                        }
+                        else {
+                            # Exchange2019 and ExchangeSE share the same published requirements
+                            $minGB = if ($isEdge) { 8 } else { 32 }
+                            $maxGB = if ($isEdge) { $null } else { 256 }
+                        }
+
+                        $belowMin = $ramGB -lt $minGB
+                        $aboveMax = ($null -ne $maxGB) -and ($ramGB -gt $maxGB)
+
+                        if (-not $belowMin -and -not $aboveMax) {
+                            $status = 'Pass'
+                            $rangeLabel = if ($null -ne $maxGB) { ('{0}–{1} GB' -f $minGB, $maxGB) } else { ('minimum {0} GB' -f $minGB) }
+                            $evidence = ('Compliant — {0} GB RAM installed on {1} server ({2}); supported range: {3}.' -f $ramGB, $roleLabel, $productLine, $rangeLabel)
+                        }
+                        else {
+                            $status = 'Fail'
+                            $issues = @()
+                            if ($belowMin) {
+                                $issues += ('RAM ({0} GB) is below the {1} GB minimum for {2} {3}' -f $ramGB, $minGB, $productLine, $roleLabel)
+                            }
+                            if ($aboveMax) {
+                                $issues += ('RAM ({0} GB) exceeds the {1} GB maximum supported for {2} {3}' -f $ramGB, $maxGB, $productLine, $roleLabel)
+                            }
+                            $evidence = ('{0}.' -f ($issues -join '; '))
+                        }
+                    }
+                }
+            }
+            'EDCA-PERF-015' {
+                $cores = $null
+                $logical = $null
+                if (($server.PSObject.Properties.Name -contains 'OS') -and $null -ne $server.OS) {
+                    if ($server.OS.PSObject.Properties.Name -contains 'NumberOfCores') {
+                        $cores = [int]$server.OS.NumberOfCores
+                    }
+                    if ($server.OS.PSObject.Properties.Name -contains 'NumberOfLogicalProcessors') {
+                        $logical = [int]$server.OS.NumberOfLogicalProcessors
+                    }
+                }
+
+                if ($null -eq $cores -or $null -eq $logical) {
+                    $status = 'Unknown'
+                    $evidence = 'Processor topology data unavailable.'
+                }
+                else {
+                    $productLine = Get-EDCAProductLineFromServerData -Server $server
+
+                    if ($productLine -eq 'Unknown') {
+                        $status = 'Unknown'
+                        $evidence = ('Exchange version could not be determined; cannot evaluate processor core limit. Physical cores: {0}; logical processors: {1}.' -f $cores, $logical)
+                    }
+                    else {
+                        # Detect Edge Transport role via org-level EdgeServers list
+                        # (ServerRole is not stored in per-server collected data)
+                        $isEdge = $false
+                        if (($CollectionData.PSObject.Properties.Name -contains 'Organization') -and
+                            $null -ne $CollectionData.Organization -and
+                            ($CollectionData.Organization.PSObject.Properties.Name -contains 'EdgeServers')) {
+                            $isEdge = @(@($CollectionData.Organization.EdgeServers) | Where-Object { [string]$_.Name -eq $serverName }).Count -gt 0
+                        }
+
+                        $roleLabel = if ($isEdge) { 'Edge Transport' } else { 'Mailbox' }
+
+                        # Maximum supported physical cores by version (same limit for both roles)
+                        $maxCores = if ($productLine -eq 'Exchange2016') { 24 } else { 48 }
+
+                        # Virtual processor over-allocation check: logical > physical cores indicates
+                        # vCPUs exceeding pCPUs, which is not supported for Exchange VMs
+                        $vRatio = if ($cores -gt 0) { [math]::Round($logical / $cores, 2) } else { $null }
+                        $ratioExceed = ($null -ne $vRatio) -and ($vRatio -gt 2)
+
+                        $coreExceed = $cores -gt $maxCores
+
+                        if (-not $coreExceed -and -not $ratioExceed) {
+                            $status = 'Pass'
+                            $ratioNote = if ($null -ne $vRatio) { (' vCPU:pCore ratio: {0}:1.' -f $vRatio) } else { '' }
+                            $evidence = ('Compliant — {0} physical cores on {1} server ({2}); maximum: {3}.{4}' -f $cores, $roleLabel, $productLine, $maxCores, $ratioNote)
+                        }
+                        else {
+                            $status = 'Fail'
+                            $issues = @()
+                            if ($coreExceed) {
+                                $issues += ('physical core count ({0}) exceeds the {1}-core maximum for {2} {3}' -f $cores, $maxCores, $productLine, $roleLabel)
+                            }
+                            if ($ratioExceed) {
+                                $issues += ('virtual processor to physical core ratio ({0}:1) exceeds the supported 2:1 maximum ({1} logical processors, {2} physical cores)' -f $vRatio, $logical, $cores)
+                            }
+                            $evidence = ('{0}.' -f ($issues -join '; '))
+                        }
+                    }
+                }
+            }
+            'EDCA-PERF-016' {
+                if (-not $isExchangeServer) {
+                    $status = 'Skipped'
+                    $evidence = 'Exchange not detected on this server; TcpAckFrequency optimisation is not applicable.'
+                    break
+                }
+
+                $ackAdapters = $null
+                if (($server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $server.Exchange -and ($server.Exchange.PSObject.Properties.Name -contains 'TcpAckFrequencyAdapters')) {
+                    $ackAdapters = @($server.Exchange.TcpAckFrequencyAdapters)
+                }
+
+                if ($null -eq $ackAdapters) {
+                    $status = 'Unknown'
+                    $evidence = 'TcpAckFrequency adapter data is unavailable.'
+                    break
+                }
+
+                if ($ackAdapters.Count -eq 0) {
+                    $status = 'Unknown'
+                    $evidence = 'No IP-enabled network adapters were found; cannot evaluate TcpAckFrequency.'
+                    break
+                }
+
+                $badOne = @($ackAdapters | Where-Object { $null -ne $_.TcpAckFrequency -and [int]$_.TcpAckFrequency -eq 1 })
+                $badHigh = @($ackAdapters | Where-Object { $null -ne $_.TcpAckFrequency -and [int]$_.TcpAckFrequency -ge 3 })
+
+                if ($badHigh.Count -gt 0) {
+                    $status = 'Fail'
+                    $details = @($badHigh | ForEach-Object { ('{0} (TcpAckFrequency={1})' -f [string]$_.AdapterDescription, [int]$_.TcpAckFrequency) })
+                    $evidence = ('{0} of {1} IP-enabled adapter(s) have TcpAckFrequency set to {2} or above (delayed ACK extended beyond default): {3}.' -f $badHigh.Count, $ackAdapters.Count, 3, ($details -join '; '))
+                }
+                elseif ($badOne.Count -gt 0) {
+                    $status = 'Unknown'
+                    $details = @($badOne | ForEach-Object { ('{0} (TcpAckFrequency=1)' -f [string]$_.AdapterDescription) })
+                    $evidence = ('{0} of {1} IP-enabled adapter(s) have TcpAckFrequency=1 (delayed ACK disabled — increases ACK packet rate, CPU load, and network jitter): {2}.' -f $badOne.Count, $ackAdapters.Count, ($details -join '; '))
+                }
+                else {
+                    $status = 'Pass'
+                    $details = @($ackAdapters | ForEach-Object {
+                        $val = if ($null -eq $_.TcpAckFrequency) { 'not set' } else { 'TcpAckFrequency={0}' -f [int]$_.TcpAckFrequency }
+                        '{0} ({1})' -f [string]$_.AdapterDescription, $val
+                    })
+                    $evidence = ('TcpAckFrequency is at the default on all {0} IP-enabled adapter(s): {1}.' -f $ackAdapters.Count, ($details -join '; '))
+                }
+            }
+            'EDCA-PERF-017' {
+                if (-not $isExchangeServer) {
+                    $status = 'Skipped'
+                    $evidence = 'Exchange not detected on this server; VMware Introspection check is not applicable.'
+                    break
+                }
+
+                $introspection = $null
+                if (($server.PSObject.Properties.Name -contains 'OS') -and $null -ne $server.OS -and ($server.OS.PSObject.Properties.Name -contains 'VmwareIntrospection')) {
+                    $introspection = $server.OS.VmwareIntrospection
+                }
+
+                if ($null -eq $introspection) {
+                    $status = 'Skipped'
+                    $evidence = 'Server is not running on VMware; VMware Introspection drivers are not applicable.'
+                    break
+                }
+
+                $vsepfltRunning = $false
+                $vnetfltRunning = $false
+                if ($introspection.PSObject.Properties.Name -contains 'VsepfltRunning') { $vsepfltRunning = [bool]$introspection.VsepfltRunning }
+                if ($introspection.PSObject.Properties.Name -contains 'VnetfltRunning') { $vnetfltRunning = [bool]$introspection.VnetfltRunning }
+
+                if (-not $vsepfltRunning -and -not $vnetfltRunning) {
+                    $status = 'Pass'
+                    $evidence = 'VMware NSX file introspection (vsepflt) and network introspection (vnetflt) drivers are not running.'
+                }
+                else {
+                    $status = 'Fail'
+                    $running = @()
+                    if ($vsepfltRunning) { $running += 'vsepflt (file introspection)' }
+                    if ($vnetfltRunning) { $running += 'vnetflt (network introspection)' }
+                    $evidence = ('VMware NSX Introspection driver(s) are running and may introduce network latency: {0}.' -f ($running -join ', '))
+                }
+            }
+            'EDCA-SEC-010' {
                 $systemVolume = $null
                 if (($server.PSObject.Properties.Name -contains 'OS') -and ($server.OS.PSObject.Properties.Name -contains 'SystemVolume')) {
                     $systemVolume = $server.OS.SystemVolume
@@ -2354,7 +2949,7 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-016' {
+            'EDCA-SEC-009' {
                 $databaseStoragePaths = @()
                 if (($server.PSObject.Properties.Name -contains 'Exchange') -and ($server.Exchange.PSObject.Properties.Name -contains 'DatabaseStoragePaths')) {
                     $databaseStoragePaths = @($server.Exchange.DatabaseStoragePaths)
@@ -2415,7 +3010,7 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-015' {
+            'EDCA-SEC-008' {
                 $databaseStoragePaths = @()
                 if (($server.PSObject.Properties.Name -contains 'Exchange') -and ($server.Exchange.PSObject.Properties.Name -contains 'DatabaseStoragePaths')) {
                     $databaseStoragePaths = @($server.Exchange.DatabaseStoragePaths)
@@ -2426,62 +3021,78 @@ function Test-EDCAControl {
                     $evidence = 'Mailbox database/log storage paths unavailable (may not be a mailbox server role).'
                 }
                 else {
-                    $dbDrives = @()
+                    $volumes = @()
+                    if (($server.PSObject.Properties.Name -contains 'OS') -and ($server.OS.PSObject.Properties.Name -contains 'Volumes')) {
+                        $volumes = @($server.OS.Volumes | Where-Object {
+                                ($_.PSObject.Properties.Name -contains 'DeviceID') -and
+                                -not [string]::IsNullOrWhiteSpace([string]$_.DeviceID) -and
+                                ($_.PSObject.Properties.Name -contains 'Name') -and
+                                -not [string]::IsNullOrWhiteSpace([string]$_.Name)
+                            })
+                    }
+                    $getVolumeForPath = {
+                        param([string]$Path, [object[]]$Vols)
+                        $normPath = $Path.TrimEnd('\') + '\'
+                        $bestMatch = $null
+                        $bestLen = -1
+                        foreach ($vol in $Vols) {
+                            $mountPath = ([string]$vol.Name).TrimEnd('\') + '\'
+                            if ($normPath.StartsWith($mountPath, [System.StringComparison]::OrdinalIgnoreCase) -and $mountPath.Length -gt $bestLen) {
+                                $bestMatch = $vol
+                                $bestLen = $mountPath.Length
+                            }
+                        }
+                        return $bestMatch
+                    }
+                    $seenDeviceIds = @{}
+                    $matchedVolumeInfos = @()
                     foreach ($storagePath in $databaseStoragePaths) {
-                        $storagePathText = [string]$storagePath
-                        if ($storagePathText -match '^([A-Za-z]:)') {
-                            $dbDrives += $matches[1].ToUpperInvariant()
-                        }
-                    }
-
-                    $dbDrives = @($dbDrives | Sort-Object -Unique)
-                    if ($dbDrives.Count -eq 0) {
-                        $status = 'Unknown'
-                        $evidence = ('Could not resolve local drive letters from mailbox database/log paths: {0}' -f ($databaseStoragePaths -join ', '))
-                    }
-                    else {
-                        $volumes = @()
-                        if (($server.PSObject.Properties.Name -contains 'OS') -and ($server.OS.PSObject.Properties.Name -contains 'Volumes')) {
-                            $volumes = @($server.OS.Volumes)
-                        }
-
-                        $nonCompliant = @()
-                        $unknownDrives = @()
-                        foreach ($dbDrive in $dbDrives) {
-                            $matchedVolume = @($volumes | Where-Object { ([string]$_.DriveLetter).Equals($dbDrive, [System.StringComparison]::OrdinalIgnoreCase) } | Select-Object -First 1)
-                            if ($matchedVolume.Count -eq 0) {
-                                $unknownDrives += $dbDrive
-                                continue
+                        $vol = & $getVolumeForPath -Path ([string]$storagePath) -Vols $volumes
+                        if ($null -eq $vol) {
+                            $key = [string]$storagePath
+                            if (-not $seenDeviceIds.ContainsKey($key)) {
+                                $seenDeviceIds[$key] = $true
+                                $matchedVolumeInfos += [pscustomobject]@{ Path = [string]$storagePath; Vol = $null }
                             }
-
-                            $blockSize = $matchedVolume[0].BlockSize
-                            if ($null -eq $blockSize) {
-                                $unknownDrives += $dbDrive
-                                continue
-                            }
-
-                            if ([int64]$blockSize -ne 65536) {
-                                $nonCompliant += ('{0}:{1}' -f $dbDrive, [int64]$blockSize)
-                            }
-                        }
-
-                        if ($nonCompliant.Count -gt 0) {
-                            $status = 'Fail'
-                            $summary = 'Database/log volume block size should be 65536 (64KB).'
-                            $evidence = Format-EDCAEvidenceWithElements -Summary $summary -Elements $nonCompliant
-                        }
-                        elseif ($unknownDrives.Count -gt 0) {
-                            $status = 'Unknown'
-                            $evidence = ('Could not determine block size for drive(s): {0}' -f ($unknownDrives -join ', '))
                         }
                         else {
-                            $status = 'Pass'
-                            $evidence = ('Database/log drive block size validated at 65536 (64KB): {0}' -f ($dbDrives -join ', '))
+                            $devId = [string]$vol.DeviceID
+                            if (-not $seenDeviceIds.ContainsKey($devId)) {
+                                $seenDeviceIds[$devId] = $true
+                                $matchedVolumeInfos += [pscustomobject]@{ Path = [string]$vol.Name; Vol = $vol }
+                            }
                         }
+                    }
+                    $nonCompliant = @()
+                    $unknownPaths = @()
+                    foreach ($info in $matchedVolumeInfos) {
+                        if ($null -eq $info.Vol) { $unknownPaths += $info.Path; continue }
+                        $blockSize = $info.Vol.BlockSize
+                        if ($null -eq $blockSize) { $unknownPaths += $info.Path; continue }
+                        if ([int64]$blockSize -ne 65536) {
+                            $nonCompliant += ('{0}: block size {1}' -f $info.Path, [int64]$blockSize)
+                        }
+                    }
+                    if ($matchedVolumeInfos.Count -eq 0) {
+                        $status = 'Unknown'
+                        $evidence = ('Could not resolve storage paths to volumes: {0}' -f ($databaseStoragePaths -join ', '))
+                    }
+                    elseif ($nonCompliant.Count -gt 0) {
+                        $status = 'Fail'
+                        $evidence = Format-EDCAEvidenceWithElements -Summary 'Database/log volume block size should be 65536 (64KB).' -Elements $nonCompliant
+                    }
+                    elseif ($unknownPaths.Count -gt 0) {
+                        $status = 'Unknown'
+                        $evidence = ('Could not determine block size for path(s): {0}' -f ($unknownPaths -join ', '))
+                    }
+                    else {
+                        $volPaths = @($matchedVolumeInfos | ForEach-Object { $_.Path })
+                        $status = 'Pass'
+                        $evidence = ('Database/log volume block size validated at 65536 (64KB): {0}' -f ($volPaths -join ', '))
                     }
                 }
             }
-            'EX-BP-049' {
+            'EDCA-IAC-004' {
                 if (($server.PSObject.Properties.Name -contains 'Exchange') -and ($server.Exchange.PSObject.Properties.Name -contains 'OAuth2ClientProfileEnabled') -and $null -ne $server.Exchange.OAuth2ClientProfileEnabled) {
                     $enabled = [bool]$server.Exchange.OAuth2ClientProfileEnabled
                     $status = if ($enabled) { 'Pass' } else { 'Fail' }
@@ -2492,7 +3103,7 @@ function Test-EDCAControl {
                     $evidence = 'Modern Authentication data unavailable.'
                 }
             }
-            'EX-BP-052' {
+            'EDCA-SEC-021' {
                 $pop = $null
                 $imap = $null
                 if (($server.PSObject.Properties.Name -contains 'Exchange') -and ($server.Exchange.PSObject.Properties.Name -contains 'Pop3ServiceStatus')) {
@@ -2512,7 +3123,7 @@ function Test-EDCAControl {
                     $evidence = if ($status -eq 'Pass') { 'Compliant — POP3 and IMAP4 services are not running.' } else { ('POP3: {0}; IMAP4: {1}' -f $pop, $imap) }
                 }
             }
-            'EX-BP-062' {
+            'EDCA-TLS-001' {
                 $connectors = @()
                 if (($server.PSObject.Properties.Name -contains 'Exchange') -and ($server.Exchange.PSObject.Properties.Name -contains 'ReceiveConnectors')) {
                     $connectors = @($server.Exchange.ReceiveConnectors)
@@ -2550,7 +3161,7 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-001' {
+            'EDCA-SEC-001' {
                 if (($server.PSObject.Properties.Name -contains 'Exchange') -and ($server.Exchange.PSObject.Properties.Name -contains 'MapiHttpEnabled') -and $null -ne $server.Exchange.MapiHttpEnabled) {
                     $enabled = [bool]$server.Exchange.MapiHttpEnabled
                     $status = if ($enabled) { 'Pass' } else { 'Fail' }
@@ -2561,29 +3172,57 @@ function Test-EDCAControl {
                     $evidence = 'MAPI/HTTP baseline data unavailable.'
                 }
             }
-            'EX-BP-006' {
+            'EDCA-GOV-001' {
                 if (($server.PSObject.Properties.Name -contains 'Exchange') -and ($server.Exchange.PSObject.Properties.Name -contains 'SharedMailboxTypeMismatchCount') -and $null -ne $server.Exchange.SharedMailboxTypeMismatchCount) {
                     $count = [int]$server.Exchange.SharedMailboxTypeMismatchCount
                     $status = if ($count -eq 0) { 'Pass' } else { 'Fail' }
-                    $evidence = if ($count -eq 0) { 'Compliant — no shared-mailbox typing mismatches detected.' } else { ('Shared-mailbox typing mismatches: {0}' -f $count) }
+                    $evidence = if ($count -eq 0) { 'Compliant — no non-user mailboxes with enabled accounts detected.' } else { ('Non-user mailboxes with enabled accounts: {0}' -f $count) }
                 }
                 else {
                     $status = 'Unknown'
                     $evidence = 'Mailbox type consistency data unavailable.'
                 }
             }
-            'EX-BP-051' {
+            'EDCA-SEC-020' {
                 if (($server.PSObject.Properties.Name -contains 'Exchange') -and ($server.Exchange.PSObject.Properties.Name -contains 'OwaDownloadDomainsConfigured') -and $null -ne $server.Exchange.OwaDownloadDomainsConfigured) {
                     $configured = [bool]$server.Exchange.OwaDownloadDomainsConfigured
-                    $status = if ($configured) { 'Pass' } else { 'Fail' }
-                    $evidence = ('OWA Download Domains are {0}.' -f (Get-EDCAStateDescriptor -Value $configured -Expectation 'Configured'))
+                    if (-not $configured) {
+                        $status = 'Fail'
+                        $evidence = 'OWA Download Domains are not configured.'
+                    }
+                    else {
+                        # When HMA is active (EvoSTS IsDefaultAuthorizationEndpoint enabled), the
+                        # OAuthIdentityCacheFixForDownloadDomains setting override is also required.
+                        $hmaActive = ($server.Exchange.PSObject.Properties.Name -contains 'HybridApplication') -and
+                        $null -ne $server.Exchange.HybridApplication -and
+                        ($server.Exchange.HybridApplication.PSObject.Properties.Name -contains 'EvoStsIsDefaultAuthorizationEndpoint') -and
+                        [bool]$server.Exchange.HybridApplication.EvoStsIsDefaultAuthorizationEndpoint -eq $true
+                        if (-not $hmaActive) {
+                            $status = 'Pass'
+                            $evidence = 'OWA Download Domains are configured.'
+                        }
+                        else {
+                            $overrideConfigured = $null
+                            if ($server.Exchange.PSObject.Properties.Name -contains 'OAuthHmaDownloadDomainOverrideConfigured') {
+                                $overrideConfigured = $server.Exchange.OAuthHmaDownloadDomainOverrideConfigured
+                            }
+                            if ($null -eq $overrideConfigured -or [bool]$overrideConfigured -eq $false) {
+                                $status = 'Fail'
+                                $evidence = 'OWA Download Domains are configured, but the OWA HMA Download Domain Support setting override (OAuthIdentityCacheFixForDownloadDomains) is missing. This override is required when Hybrid Modern Authentication is active.'
+                            }
+                            else {
+                                $status = 'Pass'
+                                $evidence = 'OWA Download Domains are configured and the OWA HMA Download Domain Support setting override is in place.'
+                            }
+                        }
+                    }
                 }
                 else {
                     $status = 'Unknown'
                     $evidence = 'OWA Download Domains data unavailable.'
                 }
             }
-            'EX-BP-055' {
+            'EDCA-SEC-023' {
                 $smb1Value = $null
                 if (($server.PSObject.Properties.Name -contains 'OS') -and ($server.OS.PSObject.Properties.Name -contains 'CisPolicy') -and $null -ne $server.OS.CisPolicy -and ($server.OS.CisPolicy.PSObject.Properties.Name -contains 'Smb1Value')) {
                     $smb1Value = $server.OS.CisPolicy.Smb1Value
@@ -2598,7 +3237,7 @@ function Test-EDCAControl {
                     $evidence = if ($status -eq 'Pass') { 'Compliant — SMB1 is disabled (LanmanServer value = 0).' } else { ('LanmanServer SMB1 value: {0} (expected 0 to disable SMB1).' -f [int]$smb1Value) }
                 }
             }
-            'EX-BP-061' {
+            'EDCA-SEC-025' {
                 $fwAllEnabled = $null
                 $fwItems = @()
                 if (($server.PSObject.Properties.Name -contains 'OS') -and ($server.OS.PSObject.Properties.Name -contains 'CisPolicy') -and $null -ne $server.OS.CisPolicy) {
@@ -2629,7 +3268,7 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-046' {
+            'EDCA-SEC-018' {
                 $llmnrValue = $null
                 if (($server.PSObject.Properties.Name -contains 'OS') -and ($server.OS.PSObject.Properties.Name -contains 'CisPolicy') -and $null -ne $server.OS.CisPolicy -and ($server.OS.CisPolicy.PSObject.Properties.Name -contains 'LlmnrEnableMulticast')) {
                     $llmnrValue = $server.OS.CisPolicy.LlmnrEnableMulticast
@@ -2644,7 +3283,7 @@ function Test-EDCAControl {
                     $evidence = if ($status -eq 'Pass') { 'Compliant — LLMNR multicast is disabled.' } else { ('DNSClient EnableMulticast value: {0} (expected 0 to disable LLMNR).' -f [int]$llmnrValue) }
                 }
             }
-            'EX-BP-047' {
+            'EDCA-IAC-003' {
                 $lmLevel = $null
                 $clientSec = $null
                 $serverSec = $null
@@ -2695,7 +3334,7 @@ function Test-EDCAControl {
                     $evidence = Format-EDCAEvidenceWithElements -Summary $summary -Elements $failedSettings
                 }
             }
-            'EX-BP-058' {
+            'EDCA-DATA-007' {
                 $tls13Support = Test-EDCAIsTls13SupportedOs -Server $server
                 if (-not $tls13Support.IsKnown) {
                     $status = 'Unknown'
@@ -2728,7 +3367,7 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-065' {
+            'EDCA-MON-002' {
                 $osInfo = Get-EDCAOsBuildInfo -Server $server
                 if (-not $osInfo.IsKnown) {
                     $status = 'Unknown'
@@ -2745,8 +3384,8 @@ function Test-EDCAControl {
                     }
 
                     if ($null -eq $enabled) {
-                        $status = 'Unknown'
-                        $evidence = ('Script block logging policy value unavailable. {0}' -f $osInfo.Evidence)
+                        $status = 'Fail'
+                        $evidence = ('Script block logging policy registry value is absent — EnableScriptBlockLogging is not configured. {0}' -f $osInfo.Evidence)
                     }
                     else {
                         $status = if ([bool]$enabled) { 'Pass' } else { 'Fail' }
@@ -2756,7 +3395,7 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-067' {
+            'EDCA-IAC-006' {
                 $osInfo = Get-EDCAOsBuildInfo -Server $server
                 if (-not $osInfo.IsKnown) {
                     $status = 'Unknown'
@@ -2782,7 +3421,7 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-066' {
+            'EDCA-IAC-005' {
                 $osInfo = Get-EDCAOsBuildInfo -Server $server
                 if (-not $osInfo.IsKnown) {
                     $status = 'Unknown'
@@ -2810,7 +3449,7 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-064' {
+            'EDCA-SEC-026' {
                 $osInfo = Get-EDCAOsBuildInfo -Server $server
                 if (-not $osInfo.IsKnown) {
                     $status = 'Unknown'
@@ -2848,7 +3487,7 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-037' {
+            'EDCA-SEC-013' {
                 $osInfo = Get-EDCAOsBuildInfo -Server $server
                 if (-not $osInfo.IsKnown) {
                     $status = 'Unknown'
@@ -2876,7 +3515,7 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-034' {
+            'EDCA-TLS-026' {
                 $domainResults = @()
                 if (($CollectionData.PSObject.Properties.Name -contains 'EmailAuthentication') -and $null -ne $CollectionData.EmailAuthentication -and ($CollectionData.EmailAuthentication.PSObject.Properties.Name -contains 'DomainResults')) {
                     $domainResults = @($CollectionData.EmailAuthentication.DomainResults)
@@ -2908,7 +3547,7 @@ function Test-EDCAControl {
                     $evidence = ('SPF domains evaluated: {0}; fail: {1}; unknown: {2}; failed domains: {3}' -f $domainResults.Count, $failed.Count, $unknown.Count, ($failedDomains -join ', '))
                 }
             }
-            'EX-BP-031' {
+            'EDCA-TLS-023' {
                 $domainResults = @()
                 if (($CollectionData.PSObject.Properties.Name -contains 'EmailAuthentication') -and $null -ne $CollectionData.EmailAuthentication -and ($CollectionData.EmailAuthentication.PSObject.Properties.Name -contains 'DomainResults')) {
                     $domainResults = @($CollectionData.EmailAuthentication.DomainResults)
@@ -2943,7 +3582,7 @@ function Test-EDCAControl {
                     $evidence = $evidenceLines -join "`n"
                 }
             }
-            'EX-BP-048' {
+            'EDCA-SEC-019' {
                 $defenderAvailable = $false
                 $rtpEnabled = $null
                 if (($server.PSObject.Properties.Name -contains 'OS') -and ($server.OS.PSObject.Properties.Name -contains 'CisPolicy') -and $null -ne $server.OS.CisPolicy) {
@@ -2995,15 +3634,21 @@ function Test-EDCAControl {
 
                         $expectedDirs = [System.Collections.Generic.List[string]]@(
                             "$installPath\Mailbox",
-                            "$installPath\FrontEnd",
-                            "$installPath\ClientAccess",
-                            "$installPath\Logging",
-                            "$installPath\TransportRoles",
+                            "$installPath\ClientAccess\OAB",
                             "$installPath\FIP-FS",
-                            "$installPath\Working"
+                            "$installPath\GroupMetrics",
+                            "$installPath\Logging",
+                            "$installPath\TransportRoles\Data\Queue",
+                            "$installPath\TransportRoles\Data\SenderReputation",
+                            "$installPath\TransportRoles\Data\Temp",
+                            "$installPath\TransportRoles\Logs",
+                            "$installPath\Working\OleConverter"
                         )
                         if ($productLine -eq 'Exchange2016') {
-                            $expectedDirs.Add("$installPath\UnifiedMessaging")
+                            $expectedDirs.Add("$installPath\UnifiedMessaging\Grammars")
+                            $expectedDirs.Add("$installPath\UnifiedMessaging\Prompts")
+                            $expectedDirs.Add("$installPath\UnifiedMessaging\Temp")
+                            $expectedDirs.Add("$installPath\UnifiedMessaging\Voicemail")
                         }
 
                         $expectedProcesses = @(
@@ -3058,7 +3703,7 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-002' {
+            'EDCA-SEC-002' {
                 $netRelease = $null
                 if (($server.PSObject.Properties.Name -contains 'OS') -and $null -ne $server.OS -and ($server.OS.PSObject.Properties.Name -contains 'NetFrameworkRelease')) {
                     $netRelease = $server.OS.NetFrameworkRelease
@@ -3096,7 +3741,7 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-024' {
+            'EDCA-SEC-011' {
                 if (-not $isExchangeServer) {
                     $status = 'Skipped'
                     $evidence = 'Exchange not detected on this server; RPC minimum connection timeout baseline is not applicable.'
@@ -3121,7 +3766,7 @@ function Test-EDCAControl {
                     $evidence = 'Compliant — RPC minimum connection timeout is configured.'
                 }
             }
-            'EX-BP-027' {
+            'EDCA-PERF-010' {
                 if (-not $isExchangeServer) {
                     $status = 'Skipped'
                     $evidence = 'Exchange not detected on this server; TCP/IP Exchange baseline is not applicable.'
@@ -3146,7 +3791,7 @@ function Test-EDCAControl {
                     $evidence = ('TCP KeepAliveTime is {0}, within the recommended 900000-1800000 ms range.' -f [int]$tcpKeepAlive)
                 }
             }
-            'EX-BP-020' {
+            'EDCA-PERF-005' {
                 if (-not $isExchangeServer) {
                     $status = 'Skipped'
                     $evidence = 'Exchange not detected on this server; NUMA baseline is not applicable.'
@@ -3159,8 +3804,8 @@ function Test-EDCAControl {
                 }
 
                 if ($null -eq $numaGroupSizeOptimization) {
-                    $status = 'Pass'
-                    $evidence = 'NUMA group size optimization registry value is not configured; control treated as not applicable.'
+                    $status = 'Skipped'
+                    $evidence = 'NUMA group size optimization registry value is not configured; no NUMA optimization is in effect, so the baseline check is not applicable.'
                 }
                 elseif ([int]$numaGroupSizeOptimization -eq 0) {
                     $status = 'Pass'
@@ -3171,7 +3816,7 @@ function Test-EDCAControl {
                     $evidence = ('NUMA group size optimization is set to {0}. Expected baseline value is 0.' -f [int]$numaGroupSizeOptimization)
                 }
             }
-            'EX-BP-022' {
+            'EDCA-PERF-006' {
                 if (-not $isExchangeServer) {
                     $status = 'Skipped'
                     $evidence = 'Exchange not detected on this server; processor baseline is not applicable.'
@@ -3200,7 +3845,7 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-045' {
+            'EDCA-SEC-017' {
                 if (-not $isExchangeServer) {
                     $status = 'Skipped'
                     $evidence = 'Exchange not detected on this server; IPv6 Exchange baseline is not applicable.'
@@ -3229,7 +3874,7 @@ function Test-EDCAControl {
                     $evidence = ('IPv6 disabled-components value is {0}. Partial/custom IPv6 disablement should be reviewed.' -f [int]$ipv6DisabledComponents)
                 }
             }
-            'EX-BP-026' {
+            'EDCA-PERF-009' {
                 if (-not $isExchangeServer) {
                     $status = 'Skipped'
                     $evidence = 'Exchange not detected on this server; Sleepy NIC baseline is not applicable.'
@@ -3266,7 +3911,7 @@ function Test-EDCAControl {
                     $evidence = ('Sleepy NIC baseline validated on {0} adapter(s).' -f [int]$sleepyNic.AdapterCount)
                 }
             }
-            'EX-BP-019' {
+            'EDCA-PERF-004' {
                 if (-not $isExchangeServer) {
                     $status = 'Skipped'
                     $evidence = 'Exchange not detected on this server; NodeRunner baseline is not applicable.'
@@ -3307,7 +3952,7 @@ function Test-EDCAControl {
                     $evidence = ('NodeRunner memoryLimitMegabytes has an invalid value: {0}' -f [int]$nodeRunner.MemoryLimitMB)
                 }
             }
-            'EX-BP-013' {
+            'EDCA-SEC-007' {
                 if (-not $isExchangeServer) {
                     $status = 'Skipped'
                     $evidence = 'Exchange not detected on this server; Visual C++ Exchange baseline is not applicable.'
@@ -3339,7 +3984,7 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-054' {
+            'EDCA-DATA-004' {
                 if (-not $isExchangeServer) {
                     $status = 'Skipped'
                     $evidence = 'Exchange not detected on this server; serialized data signing baseline is not applicable.'
@@ -3361,7 +4006,7 @@ function Test-EDCAControl {
                     $evidence = ('SerializedDataSigning is {0}.' -f $signingState)
                 }
             }
-            'EX-BP-011' {
+            'EDCA-SEC-006' {
                 if (-not $isExchangeServer) {
                     $status = 'Skipped'
                     $evidence = 'Exchange not detected on this server; setting override baseline is not applicable.'
@@ -3387,6 +4032,7 @@ function Test-EDCAControl {
                     if ($settingOverrides.PSObject.Properties.Name -contains 'Names' -and $null -ne $settingOverrides.Names) {
                         $overrideNames = @($settingOverrides.Names | ForEach-Object { [string]$_ })
                     }
+                    $rawOverrideCount = $overrideNames.Count
 
                     # EnableSigningVerification is set by Exchange when serialized data signing is enabled; exclude it from flagging.
                     $signingEnabled = $false
@@ -3421,7 +4067,7 @@ function Test-EDCAControl {
 
                     if ($overrideCount -eq 0) {
                         $status = 'Pass'
-                        $evidence = 'No Exchange setting overrides detected.'
+                        $evidence = if ($rawOverrideCount -eq 0) { 'No Exchange setting overrides detected.' } else { ('{0} setting override(s) detected; all within expected baseline.' -f $rawOverrideCount) }
                     }
                     else {
                         $status = 'Unknown'
@@ -3447,7 +4093,7 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-044' {
+            'EDCA-DATA-003' {
                 if (-not $isExchangeServer) {
                     $status = 'Skipped'
                     $evidence = 'Exchange not detected on this server; internal transport certificate baseline is not applicable.'
@@ -3483,10 +4129,16 @@ function Test-EDCAControl {
                         $status = 'Pass'
                     }
 
-                    $evidence = if ($status -eq 'Pass') { ('Compliant — internal transport certificate valid; expires {0} ({1} days remaining).' -f [string]$internalTransportCertificate.NotAfter, [string]$daysRemaining) } else { ('Internal transport certificate {0}; expires: {1}; remaining days: {2}' -f [string]$internalTransportCertificate.Thumbprint, [string]$internalTransportCertificate.NotAfter, [string]$daysRemaining) }
+                    if ($status -eq 'Pass') {
+                        $evidence = ('Compliant — internal transport certificate valid; expires {0} ({1} days remaining).' -f [string]$internalTransportCertificate.NotAfter, [string]$daysRemaining)
+                    }
+                    else {
+                        $expiredLabel = if ([bool]$internalTransportCertificate.IsExpired) { 'EXPIRED' } elseif ($null -ne $daysRemaining -and $daysRemaining -lt 30) { 'expiring within 30 days' } else { 'expiring soon' }
+                        $evidence = "Internal transport certificate $expiredLabel`n  Thumbprint  : $([string]$internalTransportCertificate.Thumbprint)`n  Expiry      : $([string]$internalTransportCertificate.NotAfter)`n  Days left   : $(if ($null -ne $daysRemaining) { $daysRemaining } else { 'unknown' })"
+                    }
                 }
             }
-            'EX-BP-059' {
+            'EDCA-DATA-008' {
                 if (-not $isExchangeServer) {
                     $status = 'Skipped'
                     $evidence = 'Exchange not detected on this server; trusted root certificate baseline is not applicable.'
@@ -3515,7 +4167,7 @@ function Test-EDCAControl {
                     $evidence = ('DisableRootAutoUpdate has an unexpected value: {0}' -f [int]$disableRootAutoUpdate)
                 }
             }
-            'EX-BP-038' {
+            'EDCA-GOV-003' {
                 if (-not $isExchangeServer) {
                     $status = 'Skipped'
                     $evidence = 'Exchange not detected on this server; EEMS baseline is not applicable.'
@@ -3553,7 +4205,7 @@ function Test-EDCAControl {
                     $evidence = if ($status -eq 'Pass') { 'Compliant — EEMS service is running, automatic start, mitigations enabled.' } else { ('EEMS service state: status={0}; start mode={1}; mitigations enabled={2}' -f [string]$eems.Status, [string]$eems.StartMode, [string]$mitigationsEnabled) }
                 }
             }
-            'EX-BP-035' {
+            'EDCA-SEC-012' {
                 if (-not $isExchangeServer) {
                     $status = 'Skipped'
                     $evidence = 'Exchange not detected on this server; AMSI Exchange baseline is not applicable.'
@@ -3598,7 +4250,7 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-060' {
+            'EDCA-SEC-024' {
                 if (-not $isExchangeServer) {
                     $status = 'Skipped'
                     $evidence = 'Exchange not detected on this server; vulnerability baseline is not applicable.'
@@ -3625,7 +4277,7 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-042' {
+            'EDCA-SEC-015' {
                 if (-not $isExchangeServer) {
                     $status = 'Skipped'
                     $evidence = 'Exchange not detected on this server; FIP-FS baseline is not applicable.'
@@ -3655,7 +4307,7 @@ function Test-EDCAControl {
                     $evidence = 'FIP-FS engine folders do not include known problematic version markers.'
                 }
             }
-            'EX-BP-043' {
+            'EDCA-SEC-016' {
                 if (-not $isExchangeServer) {
                     $status = 'Skipped'
                     $evidence = 'Exchange not detected on this server; IIS web.config baseline is not applicable.'
@@ -3699,7 +4351,7 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-039' {
+            'EDCA-IAC-002' {
                 if (-not $isExchangeServer) {
                     $status = 'Skipped'
                     $evidence = 'Exchange not detected on this server; computer membership baseline is not applicable.'
@@ -3736,7 +4388,7 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-012' {
+            'EDCA-RES-002' {
                 if (-not $isExchangeServer) {
                     $status = 'Skipped'
                     $evidence = 'Exchange not detected on this server; UnifiedContent cleanup baseline is not applicable.'
@@ -3765,7 +4417,7 @@ function Test-EDCAControl {
                     $evidence = [string]$unifiedContentCleanup.Details
                 }
             }
-            'EX-BP-063' {
+            'EDCA-TLS-002' {
                 if (-not $isExchangeServer) {
                     $status = 'Unknown'
                     $evidence = 'Exchange not detected on this server; transport retry baseline is not applicable.'
@@ -3806,7 +4458,7 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-080' {
+            'EDCA-MON-004' {
                 if (-not $isExchangeServer) {
                     $status = 'Unknown'
                     $evidence = 'Exchange not detected on this server; connectivity logging control is not applicable.'
@@ -3828,7 +4480,7 @@ function Test-EDCAControl {
                     $evidence = ('ConnectivityLogEnabled is {0}.' -f (Get-EDCAStateDescriptor -Value $connectivityLogEnabled -Expectation 'Enabled'))
                 }
             }
-            'EX-BP-081' {
+            'EDCA-MON-005' {
                 if (-not $isExchangeServer) {
                     $status = 'Unknown'
                     $evidence = 'Exchange not detected on this server; message tracking logging control is not applicable.'
@@ -3850,7 +4502,7 @@ function Test-EDCAControl {
                     $evidence = ('MessageTrackingLogEnabled is {0}.' -f (Get-EDCAStateDescriptor -Value $messageTrackingLogEnabled -Expectation 'Enabled'))
                 }
             }
-            'EX-BP-082' {
+            'EDCA-MON-006' {
                 if (-not $isExchangeServer) {
                     $status = 'Unknown'
                     $evidence = 'Exchange not detected on this server; message subject logging control is not applicable.'
@@ -3869,10 +4521,10 @@ function Test-EDCAControl {
                 else {
                     $messageTrackingLogSubjectLoggingEnabled = [bool]$transportRetryConfig.MessageTrackingLogSubjectLoggingEnabled
                     $status = if (-not $messageTrackingLogSubjectLoggingEnabled) { 'Pass' } else { 'Fail' }
-                    $evidence = ('MessageTrackingLogSubjectLoggingEnabled is {0}.' -f (Get-EDCAStateDescriptor -Value (-not $messageTrackingLogSubjectLoggingEnabled) -Expectation 'Disabled'))
+                    $evidence = ('MessageTrackingLogSubjectLoggingEnabled is {0}.' -f (Get-EDCAStateDescriptor -Value $messageTrackingLogSubjectLoggingEnabled -Expectation 'Disabled'))
                 }
             }
-            'EX-BP-014' {
+            'EDCA-PERF-001' {
                 if (-not $isExchangeServer) {
                     $status = 'Unknown'
                     $evidence = 'Exchange not detected on this server; CTS processor affinity baseline is not applicable.'
@@ -3901,7 +4553,7 @@ function Test-EDCAControl {
                     $evidence = ('CtsProcessorAffinityPercentage has an invalid value: {0}' -f [int]$ctsProcessorAffinityPercentage)
                 }
             }
-            'EX-BP-068' {
+            'EDCA-DATA-009' {
                 $hsts = $null
                 if (($server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $server.Exchange -and ($server.Exchange.PSObject.Properties.Name -contains 'Hsts')) {
                     $hsts = $server.Exchange.Hsts
@@ -3960,7 +4612,7 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-070' {
+            'EDCA-DATA-010' {
                 $tlsHardening = $null
                 if (($server.PSObject.Properties.Name -contains 'OS') -and $null -ne $server.OS -and ($server.OS.PSObject.Properties.Name -contains 'TlsHardening')) {
                     $tlsHardening = $server.OS.TlsHardening
@@ -3998,7 +4650,7 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-089' {
+            'EDCA-DATA-011' {
                 $tlsHardening = $null
                 if (($server.PSObject.Properties.Name -contains 'OS') -and $null -ne $server.OS -and ($server.OS.PSObject.Properties.Name -contains 'TlsHardening')) {
                     $tlsHardening = $server.OS.TlsHardening
@@ -4030,7 +4682,7 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-090' {
+            'EDCA-DATA-012' {
                 $tlsHardening = $null
                 if (($server.PSObject.Properties.Name -contains 'OS') -and $null -ne $server.OS -and ($server.OS.PSObject.Properties.Name -contains 'TlsHardening')) {
                     $tlsHardening = $server.OS.TlsHardening
@@ -4062,7 +4714,7 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-091' {
+            'EDCA-DATA-013' {
                 $tlsHardening = $null
                 if (($server.PSObject.Properties.Name -contains 'OS') -and $null -ne $server.OS -and ($server.OS.PSObject.Properties.Name -contains 'TlsHardening')) {
                     $tlsHardening = $server.OS.TlsHardening
@@ -4094,7 +4746,7 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-071' {
+            'EDCA-SEC-027' {
                 $iisModules = $null
                 if (($server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $server.Exchange -and ($server.Exchange.PSObject.Properties.Name -contains 'IisModules')) {
                     $iisModules = $server.Exchange.IisModules
@@ -4141,7 +4793,7 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-072' {
+            'EDCA-MON-003' {
                 $pendingReboot = $null
                 if (($server.PSObject.Properties.Name -contains 'OS') -and $null -ne $server.OS -and ($server.OS.PSObject.Properties.Name -contains 'PendingReboot')) {
                     $pendingReboot = $server.OS.PendingReboot
@@ -4164,7 +4816,7 @@ function Test-EDCAControl {
                     $evidence = 'No pending reboot indicators detected.'
                 }
             }
-            'EX-BP-073' {
+            'EDCA-SEC-028' {
                 $dynamicMemory = $null
                 if (($server.PSObject.Properties.Name -contains 'OS') -and $null -ne $server.OS -and ($server.OS.PSObject.Properties.Name -contains 'DynamicMemory')) {
                     $dynamicMemory = $server.OS.DynamicMemory
@@ -4191,7 +4843,7 @@ function Test-EDCAControl {
                     $evidence = [string]$dynamicMemory.Details
                 }
             }
-            'EX-BP-074' {
+            'EDCA-SEC-029' {
                 $msmqFeature = $null
                 if (($server.PSObject.Properties.Name -contains 'OS') -and $null -ne $server.OS -and ($server.OS.PSObject.Properties.Name -contains 'MsmqFeature')) {
                     $msmqFeature = $server.OS.MsmqFeature
@@ -4214,7 +4866,7 @@ function Test-EDCAControl {
                     $evidence = 'MSMQ-related Windows features are not installed.'
                 }
             }
-            'EX-BP-075' {
+            'EDCA-SEC-030' {
                 $disableAsyncNotification = $null
                 if (($server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $server.Exchange -and ($server.Exchange.PSObject.Properties.Name -contains 'DisableAsyncNotification')) {
                     $disableAsyncNotification = $server.Exchange.DisableAsyncNotification
@@ -4233,7 +4885,7 @@ function Test-EDCAControl {
                     $evidence = ('DisableAsyncNotification is set to {0}. This is typically temporary and should be reset to 0 after workaround usage.' -f [int]$disableAsyncNotification)
                 }
             }
-            'EX-BP-076' {
+            'EDCA-SEC-031' {
                 $tokenCacheModuleLoaded = $null
                 if (($server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $server.Exchange -and ($server.Exchange.PSObject.Properties.Name -contains 'TokenCacheModuleLoaded')) {
                     $tokenCacheModuleLoaded = $server.Exchange.TokenCacheModuleLoaded
@@ -4252,7 +4904,7 @@ function Test-EDCAControl {
                     $evidence = 'TokenCacheModule is not loaded. Review CVE-2023-21709 / CVE-2023-36434 mitigation and rollback guidance before changing state.'
                 }
             }
-            'EX-BP-079' {
+            'EDCA-IAC-007' {
                 $alternateServiceAccount = $null
                 if (($server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $server.Exchange -and ($server.Exchange.PSObject.Properties.Name -contains 'AlternateServiceAccount')) {
                     $alternateServiceAccount = $server.Exchange.AlternateServiceAccount
@@ -4367,7 +5019,7 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-092' {
+            'EDCA-RES-004' {
                 $databases = @()
                 if (($server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $server.Exchange -and
                     ($server.Exchange.PSObject.Properties.Name -contains 'MailboxDatabases')) {
@@ -4391,7 +5043,7 @@ function Test-EDCAControl {
                         })
                 }
             }
-            'EX-BP-093' {
+            'EDCA-RES-005' {
                 $databases = @()
                 if (($server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $server.Exchange -and
                     ($server.Exchange.PSObject.Properties.Name -contains 'MailboxDatabases')) {
@@ -4415,7 +5067,7 @@ function Test-EDCAControl {
                         })
                 }
             }
-            'EX-BP-094' {
+            'EDCA-RES-006' {
                 $databases = @()
                 if (($server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $server.Exchange -and
                     ($server.Exchange.PSObject.Properties.Name -contains 'MailboxDatabases')) {
@@ -4441,7 +5093,7 @@ function Test-EDCAControl {
                         })
                 }
             }
-            'EX-BP-101' {
+            'EDCA-MON-007' {
                 $connectors = @()
                 if (($server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $server.Exchange -and
                     ($server.Exchange.PSObject.Properties.Name -contains 'ReceiveConnectors')) {
@@ -4464,7 +5116,7 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-105' {
+            'EDCA-GOV-005' {
                 $dbs = @()
                 if (($server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $server.Exchange -and
                     ($server.Exchange.PSObject.Properties.Name -contains 'MailboxDatabases')) {
@@ -4489,7 +5141,7 @@ function Test-EDCAControl {
                         })
                 }
             }
-            'EX-BP-106' {
+            'EDCA-GOV-006' {
                 $dbs = @()
                 if (($server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $server.Exchange -and
                     ($server.Exchange.PSObject.Properties.Name -contains 'MailboxDatabases')) {
@@ -4514,7 +5166,7 @@ function Test-EDCAControl {
                         })
                 }
             }
-            'EX-BP-107' {
+            'EDCA-GOV-007' {
                 $dbs = @()
                 if (($server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $server.Exchange -and
                     ($server.Exchange.PSObject.Properties.Name -contains 'MailboxDatabases')) {
@@ -4539,7 +5191,7 @@ function Test-EDCAControl {
                         })
                 }
             }
-            'EX-BP-108' {
+            'EDCA-SEC-033' {
                 $trc = $null
                 if (($server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $server.Exchange -and
                     ($server.Exchange.PSObject.Properties.Name -contains 'TransportRetryConfig')) {
@@ -4555,7 +5207,7 @@ function Test-EDCAControl {
                     $evidence = if ([string]::IsNullOrWhiteSpace($path)) { 'Compliant — PickupDirectoryPath is not set on this server.' } else { ('PickupDirectoryPath is configured on this server: {0}' -f $path) }
                 }
             }
-            'EX-BP-110' {
+            'EDCA-TLS-013' {
                 $allConnectors = @()
                 if (($server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $server.Exchange -and
                     ($server.Exchange.PSObject.Properties.Name -contains 'ReceiveConnectors')) {
@@ -4594,7 +5246,7 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-112' {
+            'EDCA-DATA-014' {
                 $val = $null
                 if (($server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $server.Exchange -and
                     ($server.Exchange.PSObject.Properties.Name -contains 'OwaSmimeEnabled')) {
@@ -4609,7 +5261,7 @@ function Test-EDCAControl {
                     $evidence = if ([bool]$val) { 'Compliant — S/MIME is enabled on at least one OWA virtual directory on this server.' } else { 'S/MIME is not enabled on any OWA virtual directory on this server.' }
                 }
             }
-            'EX-BP-113' {
+            'EDCA-DATA-015' {
                 $rpc = $null
                 if (($server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $server.Exchange -and
                     ($server.Exchange.PSObject.Properties.Name -contains 'RpcClientAccessConfig')) {
@@ -4631,7 +5283,7 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-136' {
+            'EDCA-TLS-015' {
                 $connectors = @()
                 if (($server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $server.Exchange -and
                     ($server.Exchange.PSObject.Properties.Name -contains 'ReceiveConnectors')) {
@@ -4658,7 +5310,7 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-137' {
+            'EDCA-TLS-016' {
                 $trc = $null
                 if (($server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $server.Exchange -and
                     ($server.Exchange.PSObject.Properties.Name -contains 'TransportRetryConfig')) {
@@ -4684,7 +5336,7 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-138' {
+            'EDCA-TLS-017' {
                 $trc = $null
                 if (($server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $server.Exchange -and
                     ($server.Exchange.PSObject.Properties.Name -contains 'TransportRetryConfig')) {
@@ -4706,7 +5358,7 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-125' {
+            'EDCA-IAC-013' {
                 $owaAuth = @()
                 if (($server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $server.Exchange -and
                     ($server.Exchange.PSObject.Properties.Name -contains 'OwaFormsAuthentication')) {
@@ -4744,7 +5396,7 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-127' {
+            'EDCA-RES-007' {
                 $databases = @()
                 if (($server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $server.Exchange -and
                     ($server.Exchange.PSObject.Properties.Name -contains 'MailboxDatabases')) {
@@ -4774,7 +5426,139 @@ function Test-EDCAControl {
                         })
                 }
             }
-            'EX-BP-134' {
+            'EDCA-GOV-008' {
+                $errReporting = $null
+                if (($server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $server.Exchange -and
+                    ($server.Exchange.PSObject.Properties.Name -contains 'ErrorReportingEnabled') -and
+                    $null -ne $server.Exchange.ErrorReportingEnabled) {
+                    $errReporting = [bool]$server.Exchange.ErrorReportingEnabled
+                }
+                if ($null -eq $errReporting) {
+                    $status = 'Unknown'
+                    $evidence = 'ErrorReportingEnabled data not available.'
+                }
+                else {
+                    $status = if (-not $errReporting) { 'Pass' } else { 'Fail' }
+                    $errDesc = if (-not $errReporting) { 'compliant (disabled)' } else { 'non-compliant (must be False)' }
+                    $evidence = ('ErrorReportingEnabled={0} — {1}.' -f $errReporting, $errDesc)
+                }
+            }
+            'EDCA-RES-008' {
+                $databases = @()
+                if (($server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $server.Exchange -and
+                    ($server.Exchange.PSObject.Properties.Name -contains 'MailboxDatabases')) {
+                    $databases = @($server.Exchange.MailboxDatabases)
+                }
+                $volumes = @()
+                if (($server.PSObject.Properties.Name -contains 'OS') -and $null -ne $server.OS -and
+                    ($server.OS.PSObject.Properties.Name -contains 'Volumes')) {
+                    $volumes = @($server.OS.Volumes | Where-Object {
+                            ($_.PSObject.Properties.Name -contains 'DeviceID') -and
+                            -not [string]::IsNullOrWhiteSpace([string]$_.DeviceID) -and
+                            ($_.PSObject.Properties.Name -contains 'Name') -and
+                            -not [string]::IsNullOrWhiteSpace([string]$_.Name)
+                        })
+                }
+                if ($databases.Count -eq 0) {
+                    $status = 'Unknown'
+                    $evidence = 'No mailbox database data available for this server.'
+                }
+                elseif ($volumes.Count -eq 0) {
+                    $status = 'Unknown'
+                    $evidence = 'Volume inventory not available; cannot evaluate storage isolation.'
+                }
+                else {
+                    # Return the volume whose mount path (Name) is the longest prefix of $Path.
+                    # This correctly handles both drive-letter volumes (D:\) and directory mount
+                    # points (C:\MountedVolumes\DB1\) under the same drive letter.
+                    $getVolumeForPath = {
+                        param([string]$Path, [object[]]$Vols)
+                        $normPath = $Path.TrimEnd('\') + '\'
+                        $bestMatch = $null
+                        $bestLen = -1
+                        foreach ($vol in $Vols) {
+                            $mountPath = ([string]$vol.Name).TrimEnd('\') + '\'
+                            if ($normPath.StartsWith($mountPath, [System.StringComparison]::OrdinalIgnoreCase) -and $mountPath.Length -gt $bestLen) {
+                                $bestMatch = $vol
+                                $bestLen = $mountPath.Length
+                            }
+                        }
+                        return $bestMatch
+                    }
+
+                    # Resolve the OS system volume
+                    $osVolDeviceId = $null
+                    $osVolLabel = $null
+                    if (($server.PSObject.Properties.Name -contains 'OS') -and $null -ne $server.OS -and
+                        ($server.OS.PSObject.Properties.Name -contains 'SystemDrive') -and
+                        -not [string]::IsNullOrWhiteSpace([string]$server.OS.SystemDrive)) {
+                        $osVol = & $getVolumeForPath -Path ([string]$server.OS.SystemDrive) -Vols $volumes
+                        if ($null -ne $osVol) {
+                            $osVolDeviceId = [string]$osVol.DeviceID
+                            $osVolLabel = [string]$osVol.Name
+                        }
+                    }
+
+                    # Resolve the Exchange binaries volume
+                    $exchVolDeviceId = $null
+                    $exchVolLabel = $null
+                    $exchInstallPath = $null
+                    if (($server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $server.Exchange -and
+                        ($server.Exchange.PSObject.Properties.Name -contains 'InstallPath') -and
+                        -not [string]::IsNullOrWhiteSpace([string]$server.Exchange.InstallPath)) {
+                        $exchInstallPath = [string]$server.Exchange.InstallPath
+                        $exchVol = & $getVolumeForPath -Path $exchInstallPath -Vols $volumes
+                        if ($null -ne $exchVol) {
+                            $exchVolDeviceId = [string]$exchVol.DeviceID
+                            $exchVolLabel = [string]$exchVol.Name
+                        }
+                    }
+
+                    $dbServerResults = @($databases | ForEach-Object {
+                            $db = $_
+                            $edbPath = if (($db.PSObject.Properties.Name -contains 'EdbFilePath') -and -not [string]::IsNullOrWhiteSpace([string]$db.EdbFilePath)) { [string]$db.EdbFilePath } else { $null }
+                            if ([string]::IsNullOrWhiteSpace($edbPath)) {
+                                [pscustomobject]@{ Server = [string]$db.Name; Status = 'Unknown'; Evidence = 'EdbFilePath not available; cannot evaluate storage isolation.' }
+                            }
+                            else {
+                                $dbVol = & $getVolumeForPath -Path $edbPath -Vols $volumes
+                                if ($null -eq $dbVol) {
+                                    [pscustomobject]@{ Server = [string]$db.Name; Status = 'Unknown'; Evidence = ('EdbFilePath={0}: volume not found in inventory.' -f $edbPath) }
+                                }
+                                else {
+                                    $dbVolDeviceId = [string]$dbVol.DeviceID
+                                    $dbVolName = [string]$dbVol.Name
+                                    $conflicts = @()
+                                    if (-not [string]::IsNullOrWhiteSpace($osVolDeviceId) -and $dbVolDeviceId -eq $osVolDeviceId) {
+                                        $conflicts += ('OS system volume ({0})' -f $osVolLabel)
+                                    }
+                                    if (-not [string]::IsNullOrWhiteSpace($exchVolDeviceId) -and $dbVolDeviceId -eq $exchVolDeviceId) {
+                                        $conflicts += ('Exchange binaries volume ({0}, {1})' -f $exchVolLabel, $exchInstallPath)
+                                    }
+                                    if ($conflicts.Count -gt 0) {
+                                        [pscustomobject]@{
+                                            Server   = [string]$db.Name
+                                            Status   = 'Fail'
+                                            Evidence = ('EdbFilePath={0} shares volume {1} with: {2}.' -f $edbPath, $dbVolName, ($conflicts -join '; '))
+                                        }
+                                    }
+                                    else {
+                                        $caveats = @()
+                                        if ([string]::IsNullOrWhiteSpace($osVolDeviceId)) { $caveats += 'OS volume could not be resolved' }
+                                        if ([string]::IsNullOrWhiteSpace($exchVolDeviceId)) { $caveats += 'Exchange binaries volume could not be resolved' }
+                                        $note = if ($caveats.Count -gt 0) { ' (caveat: {0})' -f ($caveats -join '; ') } else { '' }
+                                        [pscustomobject]@{
+                                            Server   = [string]$db.Name
+                                            Status   = if ($caveats.Count -gt 0) { 'Unknown' } else { 'Pass' }
+                                            Evidence = ('EdbFilePath={0} is on dedicated volume {1}, separate from OS and Exchange binaries{2}.' -f $edbPath, $dbVolName, $note)
+                                        }
+                                    }
+                                }
+                            }
+                        })
+                }
+            }
+            'EDCA-RES-009' {
                 $databases = @()
                 if (($server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $server.Exchange -and
                     ($server.Exchange.PSObject.Properties.Name -contains 'MailboxDatabases')) {
@@ -4800,7 +5584,7 @@ function Test-EDCAControl {
                         })
                 }
             }
-            'EX-BP-140' {
+            'EDCA-SEC-034' {
                 $agents = @()
                 if (($server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $server.Exchange -and
                     ($server.Exchange.PSObject.Properties.Name -contains 'TransportAgents')) {
@@ -4832,7 +5616,7 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-142' {
+            'EDCA-TLS-020' {
                 $connectors = @()
                 if (($server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $server.Exchange -and
                     ($server.Exchange.PSObject.Properties.Name -contains 'ReceiveConnectors')) {
@@ -4866,7 +5650,7 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-147' {
+            'EDCA-SEC-037' {
                 $connectors = @()
                 if (($server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $server.Exchange -and
                     ($server.Exchange.PSObject.Properties.Name -contains 'ReceiveConnectors')) {
@@ -4877,30 +5661,44 @@ function Test-EDCAControl {
                     $evidence = 'No receive connector data available for this server.'
                 }
                 else {
-                    $revealing = @($connectors | Where-Object {
-                            $banner = if ($_.PSObject.Properties.Name -contains 'Banner') { [string]$_.Banner } else { $null }
-                            (-not [string]::IsNullOrWhiteSpace($banner)) -and ($banner -match '(?i)\bexchange\b|15\.[0-9]+\.[0-9]')
+                    # Filter to likely internet-facing connectors: PermissionGroups contains AnonymousUsers
+                    # and AuthMechanism includes Tls or is None - matching the remediation logic.
+                    $internetFacing = @($connectors | Where-Object {
+                            ($_.PSObject.Properties.Name -contains 'PermissionGroups') -and
+                            ([string]$_.PermissionGroups -match '\bAnonymousUsers\b') -and
+                            ($_.PSObject.Properties.Name -contains 'AuthMechanism') -and
+                            ([string]$_.AuthMechanism -match '\bTls\b' -or [string]$_.AuthMechanism -eq 'None')
                         })
-                    $emptyBanner = @($connectors | Where-Object {
-                            -not ($_.PSObject.Properties.Name -contains 'Banner') -or [string]::IsNullOrWhiteSpace([string]$_.Banner)
-                        })
-                    if ($revealing.Count -gt 0) {
-                        $status = 'Fail'
-                        $details = @($revealing | ForEach-Object { ('{0}: Banner="{1}"' -f [string]$_.Identity, [string]$_.Banner) })
-                        $evidence = Format-EDCAEvidenceWithElements -Summary ('{0} of {1} receive connector(s) have an SMTP banner that reveals server identity.' -f $revealing.Count, $connectors.Count) -Elements $details
-                    }
-                    elseif ($emptyBanner.Count -gt 0) {
-                        $status = 'Unknown'
-                        $details = @($emptyBanner | ForEach-Object { [string]$_.Identity })
-                        $evidence = Format-EDCAEvidenceWithElements -Summary ('{0} of {1} receive connector(s) have no custom SMTP banner; the default banner may reveal software identity.' -f $emptyBanner.Count, $connectors.Count) -Elements $details
+                    if ($internetFacing.Count -eq 0) {
+                        $status = 'Pass'
+                        $evidence = ('No likely internet-facing receive connectors identified on this server (checked {0} connector(s)).' -f $connectors.Count)
                     }
                     else {
-                        $status = 'Pass'
-                        $evidence = ('All {0} receive connector(s) have a custom SMTP banner that does not reveal server identity.' -f $connectors.Count)
+                        $revealing = @($internetFacing | Where-Object {
+                                $banner = if ($_.PSObject.Properties.Name -contains 'Banner') { [string]$_.Banner } else { $null }
+                                (-not [string]::IsNullOrWhiteSpace($banner)) -and ($banner -match '(?i)\bexchange\b|15\.[0-9]+\.[0-9]')
+                            })
+                        $emptyBanner = @($internetFacing | Where-Object {
+                                -not ($_.PSObject.Properties.Name -contains 'Banner') -or [string]::IsNullOrWhiteSpace([string]$_.Banner)
+                            })
+                        if ($revealing.Count -gt 0) {
+                            $status = 'Fail'
+                            $details = @($revealing | ForEach-Object { ('{0}: Banner="{1}"' -f [string]$_.Identity, [string]$_.Banner) })
+                            $evidence = Format-EDCAEvidenceWithElements -Summary ('{0} of {1} internet-facing receive connector(s) have an SMTP banner that reveals server identity.' -f $revealing.Count, $internetFacing.Count) -Elements $details
+                        }
+                        elseif ($emptyBanner.Count -gt 0) {
+                            $status = 'Unknown'
+                            $details = @($emptyBanner | ForEach-Object { [string]$_.Identity })
+                            $evidence = Format-EDCAEvidenceWithElements -Summary ('{0} of {1} internet-facing receive connector(s) have no custom SMTP banner; the default banner may reveal software identity.' -f $emptyBanner.Count, $internetFacing.Count) -Elements $details
+                        }
+                        else {
+                            $status = 'Pass'
+                            $evidence = ('All {0} internet-facing receive connector(s) have a custom SMTP banner that does not reveal server identity.' -f $internetFacing.Count)
+                        }
                     }
                 }
             }
-            'EX-BP-148' {
+            'EDCA-RES-010' {
                 $databases = @()
                 if (($server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $server.Exchange -and
                     ($server.Exchange.PSObject.Properties.Name -contains 'MailboxDatabases')) {
@@ -4926,7 +5724,7 @@ function Test-EDCAControl {
                         })
                 }
             }
-            'EX-BP-150' {
+            'EDCA-TLS-021' {
                 $connectors = @()
                 if (($server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $server.Exchange -and
                     ($server.Exchange.PSObject.Properties.Name -contains 'ReceiveConnectors')) {
@@ -4953,7 +5751,7 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-151' {
+            'EDCA-TLS-022' {
                 $connectors = @()
                 if (($server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $server.Exchange -and
                     ($server.Exchange.PSObject.Properties.Name -contains 'ReceiveConnectors')) {
@@ -4979,7 +5777,7 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-152' {
+            'EDCA-SEC-039' {
                 $agents = @()
                 if (($server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $server.Exchange -and
                     ($server.Exchange.PSObject.Properties.Name -contains 'TransportAgents')) {
@@ -5005,7 +5803,7 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-154' {
+            'EDCA-MON-012' {
                 $levels = @()
                 if (($server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $server.Exchange -and
                     ($server.Exchange.PSObject.Properties.Name -contains 'EventLogLevels')) {
@@ -5028,7 +5826,7 @@ function Test-EDCAControl {
                     }
                 }
             }
-            'EX-BP-155' {
+            'EDCA-DATA-017' {
                 $databaseStoragePaths = @()
                 if (($server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $server.Exchange -and
                     ($server.Exchange.PSObject.Properties.Name -contains 'DatabaseStoragePaths')) {
@@ -5039,84 +5837,481 @@ function Test-EDCAControl {
                     $evidence = 'No mailbox database or log storage paths found (may not be a mailbox server role).'
                 }
                 else {
-                    $dbDrives = @($databaseStoragePaths | ForEach-Object {
-                            if ([string]$_ -match '^([A-Za-z]:)') { $matches[1].ToUpperInvariant() }
-                        } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique)
-                    if ($dbDrives.Count -eq 0) {
-                        $status = 'Unknown'
-                        $evidence = 'Could not resolve drive letters from database or log storage paths.'
+                    $volumes = @()
+                    if (($server.PSObject.Properties.Name -contains 'OS') -and $null -ne $server.OS -and
+                        ($server.OS.PSObject.Properties.Name -contains 'Volumes')) {
+                        $volumes = @($server.OS.Volumes | Where-Object {
+                                ($_.PSObject.Properties.Name -contains 'DeviceID') -and
+                                -not [string]::IsNullOrWhiteSpace([string]$_.DeviceID) -and
+                                ($_.PSObject.Properties.Name -contains 'Name') -and
+                                -not [string]::IsNullOrWhiteSpace([string]$_.Name)
+                            })
                     }
-                    else {
-                        $volumes = @()
-                        if (($server.PSObject.Properties.Name -contains 'OS') -and $null -ne $server.OS -and
-                            ($server.OS.PSObject.Properties.Name -contains 'Volumes')) {
-                            $volumes = @($server.OS.Volumes)
+                    $getVolumeForPath = {
+                        param([string]$Path, [object[]]$Vols)
+                        $normPath = $Path.TrimEnd('\') + '\'
+                        $bestMatch = $null
+                        $bestLen = -1
+                        foreach ($vol in $Vols) {
+                            $mountPath = ([string]$vol.Name).TrimEnd('\') + '\'
+                            if ($normPath.StartsWith($mountPath, [System.StringComparison]::OrdinalIgnoreCase) -and $mountPath.Length -gt $bestLen) {
+                                $bestMatch = $vol
+                                $bestLen = $mountPath.Length
+                            }
                         }
-                        $notProtected = @()
-                        $unmapped = @()
-                        foreach ($drive in $dbDrives) {
-                            $vol = @($volumes | Where-Object { ([string]$_.DriveLetter).TrimEnd('\').TrimEnd('/').Equals($drive, [System.StringComparison]::OrdinalIgnoreCase) }) | Select-Object -First 1
-                            if ($null -eq $vol) { $unmapped += $drive; continue }
-                            if (-not [bool]$vol.BitLockerProtected) { $notProtected += $drive }
-                        }
-                        if ($notProtected.Count -gt 0) {
-                            $status = 'Fail'
-                            $evidence = Format-EDCAEvidenceWithElements -Summary ('{0} of {1} database or log volume(s) are not BitLocker-protected.' -f $notProtected.Count, $dbDrives.Count) -Elements $notProtected
-                        }
-                        elseif ($unmapped.Count -gt 0) {
-                            $status = 'Unknown'
-                            $evidence = ('Could not map the following drive(s) to volume metadata: {0}' -f ($unmapped -join ', '))
+                        return $bestMatch
+                    }
+                    $seenDeviceIds = @{}
+                    $matchedVolumeInfos = @()
+                    foreach ($storagePath in $databaseStoragePaths) {
+                        $vol = & $getVolumeForPath -Path ([string]$storagePath) -Vols $volumes
+                        if ($null -eq $vol) {
+                            $key = [string]$storagePath
+                            if (-not $seenDeviceIds.ContainsKey($key)) {
+                                $seenDeviceIds[$key] = $true
+                                $matchedVolumeInfos += [pscustomobject]@{ Path = [string]$storagePath; Vol = $null }
+                            }
                         }
                         else {
-                            $status = 'Pass'
-                            $evidence = ('All database and log volumes are BitLocker-protected: {0}' -f ($dbDrives -join ', '))
+                            $devId = [string]$vol.DeviceID
+                            if (-not $seenDeviceIds.ContainsKey($devId)) {
+                                $seenDeviceIds[$devId] = $true
+                                $matchedVolumeInfos += [pscustomobject]@{ Path = [string]$vol.Name; Vol = $vol }
+                            }
+                        }
+                    }
+                    $notProtected = @()
+                    $unmapped = @()
+                    foreach ($info in $matchedVolumeInfos) {
+                        if ($null -eq $info.Vol) { $unmapped += $info.Path; continue }
+                        if (-not [bool]$info.Vol.BitLockerProtected) { $notProtected += $info.Path }
+                    }
+                    $totalVols = $matchedVolumeInfos.Count
+                    if ($matchedVolumeInfos.Count -eq 0) {
+                        $status = 'Unknown'
+                        $evidence = ('Could not resolve storage paths to volumes: {0}' -f ($databaseStoragePaths -join ', '))
+                    }
+                    elseif ($notProtected.Count -gt 0) {
+                        $status = 'Fail'
+                        $evidence = Format-EDCAEvidenceWithElements -Summary ('{0} of {1} database or log volume(s) are not BitLocker-protected.' -f $notProtected.Count, $totalVols) -Elements $notProtected
+                    }
+                    elseif ($unmapped.Count -gt 0) {
+                        $status = 'Unknown'
+                        $evidence = ('Could not map the following path(s) to volume metadata: {0}' -f ($unmapped -join ', '))
+                    }
+                    else {
+                        $volPaths = @($matchedVolumeInfos | ForEach-Object { $_.Path })
+                        $status = 'Pass'
+                        $evidence = ('All database and log volumes are BitLocker-protected: {0}' -f ($volPaths -join ', '))
+                    }
+                }
+            }
+            'EDCA-SEC-040' {
+                $databaseStoragePaths = @()
+                if (($server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $server.Exchange -and
+                    ($server.Exchange.PSObject.Properties.Name -contains 'DatabaseStoragePaths')) {
+                    $databaseStoragePaths = @($server.Exchange.DatabaseStoragePaths)
+                }
+                if ($databaseStoragePaths.Count -eq 0) {
+                    $status = 'Unknown'
+                    $evidence = 'No mailbox database or log storage paths found (may not be a mailbox server role).'
+                }
+                else {
+                    $volumes = @()
+                    if (($server.PSObject.Properties.Name -contains 'OS') -and $null -ne $server.OS -and
+                        ($server.OS.PSObject.Properties.Name -contains 'Volumes')) {
+                        $volumes = @($server.OS.Volumes | Where-Object {
+                                ($_.PSObject.Properties.Name -contains 'DeviceID') -and
+                                -not [string]::IsNullOrWhiteSpace([string]$_.DeviceID) -and
+                                ($_.PSObject.Properties.Name -contains 'Name') -and
+                                -not [string]::IsNullOrWhiteSpace([string]$_.Name)
+                            })
+                    }
+                    $getVolumeForPath = {
+                        param([string]$Path, [object[]]$Vols)
+                        $normPath = $Path.TrimEnd('\') + '\'
+                        $bestMatch = $null
+                        $bestLen = -1
+                        foreach ($vol in $Vols) {
+                            $mountPath = ([string]$vol.Name).TrimEnd('\') + '\'
+                            if ($normPath.StartsWith($mountPath, [System.StringComparison]::OrdinalIgnoreCase) -and $mountPath.Length -gt $bestLen) {
+                                $bestMatch = $vol
+                                $bestLen = $mountPath.Length
+                            }
+                        }
+                        return $bestMatch
+                    }
+                    $seenDeviceIds = @{}
+                    $matchedVolumeInfos = @()
+                    foreach ($storagePath in $databaseStoragePaths) {
+                        $vol = & $getVolumeForPath -Path ([string]$storagePath) -Vols $volumes
+                        if ($null -eq $vol) {
+                            $key = [string]$storagePath
+                            if (-not $seenDeviceIds.ContainsKey($key)) {
+                                $seenDeviceIds[$key] = $true
+                                $matchedVolumeInfos += [pscustomobject]@{ Path = [string]$storagePath; Vol = $null }
+                            }
+                        }
+                        else {
+                            $devId = [string]$vol.DeviceID
+                            if (-not $seenDeviceIds.ContainsKey($devId)) {
+                                $seenDeviceIds[$devId] = $true
+                                $matchedVolumeInfos += [pscustomobject]@{ Path = [string]$vol.Name; Vol = $vol }
+                            }
+                        }
+                    }
+                    $notReFS = @()
+                    $unmapped = @()
+                    foreach ($info in $matchedVolumeInfos) {
+                        if ($null -eq $info.Vol) { $unmapped += $info.Path; continue }
+                        if ([string]$info.Vol.FileSystem -ne 'ReFS') { $notReFS += ('{0}: {1}' -f $info.Path, [string]$info.Vol.FileSystem) }
+                    }
+                    $totalVols = $matchedVolumeInfos.Count
+                    if ($matchedVolumeInfos.Count -eq 0) {
+                        $status = 'Unknown'
+                        $evidence = ('Could not resolve storage paths to volumes: {0}' -f ($databaseStoragePaths -join ', '))
+                    }
+                    elseif ($notReFS.Count -gt 0) {
+                        $status = 'Fail'
+                        $evidence = Format-EDCAEvidenceWithElements -Summary ('{0} of {1} database or log volume(s) are not formatted with ReFS.' -f $notReFS.Count, $totalVols) -Elements $notReFS
+                    }
+                    elseif ($unmapped.Count -gt 0) {
+                        $status = 'Unknown'
+                        $evidence = ('Could not map the following path(s) to volume metadata: {0}' -f ($unmapped -join ', '))
+                    }
+                    else {
+                        $volPaths = @($matchedVolumeInfos | ForEach-Object { $_.Path })
+                        $status = 'Pass'
+                        $evidence = ('All database and log volumes are formatted with ReFS: {0}' -f ($volPaths -join ', '))
+                    }
+                }
+            }
+            'EDCA-MON-009' {
+                $bp = $null
+                if (($server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $server.Exchange -and
+                    ($server.Exchange.PSObject.Properties.Name -contains 'TransportBackPressure')) {
+                    $bp = $server.Exchange.TransportBackPressure
+                }
+
+                if ($null -eq $bp) {
+                    $status = 'Unknown'
+                    $evidence = 'Transport back pressure configuration data unavailable.'
+                }
+                elseif ($bp.ConfigPresent -eq $false) {
+                    $status = 'Fail'
+                    $evidence = 'EdgeTransport.exe.config is missing — back pressure cannot be configured.'
+                }
+                elseif ($null -eq $bp.ConfigPresent) {
+                    $status = 'Unknown'
+                    $evidence = 'EdgeTransport.exe.config could not be parsed — back pressure configuration unverified.'
+                }
+                else {
+                    $normalVal = if (-not [string]::IsNullOrWhiteSpace([string]$bp.NormalPriorityMessageExpirationTimeout)) { [string]$bp.NormalPriorityMessageExpirationTimeout }   else { '2.00:00:00 (default)' }
+                    $criticalVal = if (-not [string]::IsNullOrWhiteSpace([string]$bp.CriticalPriorityMessageExpirationTimeout)) { [string]$bp.CriticalPriorityMessageExpirationTimeout } else { '0.04:00:00 (default)' }
+                    $status = 'Pass'
+                    $evidence = ('Back pressure active (EdgeTransport.exe.config present). Queue growth is disk-bounded via back pressure, not message-count-bounded. Message expiration is time-bounded by priority.' + "`n" +
+                        ('  NormalPriorityMessageExpirationTimeout  : {0}' -f $normalVal) + "`n" +
+                        ('  CriticalPriorityMessageExpirationTimeout: {0}' -f $criticalVal))
+                }
+            }
+            'EDCA-MON-010' {
+                $auditAcl = @()
+                if (($server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $server.Exchange -and
+                    ($server.Exchange.PSObject.Properties.Name -contains 'AuditLogPathAcl')) {
+                    $auditAcl = @($server.Exchange.AuditLogPathAcl)
+                }
+                $auditPath129 = $null
+                if (($server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $server.Exchange -and
+                    ($server.Exchange.PSObject.Properties.Name -contains 'AuditLogPath') -and
+                    -not [string]::IsNullOrWhiteSpace([string]$server.Exchange.AuditLogPath)) {
+                    $auditPath129 = [string]$server.Exchange.AuditLogPath
+                }
+                if ([string]::IsNullOrWhiteSpace($auditPath129) -and
+                    ($server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $server.Exchange -and
+                    ($server.Exchange.PSObject.Properties.Name -contains 'InstallPath') -and
+                    -not [string]::IsNullOrWhiteSpace([string]$server.Exchange.InstallPath)) {
+                    $auditPath129 = ([string]$server.Exchange.InstallPath).TrimEnd('\') + '\Logging'
+                }
+                if ($auditAcl.Count -eq 0) {
+                    $status = 'Unknown'
+                    $evidence = if ($null -eq $auditPath129) {
+                        'AuditLogPath not available; cannot evaluate audit log directory ACL.'
+                    }
+                    else {
+                        ('AuditLogPathAcl data not available for {0}; cannot evaluate directory ACL.' -f $auditPath129)
+                    }
+                }
+                else {
+                    $safePrincipalNames = @('SYSTEM', 'Administrators', 'Exchange Trusted Subsystem', 'TrustedInstaller', 'CREATOR OWNER', 'NETWORK SERVICE', 'Exchange Windows Permissions')
+                    $badAces = @($auditAcl | Where-Object {
+                            $ace = $_
+                            if ([string]$ace.AccessControlType -ne 'Allow') { return $false }
+                            if ([bool]$ace.IsInherited) { return $false }
+                            $identity = [string]$ace.IdentityReference
+                            $isSafe = $false
+                            foreach ($safeName in $safePrincipalNames) {
+                                if ($identity -like "*\$safeName" -or $identity -ieq $safeName -or
+                                    $identity.EndsWith($safeName, [System.StringComparison]::OrdinalIgnoreCase)) {
+                                    $isSafe = $true; break
+                                }
+                            }
+                            if ($isSafe) { return $false }
+                            $rightsStr = [string]$ace.FileSystemRights
+                            return ($rightsStr -match '\bFullControl\b|\bModify\b|\bWrite|\bTakeOwnership\b|\bChangePermissions\b|\bDelete\b')
+                        })
+                    if ($badAces.Count -gt 0) {
+                        $aceList = @($badAces | ForEach-Object { ('{0} ({1})' -f [string]$_.IdentityReference, [string]$_.FileSystemRights) })
+                        $pathDesc = if ($null -ne $auditPath129) { ('on {0}' -f $auditPath129) } else { '' }
+                        $status = 'Fail'
+                        $evidence = Format-EDCAEvidenceWithElements -Summary ('{0} non-inherited Allow ACE(s) {1} grant write-capable permissions to non-standard principals.' -f $badAces.Count, $pathDesc) -Elements $aceList
+                    }
+                    else {
+                        $pathDesc129 = if ($null -ne $auditPath129) { (' ({0})' -f $auditPath129) } else { '' }
+                        $status = 'Pass'
+                        $evidence = ('Audit log directory{0} ACL contains only standard principals with appropriate permissions.' -f $pathDesc129)
+                    }
+                }
+            }
+            'EDCA-MON-011' {
+                $auditPath = $null
+                if (($server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $server.Exchange -and
+                    ($server.Exchange.PSObject.Properties.Name -contains 'AuditLogPath') -and
+                    -not [string]::IsNullOrWhiteSpace([string]$server.Exchange.AuditLogPath)) {
+                    $auditPath = [string]$server.Exchange.AuditLogPath
+                }
+                if ([string]::IsNullOrWhiteSpace($auditPath) -and
+                    ($server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $server.Exchange -and
+                    ($server.Exchange.PSObject.Properties.Name -contains 'InstallPath') -and
+                    -not [string]::IsNullOrWhiteSpace([string]$server.Exchange.InstallPath)) {
+                    $auditPath = ([string]$server.Exchange.InstallPath).TrimEnd('\') + '\Logging'
+                }
+                $volumes = @()
+                if (($server.PSObject.Properties.Name -contains 'OS') -and $null -ne $server.OS -and
+                    ($server.OS.PSObject.Properties.Name -contains 'Volumes')) {
+                    $volumes = @($server.OS.Volumes | Where-Object {
+                            ($_.PSObject.Properties.Name -contains 'DeviceID') -and
+                            -not [string]::IsNullOrWhiteSpace([string]$_.DeviceID) -and
+                            ($_.PSObject.Properties.Name -contains 'Name') -and
+                            -not [string]::IsNullOrWhiteSpace([string]$_.Name)
+                        })
+                }
+                if ([string]::IsNullOrWhiteSpace($auditPath)) {
+                    $status = 'Unknown'
+                    $evidence = 'AuditLogPath not available; cannot evaluate storage isolation.'
+                }
+                elseif ($volumes.Count -eq 0) {
+                    $status = 'Unknown'
+                    $evidence = 'Volume inventory not available; cannot evaluate storage isolation.'
+                }
+                else {
+                    $getVolumeForPath = {
+                        param([string]$Path, [object[]]$Vols)
+                        $normPath = $Path.TrimEnd('\') + '\'
+                        $bestMatch = $null
+                        $bestLen = -1
+                        foreach ($vol in $Vols) {
+                            $mountPath = ([string]$vol.Name).TrimEnd('\') + '\'
+                            if ($normPath.StartsWith($mountPath, [System.StringComparison]::OrdinalIgnoreCase) -and $mountPath.Length -gt $bestLen) {
+                                $bestMatch = $vol
+                                $bestLen = $mountPath.Length
+                            }
+                        }
+                        return $bestMatch
+                    }
+                    $auditVol = & $getVolumeForPath -Path $auditPath -Vols $volumes
+                    if ($null -eq $auditVol) {
+                        $status = 'Unknown'
+                        $evidence = ('AuditLogPath={0}: volume not found in volume inventory.' -f $auditPath)
+                    }
+                    else {
+                        $auditVolDeviceId = [string]$auditVol.DeviceID
+                        $auditVolName = [string]$auditVol.Name
+                        $osVolDeviceId = $null
+                        $osVolLabel = $null
+                        if (($server.PSObject.Properties.Name -contains 'OS') -and $null -ne $server.OS -and
+                            ($server.OS.PSObject.Properties.Name -contains 'SystemDrive') -and
+                            -not [string]::IsNullOrWhiteSpace([string]$server.OS.SystemDrive)) {
+                            $osVol = & $getVolumeForPath -Path ([string]$server.OS.SystemDrive) -Vols $volumes
+                            if ($null -ne $osVol) {
+                                $osVolDeviceId = [string]$osVol.DeviceID
+                                $osVolLabel = [string]$osVol.Name
+                            }
+                        }
+                        $exchVolDeviceId = $null
+                        $exchVolLabel = $null
+                        $exchInstallPath130 = $null
+                        if (($server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $server.Exchange -and
+                            ($server.Exchange.PSObject.Properties.Name -contains 'InstallPath') -and
+                            -not [string]::IsNullOrWhiteSpace([string]$server.Exchange.InstallPath)) {
+                            $exchInstallPath130 = [string]$server.Exchange.InstallPath
+                            $exchVol = & $getVolumeForPath -Path $exchInstallPath130 -Vols $volumes
+                            if ($null -ne $exchVol) {
+                                $exchVolDeviceId = [string]$exchVol.DeviceID
+                                $exchVolLabel = [string]$exchVol.Name
+                            }
+                        }
+                        $conflicts = @()
+                        if (-not [string]::IsNullOrWhiteSpace($osVolDeviceId) -and $auditVolDeviceId -eq $osVolDeviceId) {
+                            $conflicts += ('OS system volume ({0})' -f $osVolLabel)
+                        }
+                        if (-not [string]::IsNullOrWhiteSpace($exchVolDeviceId) -and $auditVolDeviceId -eq $exchVolDeviceId) {
+                            $conflicts += ('Exchange binaries volume ({0}, {1})' -f $exchVolLabel, $exchInstallPath130)
+                        }
+                        if ($conflicts.Count -gt 0) {
+                            $status = 'Fail'
+                            $evidence = ('AuditLogPath={0} shares volume {1} with: {2}.' -f $auditPath, $auditVolName, ($conflicts -join '; '))
+                        }
+                        else {
+                            $caveats = @()
+                            if ([string]::IsNullOrWhiteSpace($osVolDeviceId)) { $caveats += 'OS volume could not be resolved' }
+                            if ([string]::IsNullOrWhiteSpace($exchVolDeviceId)) { $caveats += 'Exchange binaries volume could not be resolved' }
+                            $note = if ($caveats.Count -gt 0) { (' (caveat: {0})' -f ($caveats -join '; ')) } else { '' }
+                            $status = if ($caveats.Count -gt 0) { 'Unknown' } else { 'Pass' }
+                            $evidence = ('AuditLogPath={0} is on dedicated volume {1}, separate from OS and Exchange binaries{2}.' -f $auditPath, $auditVolName, $note)
                         }
                     }
                 }
             }
-            'EX-BP-156' {
-                $databaseStoragePaths = @()
+            'EDCA-GOV-010' {
+                $databases = @()
                 if (($server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $server.Exchange -and
-                    ($server.Exchange.PSObject.Properties.Name -contains 'DatabaseStoragePaths')) {
-                    $databaseStoragePaths = @($server.Exchange.DatabaseStoragePaths)
+                    ($server.Exchange.PSObject.Properties.Name -contains 'MailboxDatabases')) {
+                    $databases = @($server.Exchange.MailboxDatabases)
                 }
-                if ($databaseStoragePaths.Count -eq 0) {
+                if ($databases.Count -eq 0) {
                     $status = 'Unknown'
-                    $evidence = 'No mailbox database or log storage paths found (may not be a mailbox server role).'
+                    $evidence = 'No mailbox database data available for this server.'
                 }
                 else {
-                    $dbDrives = @($databaseStoragePaths | ForEach-Object {
-                            if ([string]$_ -match '^([A-Za-z]:)') { $matches[1].ToUpperInvariant() }
-                        } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique)
-                    if ($dbDrives.Count -eq 0) {
-                        $status = 'Unknown'
-                        $evidence = 'Could not resolve drive letters from database or log storage paths.'
+                    $dbServerResults = @($databases | ForEach-Object {
+                            $db = $_
+                            $psrqUnlimited = $null
+                            $psqUnlimited = $null
+                            if (($db.PSObject.Properties.Name -contains 'ProhibitSendReceiveQuotaIsUnlimited') -and $null -ne $db.ProhibitSendReceiveQuotaIsUnlimited) {
+                                $psrqUnlimited = [bool]$db.ProhibitSendReceiveQuotaIsUnlimited
+                            }
+                            if (($db.PSObject.Properties.Name -contains 'ProhibitSendQuotaIsUnlimited') -and $null -ne $db.ProhibitSendQuotaIsUnlimited) {
+                                $psqUnlimited = [bool]$db.ProhibitSendQuotaIsUnlimited
+                            }
+                            if ($null -eq $psrqUnlimited -and $null -eq $psqUnlimited) {
+                                [pscustomobject]@{ Server = [string]$db.Name; Status = 'Unknown'; Evidence = 'Quota data not available for this database.' }
+                            }
+                            else {
+                                $failReasons = @()
+                                if ($psrqUnlimited -eq $true) { $failReasons += 'ProhibitSendReceiveQuota=Unlimited' }
+                                if ($psqUnlimited -eq $true) { $failReasons += 'ProhibitSendQuota=Unlimited' }
+                                if ($failReasons.Count -gt 0) {
+                                    [pscustomobject]@{
+                                        Server   = [string]$db.Name
+                                        Status   = 'Fail'
+                                        Evidence = ('{0} — unrestricted quota allows unlimited mailbox growth and does not protect mail-flow availability.' -f ($failReasons -join ', '))
+                                    }
+                                }
+                                else {
+                                    [pscustomobject]@{
+                                        Server   = [string]$db.Name
+                                        Status   = 'Pass'
+                                        Evidence = 'Send and receive quotas are configured (not Unlimited).'
+                                    }
+                                }
+                            }
+                        })
+                }
+            }
+            'EDCA-SEC-035' {
+                $installAcl = @()
+                if (($server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $server.Exchange -and
+                    ($server.Exchange.PSObject.Properties.Name -contains 'InstallPathAcl')) {
+                    $installAcl = @($server.Exchange.InstallPathAcl)
+                }
+                $installPath143 = $null
+                if (($server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $server.Exchange -and
+                    ($server.Exchange.PSObject.Properties.Name -contains 'InstallPath') -and
+                    -not [string]::IsNullOrWhiteSpace([string]$server.Exchange.InstallPath)) {
+                    $installPath143 = [string]$server.Exchange.InstallPath
+                }
+                if ($installAcl.Count -eq 0) {
+                    $status = 'Unknown'
+                    $evidence = 'InstallPathAcl data not available; cannot evaluate directory ACL.'
+                }
+                else {
+                    $safePrincipalNames = @('SYSTEM', 'Administrators', 'Exchange Trusted Subsystem', 'TrustedInstaller', 'CREATOR OWNER', 'NETWORK SERVICE')
+                    $badAces = @($installAcl | Where-Object {
+                            $ace = $_
+                            if ([string]$ace.AccessControlType -ne 'Allow') { return $false }
+                            if ([bool]$ace.IsInherited) { return $false }
+                            $identity = [string]$ace.IdentityReference
+                            $isSafe = $false
+                            foreach ($safeName in $safePrincipalNames) {
+                                if ($identity -like "*\$safeName" -or $identity -ieq $safeName -or
+                                    $identity.EndsWith($safeName, [System.StringComparison]::OrdinalIgnoreCase)) {
+                                    $isSafe = $true; break
+                                }
+                            }
+                            if ($isSafe) { return $false }
+                            $rightsStr = [string]$ace.FileSystemRights
+                            return ($rightsStr -match '\bFullControl\b|\bModify\b|\bWrite|\bTakeOwnership\b|\bChangePermissions\b|\bDelete\b')
+                        })
+                    if ($badAces.Count -gt 0) {
+                        $aceList = @($badAces | ForEach-Object { ('{0} ({1})' -f [string]$_.IdentityReference, [string]$_.FileSystemRights) })
+                        $pathDesc = if ($null -ne $installPath143) { ('on {0}' -f $installPath143) } else { '' }
+                        $status = 'Fail'
+                        $evidence = Format-EDCAEvidenceWithElements -Summary ('{0} non-inherited Allow ACE(s) {1} grant write-capable permissions to non-standard principals.' -f $badAces.Count, $pathDesc) -Elements $aceList
                     }
                     else {
-                        $volumes = @()
-                        if (($server.PSObject.Properties.Name -contains 'OS') -and $null -ne $server.OS -and
-                            ($server.OS.PSObject.Properties.Name -contains 'Volumes')) {
-                            $volumes = @($server.OS.Volumes)
-                        }
-                        $notReFS = @()
-                        $unmapped = @()
-                        foreach ($drive in $dbDrives) {
-                            $vol = @($volumes | Where-Object { ([string]$_.DriveLetter).TrimEnd('\').TrimEnd('/').Equals($drive, [System.StringComparison]::OrdinalIgnoreCase) }) | Select-Object -First 1
-                            if ($null -eq $vol) { $unmapped += $drive; continue }
-                            if ([string]$vol.FileSystem -ne 'ReFS') { $notReFS += ('{0}: {1}' -f $drive, [string]$vol.FileSystem) }
-                        }
-                        if ($notReFS.Count -gt 0) {
-                            $status = 'Fail'
-                            $evidence = Format-EDCAEvidenceWithElements -Summary ('{0} of {1} database or log volume(s) are not formatted with ReFS.' -f $notReFS.Count, $dbDrives.Count) -Elements $notReFS
-                        }
-                        elseif ($unmapped.Count -gt 0) {
-                            $status = 'Unknown'
-                            $evidence = ('Could not map the following drive(s) to volume metadata: {0}' -f ($unmapped -join ', '))
+                        $pathDesc143 = if ($null -ne $installPath143) { (' ({0})' -f $installPath143) } else { '' }
+                        $status = 'Pass'
+                        $evidence = ('Exchange install directory{0} ACL contains only standard principals with appropriate permissions.' -f $pathDesc143)
+                    }
+                }
+            }
+            'EDCA-GOV-012' {
+                $services = @()
+                if (($server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $server.Exchange -and
+                    ($server.Exchange.PSObject.Properties.Name -contains 'ExchangeServices')) {
+                    $services = @($server.Exchange.ExchangeServices)
+                }
+                if ($services.Count -eq 0) {
+                    $status = 'Unknown'
+                    $evidence = 'ExchangeServices data not available; cannot evaluate service state.'
+                }
+                else {
+                    $targetServices = @('MSExchangePOP3', 'MSExchangeIMAP4', 'MSExchangeUM')
+                    $failItems = @()
+                    $passItems = @()
+                    $missingItems = @()
+                    foreach ($svcName in $targetServices) {
+                        $svc = @($services | Where-Object { [string]$_.Name -ieq $svcName }) | Select-Object -First 1
+                        if ($null -eq $svc) {
+                            if ($svcName -ne 'MSExchangeUM') {
+                                $missingItems += ('{0}: not found in service list' -f $svcName)
+                            }
                         }
                         else {
-                            $status = 'Pass'
-                            $evidence = ('All database and log volumes are formatted with ReFS: {0}' -f ($dbDrives -join ', '))
+                            $startType = [string]$svc.StartType
+                            $svcStatus = [string]$svc.Status
+                            $isDisabled = ($startType -ieq 'Disabled')
+                            $isRunning = ($svcStatus -ieq 'Running')
+                            if (-not $isDisabled -or $isRunning) {
+                                $failItems += ('{0}: StartType={1}, Status={2} — must be Disabled and not Running' -f $svcName, $startType, $svcStatus)
+                            }
+                            else {
+                                $passItems += ('{0}: StartType={1}, Status={2}' -f $svcName, $startType, $svcStatus)
+                            }
                         }
+                    }
+                    if ($failItems.Count -gt 0) {
+                        $status = 'Fail'
+                        $evidence = Format-EDCAEvidenceWithElements -Summary ('{0} unnecessary service(s) are not disabled.' -f $failItems.Count) -Elements $failItems
+                    }
+                    elseif ($missingItems.Count -gt 0 -and $passItems.Count -eq 0) {
+                        $status = 'Unknown'
+                        $evidence = Format-EDCAEvidenceWithElements -Summary 'Could not verify service state for expected services.' -Elements $missingItems
+                    }
+                    else {
+                        $allItems = @($passItems) + @($missingItems)
+                        $status = 'Pass'
+                        $evidence = Format-EDCAEvidenceWithElements -Summary 'POP3, IMAP4 and UM services are disabled or not present.' -Elements $allItems
                     }
                 }
             }
@@ -5165,6 +6360,7 @@ function Test-EDCAControl {
         Frameworks     = @($Control.frameworks)
         Verify         = [bool]$Control.verify
         OverallStatus  = $overallStatus
+        SubjectLabel   = $subjectLabel
         ServerResults  = $serverResults
         References     = @($Control.references)
         Remediation    = $Control.remediation

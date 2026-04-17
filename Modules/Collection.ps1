@@ -1,4 +1,4 @@
-﻿# Author:  Michel de Rooij
+# Author:  Michel de Rooij
 # Website: https://eightwone.com
 
 Set-StrictMode -Version Latest
@@ -231,33 +231,34 @@ function Get-EDCAExchangeServerInfo {
 
     $scriptBlock = {
         $exchangeInfo = [pscustomobject]@{
-            ExchangeCmdletsAvailable            = $false
-            Name                                = $env:COMPUTERNAME
-            AdminDisplayVersion                 = $null
-            BuildNumber                         = $null
-            Edition                             = $null
-            ProductLine                         = 'Unknown'
-            IsExchangeServer                    = $false
-            ExtendedProtectionStatus            = @()
-            OutlookAnywhereSSLOffloading        = @()
-            AdminAuditLogEnabled                = $null
-            ReplicationHealthPassed             = $null
-            IsDagMember                         = $null
-            DagName                             = $null
-            AdSite                              = $null
-            SingleItemRecoveryDisabledCount     = $null
-            SingleItemRecoveryDisabledMailboxes = @()
-            Pop3ServiceStatus                   = $null
-            Imap4ServiceStatus                  = $null
-            MapiHttpEnabled                     = $null
-            ReceiveConnectors                   = @()
-            UpnPrimarySmtpMismatchCount         = $null
-            SharedMailboxTypeMismatchCount      = $null
-            SharedMailboxTypeMismatches         = @()
-            OwaDownloadDomainsConfigured        = $null
-            AlternateServiceAccount             = $null
-            DatabaseStoragePaths                = @()
-            CollectionWarnings                  = @()
+            ExchangeCmdletsAvailable                 = $false
+            Name                                     = $env:COMPUTERNAME
+            AdminDisplayVersion                      = $null
+            BuildNumber                              = $null
+            Edition                                  = $null
+            ProductLine                              = 'Unknown'
+            IsExchangeServer                         = $false
+            ExtendedProtectionStatus                 = @()
+            OutlookAnywhereSSLOffloading             = @()
+            AdminAuditLogEnabled                     = $null
+            ReplicationHealthPassed                  = $null
+            IsDagMember                              = $null
+            DagName                                  = $null
+            AdSite                                   = $null
+            SingleItemRecoveryDisabledCount          = $null
+            SingleItemRecoveryDisabledMailboxes      = @()
+            Pop3ServiceStatus                        = $null
+            Imap4ServiceStatus                       = $null
+            MapiHttpEnabled                          = $null
+            ReceiveConnectors                        = @()
+            UpnPrimarySmtpMismatchCount              = $null
+            SharedMailboxTypeMismatchCount           = $null
+            SharedMailboxTypeMismatches              = @()
+            OwaDownloadDomainsConfigured             = $null
+            OAuthHmaDownloadDomainOverrideConfigured = $null
+            AlternateServiceAccount                  = $null
+            DatabaseStoragePaths                     = @()
+            CollectionWarnings                       = @()
         }
 
         $setupKey = 'HKLM:\SOFTWARE\Microsoft\ExchangeServer\v15\Setup'
@@ -486,6 +487,23 @@ function Get-EDCAExchangeServerInfo {
                 try {
                     $audit = Get-AdminAuditLogConfig -ErrorAction Stop
                     $exchangeInfo.AdminAuditLogEnabled = [bool]$audit.AdminAuditLogEnabled
+                    if ($audit.PSObject.Properties.Name -contains 'AdminAuditLogPath' -and -not [string]::IsNullOrWhiteSpace([string]$audit.AdminAuditLogPath)) {
+                        $exchangeInfo.AuditLogPath = [string]$audit.AdminAuditLogPath
+                        try {
+                            $auditLogAcl = Get-Acl -Path $exchangeInfo.AuditLogPath -ErrorAction Stop
+                            $exchangeInfo.AuditLogPathAcl = @($auditLogAcl.Access | Where-Object { $_.PSObject.Properties.Name -contains 'IdentityReference' } | ForEach-Object {
+                                    [pscustomobject]@{
+                                        IdentityReference = [string]$_.IdentityReference
+                                        FileSystemRights  = [string]$_.FileSystemRights
+                                        AccessControlType = [string]$_.AccessControlType
+                                        IsInherited       = [bool]$_.IsInherited
+                                    }
+                                })
+                        }
+                        catch {
+                            $exchangeInfo.CollectionWarnings += ('Get-Acl for AuditLogPath failed: ' + $_.Exception.Message)
+                        }
+                    }
                 }
                 catch {
                     $exchangeInfo.CollectionWarnings += ('Get-AdminAuditLogConfig failed: ' + $_.Exception.Message)
@@ -644,6 +662,7 @@ function Get-EDCAExchangeServerInfo {
                 try {
                     $mailboxes = @(Get-Mailbox -ResultSize Unlimited -ErrorAction Stop)
                     $mismatchedUpn = @($mailboxes | Where-Object {
+                            $_.RecipientTypeDetails -eq 'UserMailbox' -and
                             -not [string]::IsNullOrWhiteSpace([string]$_.UserPrincipalName) -and
                             -not [string]::IsNullOrWhiteSpace([string]$_.WindowsEmailAddress) -and
                             -not [string]::Equals([string]$_.UserPrincipalName, [string]$_.WindowsEmailAddress, [System.StringComparison]::OrdinalIgnoreCase)
@@ -651,8 +670,9 @@ function Get-EDCAExchangeServerInfo {
                     $exchangeInfo.UpnPrimarySmtpMismatchCount = $mismatchedUpn.Count
 
                     $sharedLikeNames = @($mailboxes | Where-Object {
-                            $_.RecipientTypeDetails -eq 'UserMailbox' -and
-                            ([string]$_.DisplayName -match '(shared|team|group|department|afdeling|gedeeld)')
+                            $_.RecipientTypeDetails -ne 'UserMailbox' -and
+                            ($_.PSObject.Properties.Name -contains 'AccountDisabled') -and
+                            -not [bool]$_.AccountDisabled
                         })
                     $exchangeInfo.SharedMailboxTypeMismatchCount = $sharedLikeNames.Count
                     $exchangeInfo.SharedMailboxTypeMismatches = @($sharedLikeNames | ForEach-Object { [string]$_.DisplayName })
@@ -998,14 +1018,44 @@ function Get-EDCAExchangeServerInfo {
 
                     $dedicatedHybridAppConfigured = ($dedicatedHybridAppOverrides.Count -ge 1) -and ($dedicatedAppAuthServers.Count -ge 1) -and ($sharedAppAuthServers.Count -eq 0)
 
+                    $evoStsIsDefaultAuthorizationEndpoint = (@($evoStsAuthServers | Where-Object {
+                                $_.PSObject.Properties.Name -contains 'IsDefaultAuthorizationEndpoint' -and
+                                [bool]$_.IsDefaultAuthorizationEndpoint
+                            }).Count -gt 0)
+
+                    $defaultAuthorizationServer = @($authServers | Where-Object {
+                            $_.PSObject.Properties.Name -contains 'IsDefaultAuthorizationEndpoint' -and
+                            [bool]$_.IsDefaultAuthorizationEndpoint -eq $true
+                        }) | Select-Object -First 1
+                    $defaultAuthServerUrl = if ($null -ne $defaultAuthorizationServer -and
+                        $defaultAuthorizationServer.PSObject.Properties.Name -contains 'AuthMetadataUrl' -and
+                        -not [string]::IsNullOrWhiteSpace([string]$defaultAuthorizationServer.AuthMetadataUrl)) {
+                        [string]$defaultAuthorizationServer.AuthMetadataUrl
+                    }
+                    else { '' }
+                    $modernAuthType = if ([string]::IsNullOrWhiteSpace($defaultAuthServerUrl)) { 'None' }
+                    elseif ($defaultAuthServerUrl -match 'login\.windows\.net|login\.microsoftonline\.com') { 'HMA' }
+                    else { 'ADFS' }
+
+                    $hmaDownloadDomainOverride = @($settingOverrides | Where-Object {
+                            $cn = if ($_.PSObject.Properties.Name -contains 'ComponentName') { [string]$_.ComponentName } else { '' }
+                            $sn = if ($_.PSObject.Properties.Name -contains 'SectionName') { [string]$_.SectionName } else { '' }
+                            $pt = if ($_.PSObject.Properties.Name -contains 'Parameters' -and $null -ne $_.Parameters) { [string]::Join(';', @($_.Parameters | ForEach-Object { [string]$_ })) } else { '' }
+                            $cn -eq 'OAuth' -and $sn -eq 'OAuthIdentityCacheFixForDownloadDomains' -and $pt -match 'Enabled\s*=\s*True'
+                        })
+                    $exchangeInfo.OAuthHmaDownloadDomainOverrideConfigured = ($hmaDownloadDomainOverride.Count -gt 0)
+
                     $hybridConfigured = $oAuthConfigured
                     $exchangeInfo.HybridApplication = [pscustomobject]@{
                         Configured                             = $hybridConfigured
+                        EvoStsIsDefaultAuthorizationEndpoint   = $evoStsIsDefaultAuthorizationEndpoint
                         DedicatedHybridAppConfigured           = $dedicatedHybridAppConfigured
                         DedicatedHybridAppOverrideCount        = $dedicatedHybridAppOverrides.Count
                         DedicatedHybridAppAuthServerCount      = $dedicatedAppAuthServers.Count
                         SharedExchangeOnlineAppAuthServerCount = $sharedAppAuthServers.Count
-                        Details                                = ('OAuth hybrid detected: {0}; EvoSTS auth servers: {1}; ACS auth servers: {2}; Exchange Online partner app enabled: {3}; dedicated-hybrid-app override count: {4}; dedicated-app auth server count: {5}; shared-app auth server count: {6}' -f $hybridConfigured, $evoStsAuthServers.Count, $acsAuthServers.Count, $enabledHybridPartnerApplication, $dedicatedHybridAppOverrides.Count, $dedicatedAppAuthServers.Count, $sharedAppAuthServers.Count)
+                        DefaultAuthServerAuthMetadataUrl       = $defaultAuthServerUrl
+                        ModernAuthType                         = $modernAuthType
+                        Details                                = ('OAuth hybrid detected: {0}; EvoSTS auth servers: {1}; ACS auth servers: {2}; Exchange Online partner app enabled: {3}; dedicated-hybrid-app override count: {4}; dedicated-app auth server count: {5}; shared-app auth server count: {6}; EvoSTS IsDefaultAuthorizationEndpoint: {7}; modern auth type: {8}; default auth server URL: {9}' -f $hybridConfigured, $evoStsAuthServers.Count, $acsAuthServers.Count, $enabledHybridPartnerApplication, $dedicatedHybridAppOverrides.Count, $dedicatedAppAuthServers.Count, $sharedAppAuthServers.Count, $evoStsIsDefaultAuthorizationEndpoint, $modernAuthType, $defaultAuthServerUrl)
                     }
                 }
                 catch {
@@ -1614,7 +1664,7 @@ function Test-EDCADaneConfiguration {
     $status = if ($issues.Count -eq 0) { 'Pass' } else { 'Fail' }
     $evidenceParts = @($tlsaByHost | ForEach-Object {
             if (-not [string]::IsNullOrWhiteSpace($_.CnameTarget) -and $_.TlsaCount -eq 0) {
-                ('{0} → CNAME: {1}' -f $_.TlsaName, $_.CnameTarget)
+                ('{0} -> CNAME: {1}' -f $_.TlsaName, $_.CnameTarget)
             }
             elseif ($_.TlsaCount -gt 0 -and -not [string]::IsNullOrWhiteSpace($_.CnameTarget)) {
                 ('{0}: {1} TLSA record(s) via CNAME: {2}' -f $_.TlsaName, $_.TlsaCount, $_.CnameTarget)
@@ -1781,74 +1831,78 @@ function Get-EDCAServerInventory {
         }
 
         $exchangeInfo = [pscustomobject]@{
-            ExchangeCmdletsAvailable            = $false
-            Name                                = $env:COMPUTERNAME
-            AdminDisplayVersion                 = $null
-            BuildNumber                         = $null
-            Edition                             = $null
-            ProductLine                         = 'Unknown'
-            IsExchangeServer                    = $false
-            ExtendedProtectionStatus            = @()
-            AdminAuditLogEnabled                = $null
-            ReplicationHealthPassed             = $null
-            IsDagMember                         = $null
-            DagName                             = $null
-            AdSite                              = $null
-            SingleItemRecoveryDisabledCount     = $null
-            SingleItemRecoveryDisabledMailboxes = @()
-            OAuth2ClientProfileEnabled          = $null
-            Pop3ServiceStatus                   = $null
-            Imap4ServiceStatus                  = $null
-            MapiHttpEnabled                     = $null
-            ReceiveConnectors                   = @()
-            SendConnectors                      = @()
-            UpnPrimarySmtpMismatchCount         = $null
-            SharedMailboxTypeMismatchCount      = $null
-            SharedMailboxTypeMismatches         = @()
-            OwaDownloadDomainsConfigured        = $null
-            AlternateServiceAccount             = $null
-            AcceptedDomains                     = @()
-            DatabaseStoragePaths                = @()
-            InstallPath                         = $null
-            RpcMinConnectionTimeout             = $null
-            TcpKeepAliveTime                    = $null
-            NumaGroupSizeOptimization           = $null
-            IPv6DisabledComponents              = $null
-            CtsProcessorAffinityPercentage      = $null
-            DisableAsyncNotification            = $null
-            DisableRootAutoUpdate               = $null
-            SleepyNic                           = $null
-            NodeRunner                          = $null
-            MapiFrontEndAppPoolGcMode           = $null
-            VisualCRedistributable              = $null
-            AuthCertificate                     = $null
-            SerializedDataSigningEnabled        = $null
-            SettingOverrides                    = $null
-            InternalTransportCertificate        = $null
-            Eems                                = $null
-            Amsi                                = $null
-            Hsts                                = $null
-            IisModules                          = $null
-            TokenCacheModuleLoaded              = $null
-            FipFs                               = $null
-            IisWebConfig                        = $null
-            ExchangeComputerMembership          = $null
-            UnifiedContentCleanup               = $null
-            TransportRetryConfig                = $null
-            HybridApplication                   = $null
-            MailboxDatabases                    = @()
-            OwaSmimeEnabled                     = $null
-            OwaFormsAuthentication              = @()
-            OutlookAnywhereSSLOffloading        = @()
-            EventLogLevels                      = @()
-            RpcClientAccessConfig               = $null
-            TransportService                    = $null
-            TransportAgents                     = @()
-            ExchangeServices                    = @()
-            InstallPathAcl                      = @()
-            AuditLogPath                        = $null
-            AuditLogPathAcl                     = @()
-            CollectionWarnings                  = @()
+            ExchangeCmdletsAvailable                 = $false
+            Name                                     = $env:COMPUTERNAME
+            AdminDisplayVersion                      = $null
+            BuildNumber                              = $null
+            Edition                                  = $null
+            ProductLine                              = 'Unknown'
+            IsExchangeServer                         = $false
+            ExtendedProtectionStatus                 = @()
+            AdminAuditLogEnabled                     = $null
+            ReplicationHealthPassed                  = $null
+            IsDagMember                              = $null
+            DagName                                  = $null
+            AdSite                                   = $null
+            SingleItemRecoveryDisabledCount          = $null
+            SingleItemRecoveryDisabledMailboxes      = @()
+            OAuth2ClientProfileEnabled               = $null
+            Pop3ServiceStatus                        = $null
+            Imap4ServiceStatus                       = $null
+            MapiHttpEnabled                          = $null
+            ReceiveConnectors                        = @()
+            SendConnectors                           = @()
+            UpnPrimarySmtpMismatchCount              = $null
+            SharedMailboxTypeMismatchCount           = $null
+            SharedMailboxTypeMismatches              = @()
+            OwaDownloadDomainsConfigured             = $null
+            OAuthHmaDownloadDomainOverrideConfigured = $null
+            AlternateServiceAccount                  = $null
+            AcceptedDomains                          = @()
+            DatabaseStoragePaths                     = @()
+            InstallPath                              = $null
+            RpcMinConnectionTimeout                  = $null
+            TcpKeepAliveTime                         = $null
+            TcpAckFrequencyAdapters                  = @()
+            NumaGroupSizeOptimization                = $null
+            IPv6DisabledComponents                   = $null
+            CtsProcessorAffinityPercentage           = $null
+            DisableAsyncNotification                 = $null
+            DisableRootAutoUpdate                    = $null
+            SleepyNic                                = $null
+            NodeRunner                               = $null
+            MapiFrontEndAppPoolGcMode                = $null
+            VisualCRedistributable                   = $null
+            AuthCertificate                          = $null
+            SerializedDataSigningEnabled             = $null
+            SettingOverrides                         = $null
+            InternalTransportCertificate             = $null
+            Eems                                     = $null
+            Amsi                                     = $null
+            Hsts                                     = $null
+            IisModules                               = $null
+            TokenCacheModuleLoaded                   = $null
+            FipFs                                    = $null
+            IisWebConfig                             = $null
+            ExchangeComputerMembership               = $null
+            UnifiedContentCleanup                    = $null
+            TransportBackPressure                    = $null
+            TransportRetryConfig                     = $null
+            HybridApplication                        = $null
+            ErrorReportingEnabled                    = $null
+            MailboxDatabases                         = @()
+            OwaSmimeEnabled                          = $null
+            OwaFormsAuthentication                   = @()
+            OutlookAnywhereSSLOffloading             = @()
+            EventLogLevels                           = @()
+            RpcClientAccessConfig                    = $null
+            TransportService                         = $null
+            TransportAgents                          = @()
+            ExchangeServices                         = @()
+            InstallPathAcl                           = @()
+            AuditLogPath                             = $null
+            AuditLogPathAcl                          = @()
+            CollectionWarnings                       = @()
         }
 
         $os = Get-EDCACimInstance -ClassName Win32_OperatingSystem
@@ -1903,22 +1957,28 @@ function Get-EDCAServerInventory {
             $volumes = @(Get-EDCACimInstance -ClassName Win32_Volume -Filter 'DriveType = 3')
             foreach ($volume in $volumes) {
                 $driveLetter = [string]$volume.DriveLetter
-                if ([string]::IsNullOrWhiteSpace($driveLetter)) {
+                # Name is the mount path: 'D:\' for drive-letter volumes or 'C:\MountedVolumes\DB1\' for directory-mounted volumes
+                $mountName = ([string]$volume.Name).TrimEnd('\') + '\'
+                if ([string]::IsNullOrWhiteSpace($mountName) -or $mountName -eq '\') {
                     continue
                 }
 
+                $blKey = if (-not [string]::IsNullOrWhiteSpace($driveLetter)) { $driveLetter.TrimEnd('\').ToUpperInvariant() } else { $null }
                 $volumeItem = [pscustomobject]@{
-                    DriveLetter        = $driveLetter
+                    DeviceID           = [string]$volume.DeviceID
+                    Name               = $mountName
+                    DriveLetter        = if ([string]::IsNullOrWhiteSpace($driveLetter)) { $null } else { $driveLetter.TrimEnd('\') }
                     Label              = [string]$volume.Label
                     FileSystem         = [string]$volume.FileSystem
                     BlockSize          = if ($null -ne $volume.BlockSize) { [int64]$volume.BlockSize } else { $null }
                     CapacityGB         = if ($null -ne $volume.Capacity) { [math]::Round(([double]$volume.Capacity / 1GB), 2) } else { $null }
                     FreeSpaceGB        = if ($null -ne $volume.FreeSpace) { [math]::Round(([double]$volume.FreeSpace / 1GB), 2) } else { $null }
-                    BitLockerProtected = if ($bitlockerStatus.ContainsKey($driveLetter.ToUpperInvariant())) { $bitlockerStatus[$driveLetter.ToUpperInvariant()] } else { $false }
+                    BitLockerProtected = if ($null -ne $blKey -and $bitlockerStatus.ContainsKey($blKey)) { $bitlockerStatus[$blKey] } else { $false }
                 }
 
                 $volumeItems += $volumeItem
-                if (-not [string]::IsNullOrWhiteSpace($systemDrive) -and $driveLetter.Equals($systemDrive, [System.StringComparison]::OrdinalIgnoreCase)) {
+                if (-not [string]::IsNullOrWhiteSpace($systemDrive) -and -not [string]::IsNullOrWhiteSpace($driveLetter) -and
+                    $driveLetter.TrimEnd('\').Equals($systemDrive.TrimEnd('\'), [System.StringComparison]::OrdinalIgnoreCase)) {
                     $systemVolume = $volumeItem
                 }
             }
@@ -2213,6 +2273,29 @@ function Get-EDCAServerInventory {
             $tcpParameters = Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters' -ErrorAction SilentlyContinue
             if ($null -ne $tcpParameters -and $tcpParameters.PSObject.Properties.Name -contains 'KeepAliveTime') {
                 $tcpKeepAliveTime = [int]$tcpParameters.KeepAliveTime
+            }
+        }
+        catch {
+        }
+
+        $tcpAckFrequencyAdapters = @()
+        try {
+            $nicConfigs = @(Get-CimInstance -ClassName Win32_NetworkAdapterConfiguration -ErrorAction SilentlyContinue | Where-Object { $_.IPEnabled })
+            foreach ($nic in $nicConfigs) {
+                $guid = [string]$nic.SettingID
+                $regPath = ('HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces\{0}' -f $guid)
+                $value = $null
+                if (Test-Path -Path $regPath) {
+                    $regItem = Get-ItemProperty -Path $regPath -ErrorAction SilentlyContinue
+                    if ($null -ne $regItem -and $regItem.PSObject.Properties.Name -contains 'TcpAckFrequency') {
+                        $value = [int]$regItem.TcpAckFrequency
+                    }
+                }
+                $tcpAckFrequencyAdapters += [pscustomobject]@{
+                    AdapterDescription = [string]$nic.Description
+                    Guid               = $guid
+                    TcpAckFrequency    = $value
+                }
             }
         }
         catch {
@@ -2562,6 +2645,28 @@ function Get-EDCAServerInventory {
             $serverType = 'Virtual'
         }
 
+        $vmwareIntrospection = $null
+        if ($serverType -eq 'VMware') {
+            $vsepfltRunning = $false
+            $vnetfltRunning = $false
+            try {
+                $vsepfltSvc = Get-Service -Name 'vsepflt' -ErrorAction SilentlyContinue
+                if ($null -ne $vsepfltSvc) {
+                    $vsepfltRunning = ($vsepfltSvc.Status -eq 'Running')
+                }
+                $vnetfltSvc = Get-Service -Name 'vnetflt' -ErrorAction SilentlyContinue
+                if ($null -ne $vnetfltSvc) {
+                    $vnetfltRunning = ($vnetfltSvc.Status -eq 'Running')
+                }
+            }
+            catch {
+            }
+            $vmwareIntrospection = [pscustomobject]@{
+                VsepfltRunning = $vsepfltRunning
+                VnetfltRunning = $vnetfltRunning
+            }
+        }
+
         $dynamicMemoryDetected = $null
         $dynamicMemoryCounterName = $null
         $dynamicMemoryCounterValueMB = $null
@@ -2599,6 +2704,7 @@ function Get-EDCAServerInventory {
 
         $exchangeInfo.RpcMinConnectionTimeout = $rpcMinConnectionTimeout
         $exchangeInfo.TcpKeepAliveTime = $tcpKeepAliveTime
+        $exchangeInfo.TcpAckFrequencyAdapters = $tcpAckFrequencyAdapters
         $exchangeInfo.NumaGroupSizeOptimization = $numaGroupSizeOptimization
         $exchangeInfo.IPv6DisabledComponents = $ipv6DisabledComponents
         $exchangeInfo.CtsProcessorAffinityPercentage = $ctsProcessorAffinityPercentage
@@ -2708,6 +2814,7 @@ function Get-EDCAServerInventory {
                 WeakKeyExchange            = $weakKeyExchangeStates
             }
             NetFrameworkRelease       = $netFrameworkRelease
+            VmwareIntrospection       = $vmwareIntrospection
         }
 
         $tlsPaths = @{
@@ -2938,6 +3045,26 @@ function Get-EDCAServerInventory {
 
         if (-not [string]::IsNullOrWhiteSpace($exchangeInstallPath)) {
             $exchangeInfo.InstallPath = $exchangeInstallPath
+            if ([string]::IsNullOrWhiteSpace($exchangeInfo.AuditLogPath)) {
+                $defaultAuditLogPath = $exchangeInstallPath.TrimEnd('\') + '\Logging'
+                $exchangeInfo.AuditLogPath = $defaultAuditLogPath
+                if (Test-Path -LiteralPath $defaultAuditLogPath) {
+                    try {
+                        $defaultAuditAcl = Get-Acl -Path $defaultAuditLogPath -ErrorAction Stop
+                        $exchangeInfo.AuditLogPathAcl = @($defaultAuditAcl.Access | Where-Object { $_.PSObject.Properties.Name -contains 'IdentityReference' } | ForEach-Object {
+                                [pscustomobject]@{
+                                    IdentityReference = [string]$_.IdentityReference
+                                    FileSystemRights  = [string]$_.FileSystemRights
+                                    AccessControlType = [string]$_.AccessControlType
+                                    IsInherited       = [bool]$_.IsInherited
+                                }
+                            })
+                    }
+                    catch {
+                        $exchangeInfo.CollectionWarnings += ('Get-Acl for default AuditLogPath failed: ' + $_.Exception.Message)
+                    }
+                }
+            }
             try {
                 $installPathAcl = Get-Acl -Path $exchangeInstallPath -ErrorAction Stop
                 $exchangeInfo.InstallPathAcl = @($installPathAcl.Access | ForEach-Object {
@@ -3290,6 +3417,37 @@ function Get-EDCAServerInventory {
                 Configured = $unifiedContentConfigured
                 Details    = $unifiedContentDetails
             }
+
+            if (-not [string]::IsNullOrWhiteSpace($exchangeInstallPath)) {
+                $bpConfigPath = Join-Path -Path $exchangeInstallPath -ChildPath 'Bin\EdgeTransport.exe.config'
+                if (-not (Test-Path -Path $bpConfigPath)) {
+                    $exchangeInfo.TransportBackPressure = [pscustomobject]@{
+                        ConfigPresent                            = $false
+                        NormalPriorityMessageExpirationTimeout   = $null
+                        CriticalPriorityMessageExpirationTimeout = $null
+                    }
+                }
+                else {
+                    try {
+                        [xml]$bpXml = Get-Content -Path $bpConfigPath -Raw -Encoding UTF8 -ErrorAction Stop
+                        $bpNormal = ($bpXml.configuration.appSettings.add | Where-Object { [string]$_.key -eq 'NormalPriorityMessageExpirationTimeout' } | Select-Object -First 1)
+                        $bpCritical = ($bpXml.configuration.appSettings.add | Where-Object { [string]$_.key -eq 'CriticalPriorityMessageExpirationTimeout' } | Select-Object -First 1)
+                        $exchangeInfo.TransportBackPressure = [pscustomobject]@{
+                            ConfigPresent                            = $true
+                            NormalPriorityMessageExpirationTimeout   = if ($null -ne $bpNormal) { [string]$bpNormal.value }   else { $null }
+                            CriticalPriorityMessageExpirationTimeout = if ($null -ne $bpCritical) { [string]$bpCritical.value } else { $null }
+                        }
+                    }
+                    catch {
+                        $exchangeInfo.TransportBackPressure = [pscustomobject]@{
+                            ConfigPresent                            = $null
+                            NormalPriorityMessageExpirationTimeout   = $null
+                            CriticalPriorityMessageExpirationTimeout = $null
+                        }
+                        $exchangeInfo.CollectionWarnings += ('EdgeTransport.exe.config back pressure parse failed: ' + $_.Exception.Message)
+                    }
+                }
+            }
         }
 
         if ($hasExchangeInstall) {
@@ -3344,6 +3502,9 @@ function Get-EDCAServerInventory {
                 $exchangeInfo.IsDagMember = ($serverObject.PSObject.Properties.Name -contains 'MemberOfDAG') -and -not [string]::IsNullOrWhiteSpace([string]$serverObject.MemberOfDAG)
                 $exchangeInfo.DagName = if (($serverObject.PSObject.Properties.Name -contains 'MemberOfDAG') -and -not [string]::IsNullOrWhiteSpace([string]$serverObject.MemberOfDAG)) { [string]$serverObject.MemberOfDAG } else { '' }
                 $exchangeInfo.AdSite = if ($serverObject.PSObject.Properties.Name -contains 'Site') { [string]$serverObject.Site } else { '' }
+                if ($serverObject.PSObject.Properties.Name -contains 'ErrorReportingEnabled') {
+                    $exchangeInfo.ErrorReportingEnabled = [bool]$serverObject.ErrorReportingEnabled
+                }
 
                 if ($exchangeInfo.AdminDisplayVersion -match 'Version 15\.1') {
                     $exchangeInfo.ProductLine = 'Exchange2016'
@@ -3397,6 +3558,23 @@ function Get-EDCAServerInventory {
                 try {
                     $audit = Get-AdminAuditLogConfig -ErrorAction Stop
                     $exchangeInfo.AdminAuditLogEnabled = [bool]$audit.AdminAuditLogEnabled
+                    if ($audit.PSObject.Properties.Name -contains 'AdminAuditLogPath' -and -not [string]::IsNullOrWhiteSpace([string]$audit.AdminAuditLogPath)) {
+                        $exchangeInfo.AuditLogPath = [string]$audit.AdminAuditLogPath
+                        try {
+                            $auditLogAcl = Get-Acl -Path $exchangeInfo.AuditLogPath -ErrorAction Stop
+                            $exchangeInfo.AuditLogPathAcl = @($auditLogAcl.Access | Where-Object { $_.PSObject.Properties.Name -contains 'IdentityReference' } | ForEach-Object {
+                                    [pscustomobject]@{
+                                        IdentityReference = [string]$_.IdentityReference
+                                        FileSystemRights  = [string]$_.FileSystemRights
+                                        AccessControlType = [string]$_.AccessControlType
+                                        IsInherited       = [bool]$_.IsInherited
+                                    }
+                                })
+                        }
+                        catch {
+                            $exchangeInfo.CollectionWarnings += ('Get-Acl for AuditLogPath failed: ' + $_.Exception.Message)
+                        }
+                    }
                 }
                 catch {
                     $exchangeInfo.CollectionWarnings += ('Get-AdminAuditLogConfig failed: ' + $_.Exception.Message)
@@ -3567,6 +3745,7 @@ function Get-EDCAServerInventory {
                 try {
                     $mailboxes = @(Get-Mailbox -ResultSize Unlimited -ErrorAction Stop)
                     $mismatchedUpn = @($mailboxes | Where-Object {
+                            $_.RecipientTypeDetails -eq 'UserMailbox' -and
                             -not [string]::IsNullOrWhiteSpace([string]$_.UserPrincipalName) -and
                             -not [string]::IsNullOrWhiteSpace([string]$_.WindowsEmailAddress) -and
                             -not [string]::Equals([string]$_.UserPrincipalName, [string]$_.WindowsEmailAddress, [System.StringComparison]::OrdinalIgnoreCase)
@@ -3574,8 +3753,9 @@ function Get-EDCAServerInventory {
                     $exchangeInfo.UpnPrimarySmtpMismatchCount = $mismatchedUpn.Count
 
                     $sharedLikeNames = @($mailboxes | Where-Object {
-                            $_.RecipientTypeDetails -eq 'UserMailbox' -and
-                            ([string]$_.DisplayName -match '(shared|team|group|department|afdeling|gedeeld)')
+                            $_.RecipientTypeDetails -ne 'UserMailbox' -and
+                            ($_.PSObject.Properties.Name -contains 'AccountDisabled') -and
+                            -not [bool]$_.AccountDisabled
                         })
                     $exchangeInfo.SharedMailboxTypeMismatchCount = $sharedLikeNames.Count
                     $exchangeInfo.SharedMailboxTypeMismatches = @($sharedLikeNames | ForEach-Object { [string]$_.DisplayName })
@@ -3790,6 +3970,33 @@ function Get-EDCAServerInventory {
             }
         }
 
+        # OwaVersion from the setup registry key is always the authoritative source for BuildNumber.
+        # Get-ExchangeServer AdminDisplayVersion does not reflect individual SU or minor CU changes.
+        # This block always runs unconditionally so the correct build is reported regardless of
+        # whether Exchange cmdlets are available or $collectExchangeCmdlets is set.
+        if ($hasExchangeInstall) {
+            try {
+                $setupForBuild = Get-ItemProperty -Path $setupKey -ErrorAction Stop
+                if (($setupForBuild.PSObject.Properties.Name -contains 'OwaVersion') -and
+                    -not [string]::IsNullOrWhiteSpace([string]$setupForBuild.OwaVersion)) {
+                    $exchangeInfo.BuildNumber = [string]$setupForBuild.OwaVersion
+                }
+                elseif ($null -eq $exchangeInfo.BuildNumber) {
+                    # OwaVersion absent: compose version string from the four MSI component values.
+                    $fbMajor = if ($setupForBuild.PSObject.Properties.Name -contains 'MsiProductMajor') { $setupForBuild.MsiProductMajor } else { $null }
+                    $fbMinor = if ($setupForBuild.PSObject.Properties.Name -contains 'MsiProductMinor') { $setupForBuild.MsiProductMinor } else { $null }
+                    $fbBuild = if ($setupForBuild.PSObject.Properties.Name -contains 'MsiBuildMajor') { $setupForBuild.MsiBuildMajor }   else { $null }
+                    $fbRev = if ($setupForBuild.PSObject.Properties.Name -contains 'MsiBuildMinor') { $setupForBuild.MsiBuildMinor }   else { $null }
+                    if ($null -ne $fbMajor -and $null -ne $fbMinor -and $null -ne $fbBuild -and $null -ne $fbRev) {
+                        $exchangeInfo.BuildNumber = ('{0}.{1}.{2}.{3}' -f [int]$fbMajor, [int]$fbMinor, [int]$fbBuild, [int]$fbRev)
+                    }
+                }
+            }
+            catch {
+                $exchangeInfo.CollectionWarnings += ('Registry build number read failed: ' + $_.Exception.Message)
+            }
+        }
+
         $inventory = [pscustomobject]@{
             Server       = $env:COMPUTERNAME
             OS           = $osInfo
@@ -3815,8 +4022,13 @@ function Get-EDCAServerInventory {
     if (($inventory.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $inventory.Exchange -and ($inventory.Exchange.PSObject.Properties.Name -contains 'ExchangeComputerMembership')) {
         $computerCn = $Server -replace '\..*$', ''
         try {
-            $searcher = New-Object System.DirectoryServices.DirectorySearcher
+            $gcRootDse = [System.DirectoryServices.DirectoryEntry]::new('GC://RootDSE')
+            $forestRootNC = [string]$gcRootDse.Properties['rootDomainNamingContext'][0]
+            $searcher = [System.DirectoryServices.DirectorySearcher]::new(
+                [System.DirectoryServices.DirectoryEntry]::new(('GC://{0}' -f $forestRootNC))
+            )
             $searcher.Filter = ('(&(objectCategory=computer)(objectClass=computer)(cn={0}))' -f $computerCn)
+            $searcher.SearchScope = [System.DirectoryServices.SearchScope]::Subtree
             $searcher.PageSize = 1
             [void]$searcher.PropertiesToLoad.Add('memberOf')
             $computerResult = $searcher.FindOne()
@@ -3877,6 +4089,9 @@ function Get-EDCAServerInventory {
                 $inventory.Exchange.IsDagMember = ($remoteServer.PSObject.Properties.Name -contains 'MemberOfDAG') -and -not [string]::IsNullOrWhiteSpace([string]$remoteServer.MemberOfDAG)
                 $inventory.Exchange.DagName = if (($remoteServer.PSObject.Properties.Name -contains 'MemberOfDAG') -and -not [string]::IsNullOrWhiteSpace([string]$remoteServer.MemberOfDAG)) { [string]$remoteServer.MemberOfDAG } else { '' }
                 $inventory.Exchange.AdSite = if ($remoteServer.PSObject.Properties.Name -contains 'Site') { [string]$remoteServer.Site } else { '' }
+                if ($remoteServer.PSObject.Properties.Name -contains 'ErrorReportingEnabled') {
+                    $inventory.Exchange.ErrorReportingEnabled = [bool]$remoteServer.ErrorReportingEnabled
+                }
                 $adv = [string]$inventory.Exchange.AdminDisplayVersion
                 if ($adv -match 'Version 15\.1') {
                     $inventory.Exchange.ProductLine = 'Exchange2016'
@@ -3915,6 +4130,7 @@ function Get-EDCAServerInventory {
                                 InternalAuthenticationMethods   = if ($vdir.PSObject.Properties.Name -contains 'InternalAuthenticationMethods') { [string]$vdir.InternalAuthenticationMethods } else { '' }
                                 ExternalAuthenticationMethods   = if ($vdir.PSObject.Properties.Name -contains 'ExternalAuthenticationMethods') { [string]$vdir.ExternalAuthenticationMethods } else { '' }
                                 IISAuthenticationMethods        = if ($vdir.PSObject.Properties.Name -contains 'IISAuthenticationMethods') { [string]$vdir.IISAuthenticationMethods } else { '' }
+                                OAuthAuthentication             = if ($vdir.PSObject.Properties.Name -contains 'OAuthAuthentication') { [nullable[bool]]$vdir.OAuthAuthentication } else { $null }
                             })
                     }
                 }
@@ -4114,6 +4330,33 @@ function Get-EDCAServerInventory {
                 $exchEndpointWarnings += ('Get-AdminAuditLogConfig via endpoint failed: ' + $_.Exception.Message)
             }
 
+            if ([string]::IsNullOrWhiteSpace([string]$inventory.Exchange.AuditLogPath) -and
+                -not [string]::IsNullOrWhiteSpace([string]$inventory.Exchange.InstallPath)) {
+                $inventory.Exchange.AuditLogPath = ([string]$inventory.Exchange.InstallPath).TrimEnd('\') + '\Logging'
+            }
+
+            if (-not [string]::IsNullOrWhiteSpace([string]$inventory.Exchange.AuditLogPath)) {
+                try {
+                    $auditPathArg = [string]$inventory.Exchange.AuditLogPath
+                    $auditAclObj = Invoke-Command -ComputerName $invokeTarget -ScriptBlock {
+                        param($p) Get-Acl -Path $p -ErrorAction Stop
+                    } -ArgumentList $auditPathArg -ErrorAction Stop
+                    if ($null -ne $auditAclObj -and $auditAclObj.PSObject.Properties.Name -contains 'Access') {
+                        $inventory.Exchange.AuditLogPathAcl = @($auditAclObj.Access | Where-Object { $_.PSObject.Properties.Name -contains 'IdentityReference' } | ForEach-Object {
+                                [pscustomobject]@{
+                                    IdentityReference = [string]$_.IdentityReference
+                                    FileSystemRights  = [string]$_.FileSystemRights
+                                    AccessControlType = [string]$_.AccessControlType
+                                    IsInherited       = [bool]$_.IsInherited
+                                }
+                            })
+                    }
+                }
+                catch {
+                    $exchEndpointWarnings += ('Get-Acl for AuditLogPath via endpoint failed: ' + $_.Exception.Message)
+                }
+            }
+
             try {
                 $sb = [scriptblock]::Create("Get-TransportService -Identity '$invokeTarget'")
                 $transportSvc = Invoke-EDCAExchangeEndpointCommand -Server $invokeTarget -ScriptBlock $sb
@@ -4274,8 +4517,9 @@ function Get-EDCAServerInventory {
                 $sb = [scriptblock]::Create('Get-Mailbox -ResultSize Unlimited')
                 $mailboxes = @(Invoke-EDCAExchangeEndpointCommand -Server $invokeTarget -ScriptBlock $sb)
                 $sharedLikeNames = @($mailboxes | Where-Object {
-                        $_.RecipientTypeDetails -eq 'UserMailbox' -and
-                        ([string]$_.DisplayName -match '(shared|team|group|department|afdeling|gedeeld)')
+                        $_.RecipientTypeDetails -ne 'UserMailbox' -and
+                        ($_.PSObject.Properties.Name -contains 'AccountDisabled') -and
+                        -not [bool]$_.AccountDisabled
                     })
                 $inventory.Exchange.SharedMailboxTypeMismatchCount = $sharedLikeNames.Count
                 $inventory.Exchange.SharedMailboxTypeMismatches = @($sharedLikeNames | ForEach-Object { [string]$_.DisplayName })
@@ -4622,14 +4866,44 @@ function Get-EDCAServerInventory {
 
                 $dedicatedHybridAppConfigured = ($dedicatedHybridAppOverrides.Count -ge 1) -and ($dedicatedAppAuthServers.Count -ge 1) -and ($sharedAppAuthServers.Count -eq 0)
 
+                $evoStsIsDefaultAuthorizationEndpoint = (@($evoStsAuthServers | Where-Object {
+                            $_.PSObject.Properties.Name -contains 'IsDefaultAuthorizationEndpoint' -and
+                            [bool]$_.IsDefaultAuthorizationEndpoint
+                        }).Count -gt 0)
+
+                $defaultAuthorizationServer = @($authServers | Where-Object {
+                        $_.PSObject.Properties.Name -contains 'IsDefaultAuthorizationEndpoint' -and
+                        [bool]$_.IsDefaultAuthorizationEndpoint -eq $true
+                    }) | Select-Object -First 1
+                $defaultAuthServerUrl = if ($null -ne $defaultAuthorizationServer -and
+                    $defaultAuthorizationServer.PSObject.Properties.Name -contains 'AuthMetadataUrl' -and
+                    -not [string]::IsNullOrWhiteSpace([string]$defaultAuthorizationServer.AuthMetadataUrl)) {
+                    [string]$defaultAuthorizationServer.AuthMetadataUrl
+                }
+                else { '' }
+                $modernAuthType = if ([string]::IsNullOrWhiteSpace($defaultAuthServerUrl)) { 'None' }
+                elseif ($defaultAuthServerUrl -match 'login\.windows\.net|login\.microsoftonline\.com') { 'HMA' }
+                else { 'ADFS' }
+
+                $hmaDownloadDomainOverride = @($settingOverrides | Where-Object {
+                        $cn = if ($_.PSObject.Properties.Name -contains 'ComponentName') { [string]$_.ComponentName } else { '' }
+                        $sn = if ($_.PSObject.Properties.Name -contains 'SectionName') { [string]$_.SectionName } else { '' }
+                        $pt = if ($_.PSObject.Properties.Name -contains 'Parameters' -and $null -ne $_.Parameters) { [string]::Join(';', @($_.Parameters | ForEach-Object { [string]$_ })) } else { '' }
+                        $cn -eq 'OAuth' -and $sn -eq 'OAuthIdentityCacheFixForDownloadDomains' -and $pt -match 'Enabled\s*=\s*True'
+                    })
+                $inventory.Exchange.OAuthHmaDownloadDomainOverrideConfigured = ($hmaDownloadDomainOverride.Count -gt 0)
+
                 $hybridConfigured = $oAuthConfigured
                 $inventory.Exchange.HybridApplication = [pscustomobject]@{
                     Configured                             = $hybridConfigured
+                    EvoStsIsDefaultAuthorizationEndpoint   = $evoStsIsDefaultAuthorizationEndpoint
                     DedicatedHybridAppConfigured           = $dedicatedHybridAppConfigured
                     DedicatedHybridAppOverrideCount        = $dedicatedHybridAppOverrides.Count
                     DedicatedHybridAppAuthServerCount      = $dedicatedAppAuthServers.Count
                     SharedExchangeOnlineAppAuthServerCount = $sharedAppAuthServers.Count
-                    Details                                = ('OAuth hybrid detected: {0}; EvoSTS auth servers: {1}; ACS auth servers: {2}; Exchange Online partner app enabled: {3}; dedicated-hybrid-app override count: {4}; dedicated-app auth server count: {5}; shared-app auth server count: {6}' -f $hybridConfigured, $evoStsAuthServers.Count, $acsAuthServers.Count, $enabledHybridPartnerApplication, $dedicatedHybridAppOverrides.Count, $dedicatedAppAuthServers.Count, $sharedAppAuthServers.Count)
+                    DefaultAuthServerAuthMetadataUrl       = $defaultAuthServerUrl
+                    ModernAuthType                         = $modernAuthType
+                    Details                                = ('OAuth hybrid detected: {0}; EvoSTS auth servers: {1}; ACS auth servers: {2}; Exchange Online partner app enabled: {3}; dedicated-hybrid-app override count: {4}; dedicated-app auth server count: {5}; shared-app auth server count: {6}; EvoSTS IsDefaultAuthorizationEndpoint: {7}; modern auth type: {8}; default auth server URL: {9}' -f $hybridConfigured, $evoStsAuthServers.Count, $acsAuthServers.Count, $enabledHybridPartnerApplication, $dedicatedHybridAppOverrides.Count, $dedicatedAppAuthServers.Count, $sharedAppAuthServers.Count, $evoStsIsDefaultAuthorizationEndpoint, $modernAuthType, $defaultAuthServerUrl)
                 }
             }
             catch {
@@ -4746,7 +5020,7 @@ function Invoke-EDCAParallelServerCollection {
     $jobBackend = if ($canUseThreadJob) { 'Start-ThreadJob' } else { 'Start-Job' }
 
     Write-Verbose ('Using parallel server collection for {0} target(s) with throttle {1} via {2}.' -f $targetServers.Count, $ThrottleLimit, $jobBackend)
-    Write-Host ('Collecting data from {0} server(s) ...' -f $targetServers.Count)
+    Write-EDCALog -Message ('Collecting data from {0} server(s).' -f $targetServers.Count)
 
     $commonModulePath = Join-Path -Path $PSScriptRoot -ChildPath 'Common.ps1'
     $collectionModulePath = Join-Path -Path $PSScriptRoot -ChildPath 'Collection.ps1'
@@ -4791,7 +5065,7 @@ function Invoke-EDCAParallelServerCollection {
                 Server = $jobTarget.Server
                 Job    = $job
             }
-            Write-Host ('  [{0}/{1}] Starting collection: {2}' -f ($jobTarget.Index + 1), $targetServers.Count, $jobTarget.Server)
+            Write-EDCALog -Message ('[{0}/{1}] Starting collection: {2}' -f ($jobTarget.Index + 1), $targetServers.Count, $jobTarget.Server)
         }
 
         if ($activeJobs.Count -eq 0) {
@@ -4857,10 +5131,10 @@ function Invoke-EDCAParallelServerCollection {
 
     $errorCount = @($orderedResults | Where-Object { ($_.PSObject.Properties.Name -contains 'CollectionError') -and -not [string]::IsNullOrWhiteSpace($_.CollectionError) }).Count
     if ($errorCount -gt 0) {
-        Write-Host ('Collection complete: {0} succeeded, {1} failed.' -f ($targetServers.Count - $errorCount), $errorCount) -ForegroundColor Yellow
+        Write-EDCALog -Message ('Collection complete: {0} succeeded, {1} failed.' -f ($targetServers.Count - $errorCount), $errorCount) -Level WARN
     }
     else {
-        Write-Host ('Collection complete: all {0} server(s) succeeded.' -f $targetServers.Count) -ForegroundColor Green
+        Write-EDCALog -Message ('Collection complete: all {0} server(s) succeeded.' -f $targetServers.Count)
     }
 
     return $orderedResults
@@ -4872,53 +5146,72 @@ function Get-EDCAExchangeEnvironmentServers {
 
     # Discover Exchange servers via the well-known "Exchange Servers" universal security group.
     # Exchange Setup adds every Exchange server computer account to this group; membership is
-    # authoritative and requires only the ActiveDirectory module (built into Windows Server RSAT).
-    Write-Verbose 'Discovering Exchange servers via AD group membership of "Exchange Servers".'
+    # authoritative. Uses .NET System.DirectoryServices — no RSAT/AD module required.
+    Write-Verbose 'Discovering Exchange servers via AD group membership of "Exchange Servers" using .NET DirectoryServices.'
 
-    if (-not (Get-Module -Name ActiveDirectory -ListAvailable)) {
-        throw 'The ActiveDirectory PowerShell module is not available. Install RSAT-AD-PowerShell or run from a Windows Server with AD DS tools installed.'
-    }
-
-    Import-Module -Name ActiveDirectory -ErrorAction Stop -Verbose:$false
-
-    $members = @()
     try {
-        $members = @(
-            Get-ADGroup -Identity 'Exchange Servers' -ErrorAction Stop |
-            Get-ADGroupMember -Recursive -ErrorAction Stop |
-            Where-Object { $_.objectClass -eq 'computer' }
-        )
+        $rootDse = [System.DirectoryServices.DirectoryEntry]::new('GC://RootDSE')
+        $forestRootNC = [string]$rootDse.Properties['rootDomainNamingContext'][0]
     }
     catch {
-        throw ('Exchange server discovery failed: {0}. Provide -Servers explicitly.' -f $_.Exception.Message)
+        throw ('Failed to connect to Active Directory via LDAP: {0}. Provide -Servers explicitly.' -f $_.Exception.Message)
+    }
+    $gcForestRoot = [System.DirectoryServices.DirectoryEntry]::new(('GC://{0}' -f $forestRootNC))
+
+    # Find the "Exchange Servers" group DN.
+    $groupDn = $null
+    try {
+        $groupSearcher = [System.DirectoryServices.DirectorySearcher]::new($gcForestRoot)
+        $groupSearcher.Filter = '(&(objectClass=group)(cn=Exchange Servers))'
+        $groupSearcher.SearchScope = [System.DirectoryServices.SearchScope]::Subtree
+        $null = $groupSearcher.PropertiesToLoad.Add('distinguishedName')
+        $groupResult = $groupSearcher.FindOne()
+        if ($null -eq $groupResult) {
+            throw '"Exchange Servers" group not found in Active Directory. Provide -Servers explicitly.'
+        }
+        $groupDn = [string]$groupResult.Properties['distinguishedName'][0]
+    }
+    catch {
+        throw ('Exchange server discovery failed while locating group: {0}. Provide -Servers explicitly.' -f $_.Exception.Message)
     }
 
-    Write-Verbose ('"Exchange Servers" group contains {0} computer member(s).' -f $members.Count)
+    Write-Verbose ('"Exchange Servers" group found: {0}' -f $groupDn)
 
-    $serverNames = @(
-        $members | ForEach-Object {
-            try {
-                $computer = Get-ADComputer -Identity $_.distinguishedName -Properties DNSHostName -ErrorAction Stop
-                if (-not [string]::IsNullOrWhiteSpace($computer.DNSHostName)) {
-                    $computer.DNSHostName
-                }
-                else {
-                    $computer.Name
-                }
-            }
-            catch {
-                Write-Verbose ('Could not resolve computer object {0}: {1}' -f $_.distinguishedName, $_.Exception.Message)
-            }
-        } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique
-    )
+    # Recursively enumerate computer members using LDAP_MATCHING_RULE_IN_CHAIN (1.2.840.113556.1.4.1941).
+    $serverNames = [System.Collections.Generic.List[string]]::new()
+    try {
+        $memberSearcher = [System.DirectoryServices.DirectorySearcher]::new($gcForestRoot)
+        $escapedDn = $groupDn -replace '\\', '\5c' -replace '\(', '\28' -replace '\)', '\29' -replace '\*', '\2a'
+        $memberSearcher.Filter = ('(&(objectClass=computer)(memberOf:1.2.840.113556.1.4.1941:={0}))' -f $escapedDn)
+        $memberSearcher.SearchScope = [System.DirectoryServices.SearchScope]::Subtree
+        $memberSearcher.PageSize = 1000
+        $null = $memberSearcher.PropertiesToLoad.Add('name')
+        $null = $memberSearcher.PropertiesToLoad.Add('dNSHostName')
 
-    if ($serverNames.Count -eq 0) {
+        $results = $memberSearcher.FindAll()
+        foreach ($result in $results) {
+            $dns = if ($result.Properties['dNSHostName'].Count -gt 0) { [string]$result.Properties['dNSHostName'][0] } else { $null }
+            $name = if ($result.Properties['name'].Count -gt 0) { [string]$result.Properties['name'][0] } else { $null }
+            $resolved = if (-not [string]::IsNullOrWhiteSpace($dns)) { $dns } elseif (-not [string]::IsNullOrWhiteSpace($name)) { $name } else { $null }
+            if (-not [string]::IsNullOrWhiteSpace($resolved)) {
+                $serverNames.Add($resolved)
+            }
+        }
+        $results.Dispose()
+    }
+    catch {
+        throw ('Exchange server discovery failed while enumerating members: {0}. Provide -Servers explicitly.' -f $_.Exception.Message)
+    }
+
+    $unique = @($serverNames | Sort-Object -Unique)
+
+    if ($unique.Count -eq 0) {
         throw 'The "Exchange Servers" group exists but contains no computer members. Provide -Servers explicitly.'
     }
 
-    Write-Verbose ('Automatic discovery found {0} server(s): {1}' -f $serverNames.Count, ($serverNames -join ', '))
+    Write-Verbose ('Automatic discovery found {0} server(s): {1}' -f $unique.Count, ($unique -join ', '))
 
-    return $serverNames
+    return $unique
 }
 
 function Invoke-EDCAExchangeEndpointCommand {
@@ -4980,7 +5273,7 @@ function Get-EDCAOrganizationInventory {
         CollectionWarnings          = @()
     }
 
-    Write-EDCALog -Message ('Collecting organization-level Exchange settings on {0} via Exchange endpoint remoting.' -f $Server)
+    Write-EDCALog -Message ('Collecting organization-level Exchange settings via {0}' -f $Server)
 
     try {
         $orgConfigResult = Invoke-EDCAExchangeEndpointCommand -Server $Server -ScriptBlock {
@@ -5088,6 +5381,7 @@ function Get-EDCAOrganizationInventory {
         $sb = [scriptblock]::Create('Get-Mailbox -ResultSize Unlimited')
         $orgMailboxes = @(Invoke-EDCAExchangeEndpointCommand -Server $Server -ScriptBlock $sb)
         $mismatchedUpn = @($orgMailboxes | Where-Object {
+                $_.RecipientTypeDetails -eq 'UserMailbox' -and
                 -not [string]::IsNullOrWhiteSpace([string]$_.UserPrincipalName) -and
                 -not [string]::IsNullOrWhiteSpace([string]$_.WindowsEmailAddress) -and
                 -not [string]::Equals([string]$_.UserPrincipalName, [string]$_.WindowsEmailAddress, [System.StringComparison]::OrdinalIgnoreCase)
@@ -5099,7 +5393,7 @@ function Get-EDCAOrganizationInventory {
     }
 
     try {
-        $rootDseFL = [ADSI]('LDAP://RootDSE')
+        $rootDseFL = [System.DirectoryServices.DirectoryEntry]::new('GC://RootDSE')
         $forestFL = $rootDseFL.Properties['forestFunctionality']
         $domainFL = $rootDseFL.Properties['domainFunctionality']
         if ($null -ne $forestFL -and $forestFL.Count -gt 0) {
@@ -5114,10 +5408,12 @@ function Get-EDCAOrganizationInventory {
     }
 
     try {
-        $rootDse = [ADSI]("LDAP://$([System.DirectoryServices.ActiveDirectory.Domain]::GetComputerDomain().Name)/RootDSE")
-        $sitesContainerPath = ('CN=Sites,' + $rootDse.configurationNamingContext)
-        $sitesContainer = [ADSI]("LDAP://$sitesContainerPath")
-        $siteSearcher = New-Object System.DirectoryServices.DirectorySearcher($sitesContainer, '(objectCategory=site)')
+        $domainName = [System.DirectoryServices.ActiveDirectory.Domain]::GetComputerDomain().Name
+        $rootDseSites = [System.DirectoryServices.DirectoryEntry]::new(('GC://{0}/RootDSE' -f $domainName))
+        $configDN = [string]$rootDseSites.Properties['configurationNamingContext'][0]
+        $sitesContainerDN = ('CN=Sites,' + $configDN)
+        $sitesRoot = [System.DirectoryServices.DirectoryEntry]::new(('GC://{0}' -f $sitesContainerDN))
+        $siteSearcher = [System.DirectoryServices.DirectorySearcher]::new($sitesRoot, '(objectCategory=site)')
         $siteSearcher.PageSize = 100
         $organization.AdSiteCount = ($siteSearcher.FindAll()).Count
     }
@@ -5183,9 +5479,10 @@ function Get-EDCAOrganizationInventory {
     }
 
     try {
-        $edgeResults = @(Invoke-EDCAExchangeEndpointCommand -Server $Server -ScriptBlock {
-                Get-ExchangeServer -ErrorAction Stop | Where-Object { [string]$_.ServerRole -like '*Edge*' } | Select-Object Name, AdminDisplayVersion, Edition
+        $allExSvrsEdge = @(Invoke-EDCAExchangeEndpointCommand -Server $Server -ScriptBlock {
+                Get-ExchangeServer -ErrorAction Stop | Select-Object Name, ServerRole, AdminDisplayVersion, Edition
             })
+        $edgeResults = @($allExSvrsEdge | Where-Object { [string]$_.ServerRole -like '*Edge*' })
         foreach ($es in $edgeResults) {
             $organization.EdgeServers += [pscustomobject]@{
                 Name                = [string]$es.Name
@@ -5302,17 +5599,60 @@ function Get-EDCAOrganizationInventory {
     }
 
     try {
-        # Enumerate all non-Edge Exchange servers and group by AD site
-        $sbAllExSvrs = [scriptblock]::Create('Get-ExchangeServer -ErrorAction Stop | Where-Object { $_.ServerRole -notlike "*Edge*" } | Select-Object -Property Name, Site')
-        $allExSvrs = @(Invoke-EDCAExchangeEndpointCommand -Server $Server -ScriptBlock $sbAllExSvrs)
+        # Enumerate all non-Edge Exchange servers with their AD site names via a local
+        # DirectorySearcher query against the AD Configuration partition.  msExchExchangeServer
+        # objects carry an msExchServerSite attribute (DN of the AD site) so no Exchange PS
+        # endpoint call is needed — and the Exchange remote runspace runs in no-language mode
+        # which rejects complex scriptblock syntax such as [PSCustomObject]@{}.
+        Write-EDCALog -Message 'Collecting Domain Controller system information.'
+        $allExSvrs = [System.Collections.Generic.List[object]]::new()
+        try {
+            $rootDse = [System.DirectoryServices.DirectoryEntry]::new('GC://RootDSE')
+            $configDN = [string]$rootDse.Properties['configurationNamingContext'][0]
+            $searcher = [System.DirectoryServices.DirectorySearcher]::new()
+            $searcher.SearchRoot = [System.DirectoryServices.DirectoryEntry]::new(('GC://{0}' -f $configDN))
+            $searcher.Filter = '(&(objectClass=msExchExchangeServer)(msExchServerSite=*))'
+            $searcher.SearchScope = [System.DirectoryServices.SearchScope]::Subtree
+            $null = $searcher.PropertiesToLoad.Add('name')
+            $null = $searcher.PropertiesToLoad.Add('msExchServerSite')
+            $null = $searcher.PropertiesToLoad.Add('msExchCurrentServerRoles')
+            foreach ($result in @($searcher.FindAll())) {
+                # Skip Edge Transport servers (role bit 64)
+                $roles = if ($result.Properties['msExchCurrentServerRoles'].Count -gt 0) { [int]$result.Properties['msExchCurrentServerRoles'][0] } else { 0 }
+                if ($roles -band 64) { continue }
+                $serverName = if ($result.Properties['name'].Count -gt 0) { [string]$result.Properties['name'][0] } else { $null }
+                $siteDn = if ($result.Properties['msExchServerSite'].Count -gt 0) { [string]$result.Properties['msExchServerSite'][0] } else { '' }
+                $siteName = if ($siteDn -match 'CN=([^,]+)') { $Matches[1] } else { 'Unknown' }
+                if (-not [string]::IsNullOrWhiteSpace($serverName)) {
+                    $allExSvrs.Add([pscustomobject]@{ Name = $serverName; SiteName = $siteName })
+                }
+            }
+        }
+        catch {
+            throw ('Exchange server AD enumeration failed: ' + $_.Exception.Message)
+        }
 
         $siteMap = @{}
         foreach ($exSvr in $allExSvrs) {
-            $rawSite = [string]$exSvr.Site
-            $siteName = if ($rawSite -match 'CN=([^,]+)') { $Matches[1] } else { $rawSite.Trim() }
-            if ([string]::IsNullOrWhiteSpace($siteName)) { $siteName = 'Unknown' }
+            $siteName = if (-not [string]::IsNullOrWhiteSpace([string]$exSvr.SiteName)) { [string]$exSvr.SiteName } else { 'Unknown' }
             if (-not $siteMap.ContainsKey($siteName)) { $siteMap[$siteName] = [System.Collections.Generic.List[string]]::new() }
             $siteMap[$siteName].Add([string]$exSvr.Name)
+        }
+
+        # Build a site→GC map using native .NET (no ActiveDirectory module required).
+        # GlobalCatalog.SiteName and GlobalCatalog.Name provide site and hostname directly.
+        $gcsBySite = @{}
+        $gcEnumError = $null
+        try {
+            $forest = [System.DirectoryServices.ActiveDirectory.Forest]::GetCurrentForest()
+            foreach ($gc in @($forest.GlobalCatalogs)) {
+                $gcSite = [string]$gc.SiteName
+                if (-not $gcsBySite.ContainsKey($gcSite)) { $gcsBySite[$gcSite] = [System.Collections.Generic.List[object]]::new() }
+                $gcsBySite[$gcSite].Add([pscustomobject]@{ Name = [string]$gc.Name })
+            }
+        }
+        catch {
+            $gcEnumError = $_.Exception.Message
         }
 
         $dcRatioResults = [System.Collections.Generic.List[object]]::new()
@@ -5320,45 +5660,43 @@ function Get-EDCAOrganizationInventory {
         foreach ($siteEntry in ($siteMap.GetEnumerator() | Sort-Object Key)) {
             $siteName = $siteEntry.Key
 
-            # Query WMI for Exchange server core counts in this site
+            # Query Exchange server core counts using CIM
             $exCoresTotal = 0
             $exDetails = [System.Collections.Generic.List[object]]::new()
             foreach ($exName in $siteEntry.Value) {
-                try {
-                    $wmiProcs = @(Get-WmiObject -ComputerName $exName -Class Win32_Processor -ErrorAction Stop)
-                    $cores = [int]($wmiProcs | Measure-Object -Property NumberOfCores -Sum).Sum
-                    $exCoresTotal += $cores
-                    $exDetails.Add([pscustomobject]@{ Name = $exName; Cores = $cores; Error = $null })
-                }
-                catch {
-                    $exDetails.Add([pscustomobject]@{ Name = $exName; Cores = 0; Error = $_.Exception.Message })
-                }
+                $exCores = $null
+                $exErr = $null
+                try { $exCores = [int](@(Get-CimInstance -ClassName Win32_Processor -ComputerName $exName -ErrorAction Stop) | Measure-Object -Property NumberOfCores -Sum).Sum }
+                catch { $exErr = $_.Exception.Message }
+                if ($null -ne $exCores) { $exCoresTotal += $exCores }
+                $exDetails.Add([pscustomobject]@{ Name = $exName; Cores = if ($null -ne $exCores) { $exCores } else { 0 }; Error = $exErr })
             }
 
-            # Find all global catalogs in this AD site
+            # Find all GCs in this AD site using the pre-built site map
             $gcList = @()
-            $dcAccessError = $null
-            try {
-                $gcList = @([System.DirectoryServices.ActiveDirectory.Domain]::GetComputerDomain().Forest.FindAllGlobalCatalogs($siteName))
-            }
-            catch {
-                $dcAccessError = ('FindAllGlobalCatalogs failed for site ''{0}'': {1}' -f $siteName, $_.Exception.Message)
+            $dcAccessError = if ($null -ne $gcEnumError) { $gcEnumError } else { $null }
+            if ($null -eq $gcEnumError) {
+                if ($gcsBySite.ContainsKey($siteName)) {
+                    $gcList = @($gcsBySite[$siteName])
+                }
+                # else: gcsBySite built successfully but no GC in this site — $dcAccessError stays $null
             }
 
-            # Query WMI for DC/GC core counts
+            # Query DC/GC core counts using CIM
             $dcCoresTotal = 0
             $dcDetails = [System.Collections.Generic.List[object]]::new()
             foreach ($gc in $gcList) {
-                try {
-                    $wmiProcs = @(Get-WmiObject -ComputerName $gc.Name -Class Win32_Processor -ErrorAction Stop)
-                    $cores = [int]($wmiProcs | Measure-Object -Property NumberOfCores -Sum).Sum
-                    $dcCoresTotal += $cores
-                    $dcDetails.Add([pscustomobject]@{ Name = $gc.Name; Cores = $cores; Error = $null })
+                $dcCores = $null
+                $dcErr = $null
+                try { $dcCores = [int](@(Get-CimInstance -ClassName Win32_Processor -ComputerName $gc.Name -ErrorAction Stop) | Measure-Object -Property NumberOfCores -Sum).Sum }
+                catch { $dcErr = $_.Exception.Message }
+                if ($null -ne $dcCores) {
+                    $dcCoresTotal += $dcCores
                 }
-                catch {
-                    if ($null -eq $dcAccessError) { $dcAccessError = $_.Exception.Message }
-                    $dcDetails.Add([pscustomobject]@{ Name = $gc.Name; Cores = 0; Error = $_.Exception.Message })
+                else {
+                    if ($null -eq $dcAccessError) { $dcAccessError = $dcErr }
                 }
+                $dcDetails.Add([pscustomobject]@{ Name = $gc.Name; Cores = if ($null -ne $dcCores) { $dcCores } else { 0 }; Error = $dcErr })
             }
 
             $dcRatioValue = if ($null -eq $dcAccessError -and $dcCoresTotal -gt 0) { [math]::Round([double]$exCoresTotal / [double]$dcCoresTotal, 2) } else { $null }

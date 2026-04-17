@@ -86,6 +86,40 @@ function ConvertTo-EDCAHtmlWithLineBreaks {
     return (($encoded -replace "`r`n", "`n") -replace "`n", '<br />')
 }
 
+function ConvertTo-EDCAHtmlMarkdown {
+    # Renders a plain-text string with light markdown to HTML.
+    # Supports: **bold**, bullet lists (lines starting with '- '), paragraph breaks (\n\n).
+    [CmdletBinding()]
+    param(
+        [AllowNull()]
+        [object]$Value
+    )
+
+    if ($null -eq $Value) { return '' }
+    $text = ([string]$Value) -replace "`r`n", "`n"
+    $blocks = @($text -split "`n`n+" | ForEach-Object { $_.Trim() } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    $sb = [System.Text.StringBuilder]::new()
+    foreach ($block in $blocks) {
+        $lines = @($block -split "`n")
+        $nonBullet = @($lines | Where-Object { $_ -notmatch '^\s*-\s' })
+        if ($nonBullet.Count -eq 0 -and $lines.Count -gt 0) {
+            $null = $sb.Append('<ul>')
+            foreach ($line in $lines) {
+                $item = [System.Security.SecurityElement]::Escape(($line -replace '^\s*-\s+', ''))
+                $item = $item -replace '\*\*(.+?)\*\*', '<strong>$1</strong>'
+                $null = $sb.Append("<li>$item</li>")
+            }
+            $null = $sb.Append('</ul>')
+        }
+        else {
+            $para = [System.Security.SecurityElement]::Escape($block) -replace "`n", '<br />'
+            $para = $para -replace '\*\*(.+?)\*\*', '<strong>$1</strong>'
+            $null = $sb.Append("<p>$para</p>")
+        }
+    }
+    return $sb.ToString()
+}
+
 function Format-EDCARemediationScriptForReport {
     [CmdletBinding()]
     param(
@@ -127,6 +161,16 @@ function New-EDCAHtmlReport {
     )
 
     Write-Verbose ('Generating HTML report for {0} findings and {1} server entries.' -f @($AnalysisData.Findings).Count, @($CollectionData.Servers).Count)
+
+    # Build framework filter dropdown options from scores actually present in this report.
+    $frameworkLabelMap = @{ 'ENISA' = 'ENISA/NIS2' }
+    $frameworkOptions = New-Object System.Text.StringBuilder
+    foreach ($score in $AnalysisData.Scores) {
+        if ($score.Framework -eq 'All') { continue }
+        $label = if ($frameworkLabelMap.ContainsKey($score.Framework)) { $frameworkLabelMap[$score.Framework] } else { $score.Framework }
+        $null = $frameworkOptions.AppendLine(('                    <option value="{0}">{1}</option>' -f $score.Framework, $label))
+    }
+
     $scoreCards = New-Object System.Text.StringBuilder
     foreach ($score in $AnalysisData.Scores) {
         $failCount = [int]$score.FailedControls
@@ -150,7 +194,7 @@ function New-EDCAHtmlReport {
     }
 
     $findingGroups = @{}
-    foreach ($finding in $AnalysisData.Findings) {
+    foreach ($finding in @($AnalysisData.Findings | Sort-Object { [string]$_.Category }, { [string]$_.ControlId })) {
         $frameworkText = ($finding.Frameworks -join ', ')
         $refs = @()
         foreach ($reference in $finding.References) {
@@ -198,7 +242,7 @@ function New-EDCAHtmlReport {
 
         $considerationsHtml = ''
         if (($finding.PSObject.Properties.Name -contains 'Considerations') -and -not [string]::IsNullOrWhiteSpace([string]$finding.Considerations)) {
-            $considerationsHtml = ('<p>{0}</p>' -f (ConvertTo-EDCAHtmlEncoded -Value $finding.Considerations))
+            $considerationsHtml = ConvertTo-EDCAHtmlMarkdown -Value $finding.Considerations
         }
 
         $serverLines = @()
@@ -216,6 +260,7 @@ function New-EDCAHtmlReport {
         $overallCss = Get-EDCAStatusClass -Status $finding.OverallStatus
         $overallRagLabel = Get-EDCARagLabel -Status $finding.OverallStatus
         $findingModalId = 'modal-' + ($finding.ControlId -replace '[^a-zA-Z0-9]', '-')
+        $descriptionHtml = ConvertTo-EDCAHtmlMarkdown -Value $finding.Description
         $findingHtml = (
             ('<div class="finding-row {0}" data-status="{1}" data-category="{2}" data-framework="{3}" data-modal="{4}" data-id="{6}" data-title="{7}" data-description="{10}">' +
             '{5}<span class="finding-id">{6}</span> <span class="finding-title">{7}</span>' +
@@ -223,7 +268,7 @@ function New-EDCAHtmlReport {
             '<div class="modal-data" id="{4}" hidden>' +
             '<h2>{6}: {7}</h2>' +
             '<p class="modal-meta"><strong>Category:</strong> {8} | <strong>Severity:</strong> {9} | <strong>Frameworks:</strong> {3}</p>' +
-            '<p class="finding-description">{10}</p>' +
+            '<div class="finding-description">{16}</div>' +
             '<h3>Evidence</h3>' +
             '<table class="evidence-table"><thead><tr><th>{15}</th><th>Status</th><th>Evidence</th></tr></thead><tbody>{11}</tbody></table>' +
             '<h3>Remediation</h3>{12}' +
@@ -245,7 +290,8 @@ function New-EDCAHtmlReport {
             $remediationHtml,
             $referencesHtml,
             $considerationsHtml,
-            $subjectLabel
+            $subjectLabel,
+            $descriptionHtml
         )
 
         $categoryName = [string]$finding.Category
@@ -522,7 +568,7 @@ function New-EDCAHtmlReport {
     <main>
         $noticesSection
         <section>
-            <h2>Framework Scores</h2>
+            <h2>Framework Scoreboard</h2>
             <div class="score-grid">
                 $($scoreCards.ToString())
             </div>
@@ -544,25 +590,18 @@ function New-EDCAHtmlReport {
                 </select>
                 <select id="frameworkFilter">
                     <option value="All">All Frameworks</option>
-                    <option value="Best Practice">Best Practice</option>
-                    <option value="CIS">CIS</option>
-                    <option value="CISA">CISA</option>
-                    <option value="ENISA">ENISA/NIS2</option>
-                    <option value="DISA">DISA</option>
+                    $($frameworkOptions.ToString())
                 </select>
                 <select id="categoryFilter">
                     <option value="All">All Categories</option>
-                    <option value="Compliance">Compliance</option>
-                    <option value="Cryptography">Cryptography</option>
-                    <option value="Email Authentication">Email Authentication</option>
-                    <option value="Environment">Environment</option>
+                    <option value="Data Security">Data Security</option>
                     <option value="Governance">Governance</option>
-                    <option value="Hardening">Hardening</option>
-                    <option value="Identity">Identity</option>
-                    <option value="Operations">Operations</option>
+                    <option value="Identity and Access Control">Identity and Access Control</option>
+                    <option value="Monitoring">Monitoring</option>
                     <option value="Performance">Performance</option>
+                    <option value="Platform Security">Platform Security</option>
                     <option value="Resilience">Resilience</option>
-                    <option value="Transport">Transport</option>
+                    <option value="Transport Security">Transport Security</option>
                 </select>
             </div>
             <div id="findingContainer">
@@ -703,8 +742,22 @@ function New-EDCAHtmlReport {
                 }
             }
 
-            /* restore saved preference */
-            try { if (localStorage.getItem('edca-dark') === '1') { applyDark(true); } } catch (e) {}
+            /* restore saved preference, or follow system colour-scheme preference */
+            try {
+                var saved = localStorage.getItem('edca-dark');
+                if (saved !== null) {
+                    applyDark(saved === '1');
+                } else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+                    applyDark(true);
+                }
+            } catch (e) {}
+
+            /* keep in sync when the OS preference changes and no explicit override is stored */
+            try {
+                window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function (e) {
+                    try { if (localStorage.getItem('edca-dark') === null) { applyDark(e.matches); } } catch (ex) {}
+                });
+            } catch (e) {}
 
             toggle.addEventListener('change', function () {
                 applyDark(toggle.checked);
@@ -832,18 +885,21 @@ function New-EDCAHtmlReport {
             }
             applyFilters();
         })();
-        /* Print: expand all findings then restore after */
+        /* Print: expand visible findings respecting active filters, then restore after */
         window.addEventListener('beforeprint', function () {
             var details = document.querySelectorAll('details.category-group');
             for (var i = 0; i < details.length; i++) {
                 details[i].setAttribute('data-was-open', details[i].open ? '1' : '0');
-                details[i].open = true;
-                details[i].style.display = 'block';
+                if (details[i].style.display !== 'none') {
+                    details[i].open = true;
+                }
             }
             var rows = document.querySelectorAll('.finding-row');
             for (var j = 0; j < rows.length; j++) {
                 rows[j].setAttribute('data-print-orig', rows[j].style.display);
-                rows[j].style.display = 'flex';
+                if (rows[j].style.display !== 'none') {
+                    rows[j].style.display = 'flex';
+                }
             }
         });
         window.addEventListener('afterprint', function () {
