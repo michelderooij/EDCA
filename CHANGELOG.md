@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.5 Preview
+- README updated: fixed grammar in Requirements, added server auto-discovery note, fixed missing PowerShell code fence in Usage examples, added `-Framework 'Best Practice'` usage example.
+- Changelog moved from README.md to CHANGELOG.md.
+
 ## v0.4 Preview
 - Added control **EDCA-TLS-029**: hybrid receive connector TLS integrity — checks that at least one `FrontendTransport` receive connector has `TlsDomainCapabilities` set to `mail.protection.outlook.com:AcceptCloudServicesMail` (Exchange 2016 CU3+/Exchange 2019/SE) or `AcceptOorgProtocol` (older deployments), is enabled, and includes `Tls` in `AuthMechanism`.
 - **EDCA-TLS-003** (hybrid send connector TLS integrity) evaluation rewritten to check `RequireTLS`, `TlsAuthLevel`, `TlsDomain`, and `TlsCertificateName` on the hybrid send connector rather than the previous incorrect property set.

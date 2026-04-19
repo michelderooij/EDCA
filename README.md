@@ -21,7 +21,8 @@ PowerShell-based tool to collect Exchange on-premises deployment data, evaluate 
 
 - PowerShell 5.1 or later.
 - Execution under an account that has Exchange and AD administrative access as required.
-- Exchange Management Shell nor Active Directory module are required on the system.
+- Neither Exchange Management Shell nor Active Directory module is required on the system.
+- When `-Servers` is not specified, Exchange servers are auto-discovered via Active Directory (the "Exchange Servers" security group). EDCA must be able to reach a domain controller.
 - EDCA uses remoting sessions to the Exchange servers through http (80).
 - EDCA uses LDAPS to Domain Controllers with the Global Catalog role (3269), and CIM uses WS-MAN (5985) to read CPU details.
 
@@ -42,6 +43,7 @@ The account running EDCA needs the following access rights. Rights marked **requ
 
 From the `EDCA` folder:
 
+```powershell
 # Collect + analysis + HTML for all Exchange servers in current environment
 .\EDCA.ps1
 
@@ -57,8 +59,8 @@ From the `EDCA` folder:
 # Report mode using files from previously collected server and organization files
 .\EDCA.ps1 -Report
 
-# Analyse only against CIS and ENISA controls
-.\EDCA.ps1 -Servers EXCH01,EXCH02 -Framework CIS,ENISA
+# Analyse only against Best Practice (contains space, thus needs quotes) and CIS controls
+.\EDCA.ps1 -Servers EXCH01,EXCH02 -Framework 'Best Practice',CIS
 
 ```
 
