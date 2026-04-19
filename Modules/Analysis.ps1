@@ -223,7 +223,7 @@ function Test-EDCAControl {
         [pscustomobject]$CollectionData
     )
 
-    if ($Control.id -in @('EDCA-MON-001', 'EDCA-IAC-001', 'EDCA-DATA-002', 'EDCA-IAC-004', 'EDCA-IAC-008', 'EDCA-SEC-032', 'EDCA-TLS-026', 'EDCA-TLS-023', 'EDCA-TLS-025', 'EDCA-TLS-024', 'EDCA-TLS-027', 'EDCA-TLS-028', 'EDCA-SEC-004', 'EDCA-SEC-003', 'EDCA-SEC-005', 'EDCA-TLS-003', 'EDCA-IAC-011', 'EDCA-GOV-004', 'EDCA-IAC-009', 'EDCA-TLS-004', 'EDCA-TLS-005', 'EDCA-TLS-006', 'EDCA-TLS-007', 'EDCA-TLS-008', 'EDCA-TLS-009', 'EDCA-MON-008', 'EDCA-TLS-010', 'EDCA-TLS-011', 'EDCA-TLS-014', 'EDCA-IAC-014', 'EDCA-IAC-015', 'EDCA-IAC-016', 'EDCA-IAC-017', 'EDCA-IAC-018', 'EDCA-IAC-019', 'EDCA-IAC-020', 'EDCA-IAC-021', 'EDCA-IAC-022', 'EDCA-IAC-023', 'EDCA-IAC-024', 'EDCA-TLS-012', 'EDCA-TLS-018', 'EDCA-TLS-019', 'EDCA-DATA-016', 'EDCA-RES-012', 'EDCA-GOV-009', 'EDCA-PERF-012', 'EDCA-GOV-011', 'EDCA-SEC-036', 'EDCA-IAC-028')) {
+    if ($Control.id -in @('EDCA-MON-001', 'EDCA-IAC-001', 'EDCA-DATA-002', 'EDCA-IAC-004', 'EDCA-IAC-008', 'EDCA-SEC-032', 'EDCA-TLS-026', 'EDCA-TLS-023', 'EDCA-TLS-025', 'EDCA-TLS-024', 'EDCA-TLS-027', 'EDCA-TLS-028', 'EDCA-TLS-029', 'EDCA-SEC-004', 'EDCA-SEC-003', 'EDCA-SEC-005', 'EDCA-TLS-003', 'EDCA-IAC-011', 'EDCA-GOV-004', 'EDCA-IAC-009', 'EDCA-TLS-004', 'EDCA-TLS-005', 'EDCA-TLS-006', 'EDCA-TLS-007', 'EDCA-TLS-008', 'EDCA-TLS-009', 'EDCA-MON-008', 'EDCA-TLS-010', 'EDCA-TLS-011', 'EDCA-TLS-014', 'EDCA-IAC-014', 'EDCA-IAC-015', 'EDCA-IAC-016', 'EDCA-IAC-017', 'EDCA-IAC-018', 'EDCA-IAC-019', 'EDCA-IAC-020', 'EDCA-IAC-021', 'EDCA-IAC-022', 'EDCA-IAC-023', 'EDCA-IAC-024', 'EDCA-TLS-012', 'EDCA-TLS-018', 'EDCA-TLS-019', 'EDCA-DATA-016', 'EDCA-RES-012', 'EDCA-GOV-009', 'EDCA-PERF-012', 'EDCA-GOV-011', 'EDCA-SEC-036', 'EDCA-IAC-028')) {
         $status = 'Unknown'
         $evidence = ''
         $domainServerResults = $null
@@ -945,13 +945,175 @@ function Test-EDCAControl {
                     }
                     else {
                         $domainServerResults = @($hybridConnectors | ForEach-Object {
-                                $dse = if ($_.PSObject.Properties.Name -contains 'DomainSecureEnabled') { $_.DomainSecureEnabled } else { $null }
-                                $dseDisplay = if ($dse -eq $true) { 'True' } elseif ($dse -eq $false) { 'False' } else { 'unknown' }
-                                $itemStatus = if ($dse -eq $true) { 'Pass' } elseif ($null -eq $dse) { 'Unknown' } else { 'Fail' }
+                                $connIssues = @()
+                                $evLines = @()
+
+                                $requireTls = if ($_.PSObject.Properties.Name -contains 'RequireTLS') { $_.RequireTLS } else { $null }
+                                $tlsAuthLevel = if ($_.PSObject.Properties.Name -contains 'TlsAuthLevel') { [string]$_.TlsAuthLevel } else { $null }
+                                $tlsDomain = if ($_.PSObject.Properties.Name -contains 'TlsDomain') { [string]$_.TlsDomain } else { $null }
+                                $tlsCertName = if ($_.PSObject.Properties.Name -contains 'TlsCertificateName') { [string]$_.TlsCertificateName } else { $null }
+                                $certSyntaxValid = if ($_.PSObject.Properties.Name -contains 'TlsCertificateSyntaxValid') { $_.TlsCertificateSyntaxValid } else { $null }
+
+                                # RequireTLS must be True
+                                if ($null -eq $requireTls) {
+                                    $connIssues += 'RequireTLS: unknown'
+                                }
+                                elseif ($requireTls -ne $true) {
+                                    $connIssues += 'RequireTLS: False (must be True)'
+                                }
+                                $evLines += ('RequireTLS: {0}' -f $(if ($null -eq $requireTls) { 'unknown' } else { [string]$requireTls }))
+
+                                # TlsAuthLevel must be DomainValidation
+                                if ([string]::IsNullOrWhiteSpace($tlsAuthLevel)) {
+                                    $connIssues += 'TlsAuthLevel: not set (must be DomainValidation)'
+                                }
+                                elseif ($tlsAuthLevel -ne 'DomainValidation') {
+                                    $connIssues += ('TlsAuthLevel: {0} (must be DomainValidation)' -f $tlsAuthLevel)
+                                }
+                                $evLines += ('TlsAuthLevel: {0}' -f $(if ([string]::IsNullOrWhiteSpace($tlsAuthLevel)) { 'not set' } else { $tlsAuthLevel }))
+
+                                # TlsDomain must point to mail.protection.outlook.com
+                                $tlsDomainOk = (-not [string]::IsNullOrWhiteSpace($tlsDomain)) -and ($tlsDomain -match '(?i)(^|\*\.)mail\.protection\.outlook\.com\.?$')
+                                if ([string]::IsNullOrWhiteSpace($tlsDomain)) {
+                                    $connIssues += 'TlsDomain: not set (must be mail.protection.outlook.com)'
+                                }
+                                elseif (-not $tlsDomainOk) {
+                                    $connIssues += ('TlsDomain: {0} (expected mail.protection.outlook.com)' -f $tlsDomain)
+                                }
+                                $evLines += ('TlsDomain: {0}' -f $(if ([string]::IsNullOrWhiteSpace($tlsDomain)) { 'not set' } else { $tlsDomain }))
+
+                                # TlsCertificateName must be set and have valid <I>...<S>... syntax
+                                if ([string]::IsNullOrWhiteSpace($tlsCertName)) {
+                                    $connIssues += 'TlsCertificateName: not set'
+                                }
+                                elseif ($certSyntaxValid -eq $false) {
+                                    $connIssues += ('TlsCertificateName: invalid syntax — {0}' -f $tlsCertName)
+                                }
+                                $evLines += ('TlsCertificateName: {0}' -f $(if ([string]::IsNullOrWhiteSpace($tlsCertName)) { 'not set' } else { $tlsCertName }))
+
+                                $itemStatus = if ($connIssues.Count -eq 0) { 'Pass' } else { 'Fail' }
+                                if ($connIssues.Count -gt 0) { $evLines += ('Issues: ' + ($connIssues -join '; ')) }
                                 [pscustomobject]@{
                                     Server   = [string]$_.Identity
                                     Status   = $itemStatus
-                                    Evidence = ('DomainSecureEnabled: {0}.' -f $dseDisplay)
+                                    Evidence = $evLines -join "`n"
+                                }
+                            })
+
+                        $subjectLabel = 'Connector'
+                        $failCount = @($domainServerResults | Where-Object { $_.Status -eq 'Fail' }).Count
+                        $unknownCount = @($domainServerResults | Where-Object { $_.Status -eq 'Unknown' }).Count
+                        if ($failCount -gt 0) {
+                            $status = 'Fail'
+                        }
+                        elseif ($unknownCount -gt 0) {
+                            $status = 'Unknown'
+                        }
+                        else {
+                            $status = 'Pass'
+                        }
+                    }
+                }
+            }
+            'EDCA-TLS-029' {
+                $allReceiveConnectors = @()
+                $serverList = @()
+                if (($CollectionData.PSObject.Properties.Name -contains 'Servers') -and $null -ne $CollectionData.Servers) {
+                    $serverList = @($CollectionData.Servers)
+                }
+
+                foreach ($serverEntry in $serverList) {
+                    if (($serverEntry.PSObject.Properties.Name -contains 'CollectionError') -and -not [string]::IsNullOrWhiteSpace([string]$serverEntry.CollectionError)) {
+                        continue
+                    }
+
+                    $isExchangeServer = (
+                        ($serverEntry.PSObject.Properties.Name -contains 'Exchange') -and
+                        $null -ne $serverEntry.Exchange -and
+                        ($serverEntry.Exchange.PSObject.Properties.Name -contains 'IsExchangeServer') -and
+                        [bool]$serverEntry.Exchange.IsExchangeServer
+                    )
+
+                    if (-not $isExchangeServer) {
+                        continue
+                    }
+
+                    if (($serverEntry.Exchange.PSObject.Properties.Name -contains 'ReceiveConnectors') -and $null -ne $serverEntry.Exchange.ReceiveConnectors) {
+                        $allReceiveConnectors += @($serverEntry.Exchange.ReceiveConnectors)
+                    }
+                }
+
+                if ($allReceiveConnectors.Count -eq 0) {
+                    $status = 'Unknown'
+                    $evidence = 'Receive connector telemetry unavailable.'
+                }
+                else {
+                    $connectorByIdentity = @{}
+                    foreach ($connector in $allReceiveConnectors) {
+                        $cId = [string]$connector.Identity
+                        if ([string]::IsNullOrWhiteSpace($cId)) { continue }
+                        if (-not $connectorByIdentity.ContainsKey($cId)) {
+                            $connectorByIdentity[$cId] = $connector
+                        }
+                    }
+
+                    $dedupedConnectors = @($connectorByIdentity.Values)
+                    $hybridRcvConnectors = @($dedupedConnectors | Where-Object {
+                            ($_.PSObject.Properties.Name -contains 'TransportRole') -and
+                            ([string]$_.TransportRole -eq 'FrontendTransport') -and
+                            ($_.PSObject.Properties.Name -contains 'TlsDomainCapabilities') -and
+                            -not [string]::IsNullOrWhiteSpace([string]$_.TlsDomainCapabilities)
+                        })
+
+                    if ($hybridRcvConnectors.Count -eq 0) {
+                        $status = 'Unknown'
+                        $evidence = 'No frontend receive connectors with TlsDomainCapabilities detected — hybrid receive connector may not be present or telemetry is incomplete.'
+                    }
+                    else {
+                        $domainServerResults = @($hybridRcvConnectors | ForEach-Object {
+                                $connIssues = @()
+                                $evLines = @()
+
+                                $enabled = if ($_.PSObject.Properties.Name -contains 'Enabled') { $_.Enabled } else { $null }
+                                $authMechanism = if ($_.PSObject.Properties.Name -contains 'AuthMechanism') { [string]$_.AuthMechanism } else { $null }
+                                $tlsDomainCaps = if ($_.PSObject.Properties.Name -contains 'TlsDomainCapabilities') { [string]$_.TlsDomainCapabilities } else { $null }
+
+                                # Connector must be enabled
+                                if ($null -eq $enabled) {
+                                    $connIssues += 'Enabled: unknown'
+                                }
+                                elseif ($enabled -ne $true) {
+                                    $connIssues += 'Enabled: False (connector must be enabled)'
+                                }
+                                $evLines += ('Enabled: {0}' -f $(if ($null -eq $enabled) { 'unknown' } else { [string]$enabled }))
+
+                                # TlsDomainCapabilities must contain AcceptOorgProtocol for mail.protection.outlook.com
+                                $oorgOk = (-not [string]::IsNullOrWhiteSpace($tlsDomainCaps)) -and
+                                ($tlsDomainCaps -match '(?i)mail\.protection\.outlook\.com\s*:\s*AcceptOorgProtocol')
+                                if ([string]::IsNullOrWhiteSpace($tlsDomainCaps)) {
+                                    $connIssues += 'TlsDomainCapabilities: not set (must include mail.protection.outlook.com:AcceptOorgProtocol)'
+                                }
+                                elseif (-not $oorgOk) {
+                                    $connIssues += ('TlsDomainCapabilities: AcceptOorgProtocol for mail.protection.outlook.com not found — {0}' -f $tlsDomainCaps)
+                                }
+                                $evLines += ('TlsDomainCapabilities: {0}' -f $(if ([string]::IsNullOrWhiteSpace($tlsDomainCaps)) { 'not set' } else { $tlsDomainCaps }))
+
+                                # AuthMechanism must include Tls
+                                $tlsInAuth = (-not [string]::IsNullOrWhiteSpace($authMechanism)) -and ($authMechanism -match '(?i)\bTls\b')
+                                if ([string]::IsNullOrWhiteSpace($authMechanism)) {
+                                    $connIssues += 'AuthMechanism: not set (must include Tls)'
+                                }
+                                elseif (-not $tlsInAuth) {
+                                    $connIssues += ('AuthMechanism: Tls not present — {0}' -f $authMechanism)
+                                }
+                                $evLines += ('AuthMechanism: {0}' -f $(if ([string]::IsNullOrWhiteSpace($authMechanism)) { 'not set' } else { $authMechanism }))
+
+                                $itemStatus = if ($connIssues.Count -eq 0) { 'Pass' } else { 'Fail' }
+                                if ($connIssues.Count -gt 0) { $evLines += ('Issues: ' + ($connIssues -join '; ')) }
+                                [pscustomobject]@{
+                                    Server   = [string]$_.Identity
+                                    Status   = $itemStatus
+                                    Evidence = $evLines -join "`n"
                                 }
                             })
 

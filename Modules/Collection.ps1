@@ -543,10 +543,14 @@ function Get-EDCAExchangeServerInfo {
                     $connectors = @(Get-ReceiveConnector -Server $env:COMPUTERNAME -ErrorAction Stop)
                     foreach ($connector in $connectors) {
                         $exchangeInfo.ReceiveConnectors += [pscustomobject]@{
-                            Identity            = [string]$connector.Identity
-                            PermissionGroups    = [string]$connector.PermissionGroups
-                            AuthMechanism       = [string]$connector.AuthMechanism
-                            RemoteIPRangesCount = @($connector.RemoteIPRanges).Count
+                            Identity                 = [string]$connector.Identity
+                            PermissionGroups         = [string]$connector.PermissionGroups
+                            AuthMechanism            = [string]$connector.AuthMechanism
+                            RemoteIPRangesCount      = @($connector.RemoteIPRanges).Count
+                            Enabled                  = if ($connector.PSObject.Properties.Name -contains 'Enabled') { [bool]$connector.Enabled } else { $null }
+                            TransportRole            = if ($connector.PSObject.Properties.Name -contains 'TransportRole') { [string]$connector.TransportRole } else { $null }
+                            TlsDomainCapabilities    = if ($connector.PSObject.Properties.Name -contains 'TlsDomainCapabilities') { [string]$connector.TlsDomainCapabilities } else { $null }
+                            CloudServicesMailEnabled = if ($connector.PSObject.Properties.Name -contains 'CloudServicesMailEnabled') { [bool]$connector.CloudServicesMailEnabled } else { $null }
                         }
                     }
                 }
@@ -3935,18 +3939,21 @@ function Get-EDCAServerInventory {
                     $connectors = @(Get-ReceiveConnector -Server $env:COMPUTERNAME -ErrorAction Stop)
                     foreach ($connector in $connectors) {
                         $exchangeInfo.ReceiveConnectors += [pscustomobject]@{
-                            Identity                = [string]$connector.Identity
-                            PermissionGroups        = [string]$connector.PermissionGroups
-                            AuthMechanism           = [string]$connector.AuthMechanism
-                            RemoteIPRangesCount     = @($connector.RemoteIPRanges).Count
-                            ProtocolLoggingLevel    = if ($connector.PSObject.Properties.Name -contains 'ProtocolLoggingLevel') { [string]$connector.ProtocolLoggingLevel } else { $null }
-                            MaxMessageSize          = if ($connector.PSObject.Properties.Name -contains 'MaxMessageSize' -and $null -ne $connector.MaxMessageSize) { [string]$connector.MaxMessageSize } else { $null }
-                            MaxHopCount             = if ($connector.PSObject.Properties.Name -contains 'MaxHopCount') { [string]$connector.MaxHopCount } else { $null }
-                            ConnectionTimeout       = if ($connector.PSObject.Properties.Name -contains 'ConnectionTimeout' -and $null -ne $connector.ConnectionTimeout) { [string]$connector.ConnectionTimeout } else { $null }
-                            TransportRole           = if ($connector.PSObject.Properties.Name -contains 'TransportRole') { [string]$connector.TransportRole } else { $null }
-                            Banner                  = if ($connector.PSObject.Properties.Name -contains 'Banner') { [string]$connector.Banner } else { $null }
-                            RequireTLS              = if ($connector.PSObject.Properties.Name -contains 'RequireTLS') { [bool]$connector.RequireTLS } else { $null }
-                            MaxRecipientsPerMessage = if ($connector.PSObject.Properties.Name -contains 'MaxRecipientsPerMessage') { [string]$connector.MaxRecipientsPerMessage } else { $null }
+                            Identity                 = [string]$connector.Identity
+                            PermissionGroups         = [string]$connector.PermissionGroups
+                            AuthMechanism            = [string]$connector.AuthMechanism
+                            RemoteIPRangesCount      = @($connector.RemoteIPRanges).Count
+                            Enabled                  = if ($connector.PSObject.Properties.Name -contains 'Enabled') { [bool]$connector.Enabled } else { $null }
+                            ProtocolLoggingLevel     = if ($connector.PSObject.Properties.Name -contains 'ProtocolLoggingLevel') { [string]$connector.ProtocolLoggingLevel } else { $null }
+                            MaxMessageSize           = if ($connector.PSObject.Properties.Name -contains 'MaxMessageSize' -and $null -ne $connector.MaxMessageSize) { [string]$connector.MaxMessageSize } else { $null }
+                            MaxHopCount              = if ($connector.PSObject.Properties.Name -contains 'MaxHopCount') { [string]$connector.MaxHopCount } else { $null }
+                            ConnectionTimeout        = if ($connector.PSObject.Properties.Name -contains 'ConnectionTimeout' -and $null -ne $connector.ConnectionTimeout) { [string]$connector.ConnectionTimeout } else { $null }
+                            TransportRole            = if ($connector.PSObject.Properties.Name -contains 'TransportRole') { [string]$connector.TransportRole } else { $null }
+                            Banner                   = if ($connector.PSObject.Properties.Name -contains 'Banner') { [string]$connector.Banner } else { $null }
+                            RequireTLS               = if ($connector.PSObject.Properties.Name -contains 'RequireTLS') { [bool]$connector.RequireTLS } else { $null }
+                            MaxRecipientsPerMessage  = if ($connector.PSObject.Properties.Name -contains 'MaxRecipientsPerMessage') { [string]$connector.MaxRecipientsPerMessage } else { $null }
+                            TlsDomainCapabilities    = if ($connector.PSObject.Properties.Name -contains 'TlsDomainCapabilities') { [string]$connector.TlsDomainCapabilities } else { $null }
+                            CloudServicesMailEnabled = if ($connector.PSObject.Properties.Name -contains 'CloudServicesMailEnabled') { [bool]$connector.CloudServicesMailEnabled } else { $null }
                         }
                     }
                 }
@@ -4703,18 +4710,21 @@ function Get-EDCAServerInventory {
                 $connectors = @(Invoke-EDCAExchangeEndpointCommand -Server $invokeTarget -ScriptBlock $sb)
                 foreach ($connector in $connectors) {
                     $inventory.Exchange.ReceiveConnectors = @($inventory.Exchange.ReceiveConnectors) + @([pscustomobject]@{
-                            Identity                = [string]$connector.Identity
-                            PermissionGroups        = [string]$connector.PermissionGroups
-                            AuthMechanism           = [string]$connector.AuthMechanism
-                            RemoteIPRangesCount     = @($connector.RemoteIPRanges).Count
-                            ProtocolLoggingLevel    = if ($connector.PSObject.Properties.Name -contains 'ProtocolLoggingLevel') { [string]$connector.ProtocolLoggingLevel } else { $null }
-                            MaxMessageSize          = if ($connector.PSObject.Properties.Name -contains 'MaxMessageSize' -and $null -ne $connector.MaxMessageSize) { [string]$connector.MaxMessageSize } else { $null }
-                            MaxHopCount             = if ($connector.PSObject.Properties.Name -contains 'MaxHopCount') { [string]$connector.MaxHopCount } else { $null }
-                            ConnectionTimeout       = if ($connector.PSObject.Properties.Name -contains 'ConnectionTimeout' -and $null -ne $connector.ConnectionTimeout) { [string]$connector.ConnectionTimeout } else { $null }
-                            TransportRole           = if ($connector.PSObject.Properties.Name -contains 'TransportRole') { [string]$connector.TransportRole } else { $null }
-                            Banner                  = if ($connector.PSObject.Properties.Name -contains 'Banner') { [string]$connector.Banner } else { $null }
-                            RequireTLS              = if ($connector.PSObject.Properties.Name -contains 'RequireTLS') { [bool]$connector.RequireTLS } else { $null }
-                            MaxRecipientsPerMessage = if ($connector.PSObject.Properties.Name -contains 'MaxRecipientsPerMessage') { [string]$connector.MaxRecipientsPerMessage } else { $null }
+                            Identity                 = [string]$connector.Identity
+                            PermissionGroups         = [string]$connector.PermissionGroups
+                            AuthMechanism            = [string]$connector.AuthMechanism
+                            RemoteIPRangesCount      = @($connector.RemoteIPRanges).Count
+                            Enabled                  = if ($connector.PSObject.Properties.Name -contains 'Enabled') { [bool]$connector.Enabled } else { $null }
+                            ProtocolLoggingLevel     = if ($connector.PSObject.Properties.Name -contains 'ProtocolLoggingLevel') { [string]$connector.ProtocolLoggingLevel } else { $null }
+                            MaxMessageSize           = if ($connector.PSObject.Properties.Name -contains 'MaxMessageSize' -and $null -ne $connector.MaxMessageSize) { [string]$connector.MaxMessageSize } else { $null }
+                            MaxHopCount              = if ($connector.PSObject.Properties.Name -contains 'MaxHopCount') { [string]$connector.MaxHopCount } else { $null }
+                            ConnectionTimeout        = if ($connector.PSObject.Properties.Name -contains 'ConnectionTimeout' -and $null -ne $connector.ConnectionTimeout) { [string]$connector.ConnectionTimeout } else { $null }
+                            TransportRole            = if ($connector.PSObject.Properties.Name -contains 'TransportRole') { [string]$connector.TransportRole } else { $null }
+                            Banner                   = if ($connector.PSObject.Properties.Name -contains 'Banner') { [string]$connector.Banner } else { $null }
+                            RequireTLS               = if ($connector.PSObject.Properties.Name -contains 'RequireTLS') { [bool]$connector.RequireTLS } else { $null }
+                            MaxRecipientsPerMessage  = if ($connector.PSObject.Properties.Name -contains 'MaxRecipientsPerMessage') { [string]$connector.MaxRecipientsPerMessage } else { $null }
+                            TlsDomainCapabilities    = if ($connector.PSObject.Properties.Name -contains 'TlsDomainCapabilities') { [string]$connector.TlsDomainCapabilities } else { $null }
+                            CloudServicesMailEnabled = if ($connector.PSObject.Properties.Name -contains 'CloudServicesMailEnabled') { [bool]$connector.CloudServicesMailEnabled } else { $null }
                         })
                 }
             }
