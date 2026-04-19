@@ -491,17 +491,33 @@ function Test-EDCAControl {
                                         $rawDkimStatus = [string]$_.Dkim.Status
                                         if ($rawDkimStatus -eq 'Pass') {
                                             $passParts = @()
-                                            if ($null -ne $_.Dkim.DetectedSelectors) {
+                                            if (($_.Dkim.PSObject.Properties.Name -contains 'DetectedSelectors') -and $null -ne $_.Dkim.DetectedSelectors) {
+                                                $domainNorm = ([string]$_.Domain).TrimEnd('.').ToLowerInvariant()
+                                                $platformGroups = [ordered]@{}
                                                 foreach ($selProp in $_.Dkim.DetectedSelectors.PSObject.Properties) {
                                                     $selName = $selProp.Name
                                                     $selEntry = $selProp.Value
+                                                    if ($null -eq $selEntry) { continue }
                                                     $record = ('{0}._domainkey.{1}' -f $selName, [string]$_.Domain)
-                                                    if ([string]$selEntry.Type -eq 'CNAME' -and -not [string]::IsNullOrWhiteSpace([string]$selEntry.Cname)) {
-                                                        $passParts += ('{0} → CNAME: {1}' -f $record, [string]$selEntry.Cname)
+                                                    $hasCname = ($selEntry.PSObject.Properties.Name -contains 'Type') -and [string]$selEntry.Type -eq 'CNAME' -and ($selEntry.PSObject.Properties.Name -contains 'Cname') -and -not [string]::IsNullOrWhiteSpace([string]$selEntry.Cname)
+                                                    # Skip self-referential CNAMEs — resolving back to the domain itself is not evidence of platform DKIM signing
+                                                    if ($hasCname) {
+                                                        $cnameNorm = ([string]$selEntry.Cname).TrimEnd('.').ToLowerInvariant()
+                                                        if ($cnameNorm -eq $domainNorm) { continue }
+                                                    }
+                                                    $service = if ($selEntry.PSObject.Properties.Name -contains 'Service') { [string]$selEntry.Service } else { '' }
+                                                    if ([string]::IsNullOrWhiteSpace($service)) { $service = '(unknown platform)' }
+                                                    if (-not $platformGroups.Contains($service)) { $platformGroups[$service] = [System.Collections.Generic.List[string]]::new() }
+                                                    if ($hasCname) {
+                                                        $platformGroups[$service].Add(('  - {0} → CNAME: {1}' -f $record, [string]$selEntry.Cname))
                                                     }
                                                     else {
-                                                        $passParts += ('{0} → TXT record found' -f $record)
+                                                        $platformGroups[$service].Add(('  - {0} → TXT record found' -f $record))
                                                     }
+                                                }
+                                                foreach ($svc in $platformGroups.Keys) {
+                                                    $passParts += ('{0}:' -f $svc)
+                                                    foreach ($line in $platformGroups[$svc]) { $passParts += $line }
                                                 }
                                             }
                                             $dkimStatus = 'Pass'
