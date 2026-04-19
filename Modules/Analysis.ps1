@@ -2446,8 +2446,9 @@ function Test-EDCAControl {
                         # Step 3: Determine whether the fix has been applied
                         $ewpUserOk = $dacl.PSObject.Properties.Name -contains 'EwpUserAceInheritOnly' -and $null -ne $dacl.EwpUserAceInheritOnly
                         $ewpInetOk = $dacl.PSObject.Properties.Name -contains 'EwpInetOrgPersonAceInheritOnly' -and $null -ne $dacl.EwpInetOrgPersonAceInheritOnly
-                        $ewpUserCompliant = $ewpUserOk -and [bool]$dacl.EwpUserAceInheritOnly
-                        $ewpInetCompliant = $ewpInetOk -and [bool]$dacl.EwpInetOrgPersonAceInheritOnly
+                        # Absent ACE (null) is compliant — no WriteDACL right on the domain object at all
+                        $ewpUserCompliant = (-not $ewpUserOk) -or [bool]$dacl.EwpUserAceInheritOnly
+                        $ewpInetCompliant = (-not $ewpInetOk) -or [bool]$dacl.EwpInetOrgPersonAceInheritOnly
 
                         # Determine whether AdminSDHolder check is applicable (any Exchange 2016+ server)
                         $has2016Plus = $false
@@ -2474,8 +2475,8 @@ function Test-EDCAControl {
 
                         if ($aclFixed) {
                             $status = 'Pass'
-                            $ewpUserDisplay = if ($ewpUserOk) { 'InheritOnly=True' } else { 'not present' }
-                            $ewpInetDisplay = if ($ewpInetOk) { 'InheritOnly=True' } else { 'not present' }
+                            $ewpUserDisplay = if (-not $ewpUserOk) { 'absent (no WriteDACL on domain object)' } else { 'present, Inherit-Only flag set' }
+                            $ewpInetDisplay = if (-not $ewpInetOk) { 'absent (no WriteDACL on domain object)' } else { 'present, Inherit-Only flag set' }
                             $adminSdDisplay = if ($adminSdApplicable) { (', ETS WriteDACL Group ACE on AdminSDHolder: absent') } else { '' }
                             $evidence = ('EWP WriteDACL User ACE: {0}; EWP WriteDACL inetOrgPerson ACE: {1}{2}.' -f $ewpUserDisplay, $ewpInetDisplay, $adminSdDisplay)
                         }
@@ -2485,14 +2486,8 @@ function Test-EDCAControl {
                             if ($ewpUserOk -and -not $ewpUserCompliant) {
                                 $issueLines += 'EWP WriteDACL ACE for User (bf967aba): Inherit-Only flag is NOT set — WriteDACL applies to the domain object itself.'
                             }
-                            elseif (-not $ewpUserOk) {
-                                $issueLines += 'EWP WriteDACL ACE for User (bf967aba): not found in domain object DACL — cannot determine state.'
-                            }
                             if ($ewpInetOk -and -not $ewpInetCompliant) {
                                 $issueLines += 'EWP WriteDACL ACE for inetOrgPerson (4828cc14): Inherit-Only flag is NOT set — WriteDACL applies to the domain object itself.'
-                            }
-                            elseif (-not $ewpInetOk) {
-                                $issueLines += 'EWP WriteDACL ACE for inetOrgPerson (4828cc14): not found in domain object DACL — cannot determine state.'
                             }
                             if ($adminSdApplicable -and -not $adminSdCompliant) {
                                 $issueLines += 'ETS WriteDACL Group ACE on AdminSDHolder: present — must be removed (Exchange 2016+ environment).'

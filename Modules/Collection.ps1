@@ -6050,7 +6050,8 @@ function Get-EDCAOrganizationInventory {
                 $matchingAce = $domainRules | Where-Object {
                     $_.IdentityReference.Value -eq $ewpSid -and
                     ($_.ActiveDirectoryRights -band $writeDaclRight) -and
-                    $_.ObjectType -eq $guid -and
+                    $_.ObjectType -eq [Guid]::Empty -and
+                    $_.InheritedObjectType -eq $guid -and
                     $_.AccessControlType -eq [System.Security.AccessControl.AccessControlType]::Allow
                 } | Select-Object -First 1
 
