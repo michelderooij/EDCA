@@ -2602,6 +2602,7 @@ function Test-EDCAControl {
         'EDCA-DATA-012',
         'EDCA-DATA-013',
         'EDCA-IAC-026',
+        'EDCA-IAC-027',
         'EDCA-RES-004',
         'EDCA-RES-005',
         'EDCA-RES-006',
@@ -5389,6 +5390,34 @@ function Test-EDCAControl {
                 else {
                     $status = 'Unknown'
                     $evidence = 'TokenCacheModule is not loaded. Review CVE-2023-21709 / CVE-2023-36434 mitigation and rollback guidance before changing state.'
+                }
+            }
+            'EDCA-IAC-027' {
+                $computerMembership = $null
+                if (($server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $server.Exchange -and
+                    ($server.Exchange.PSObject.Properties.Name -contains 'ExchangeComputerMembership')) {
+                    $computerMembership = $server.Exchange.ExchangeComputerMembership
+                }
+
+                if ($null -eq $computerMembership) {
+                    $status = 'Unknown'
+                    $evidence = 'Exchange computer membership telemetry unavailable.'
+                }
+                elseif (-not ($computerMembership.PSObject.Properties.Name -contains 'QuerySucceeded') -or -not [bool]$computerMembership.QuerySucceeded) {
+                    $status = 'Unknown'
+                    $evidence = 'Active Directory query for computer account attributes did not succeed — unable to determine delegation state.'
+                }
+                elseif (-not ($computerMembership.PSObject.Properties.Name -contains 'TrustedForDelegation') -or $null -eq $computerMembership.TrustedForDelegation) {
+                    $status = 'Unknown'
+                    $evidence = 'TrustedForDelegation attribute not collected — re-run collection with the current EDCA build to evaluate this control.'
+                }
+                elseif ([bool]$computerMembership.TrustedForDelegation) {
+                    $status = 'Fail'
+                    $evidence = 'Unconstrained Kerberos delegation is enabled (TRUSTED_FOR_DELEGATION flag set in userAccountControl). Any Kerberos TGT presented to this server can be captured and replayed, enabling full domain compromise. Remove the flag using Set-ADComputer or Active Directory Users and Computers (Account tab: clear "Trust this computer for delegation to any service (Kerberos only)"). If delegation is required for a specific integration, configure constrained or resource-based constrained delegation targeting only the required SPNs.'
+                }
+                else {
+                    $status = 'Pass'
+                    $evidence = 'Unconstrained Kerberos delegation is not enabled (TRUSTED_FOR_DELEGATION flag not set).'
                 }
             }
             'EDCA-IAC-007' {

@@ -1,8 +1,10 @@
 # Changelog
 
 ## v0.5 Preview
-- README updated: fixed grammar in Requirements, added server auto-discovery note, fixed missing PowerShell code fence in Usage examples, added `-Framework 'Best Practice'` usage example.
-- Changelog moved from README.md to CHANGELOG.md.
+- README updated
+- **EDCA-TLS-027** (DKIM): fixed "The property 'Name' cannot be found on this object" error caused by unguarded property access on domain result objects; added null guard at top of ForEach-Object body, guarded `Dane`/`Dane.MxHosts`, `Dkim.Status`, `Dkim.Evidence`, and added `[PSCustomObject]` type check on `DetectedSelectors` before iterating its properties.
+- **EDCA-IAC-028** (domain object DACL WriteDACL ACEs): fixed incorrect ACE matching — Exchange WriteDACL ACEs carry `ObjectType = [Guid]::Empty` and the class GUID in `InheritedObjectType`; collection was previously matching `ObjectType` against the class GUID and never found the ACEs. Analysis updated so that absent ACEs are treated as compliant (no WriteDACL right on the domain object = safe state). Removed dead "cannot determine state" evidence branches. Control description, `scriptTemplate`, and `considerations` updated to reflect the correct ACE structure and absent = compliant semantics.
+- **EDCA-IAC-027** (unconstrained Kerberos delegation): evaluator implemented. Collection extended to read `userAccountControl` from the Exchange server computer account in AD (via the existing `ExchangeComputerMembership` AD searcher query) and store `TrustedForDelegation` (`0x80000` flag). Analysis reports Fail when the flag is set and Pass when it is absent.
 
 ## v0.4 Preview
 - Added control **EDCA-TLS-029**: hybrid receive connector TLS integrity — checks that at least one `FrontendTransport` receive connector has `TlsDomainCapabilities` set to `mail.protection.outlook.com:AcceptCloudServicesMail` (Exchange 2016 CU3+/Exchange 2019/SE) or `AcceptOorgProtocol` (older deployments), is enabled, and includes `Tls` in `AuthMechanism`.

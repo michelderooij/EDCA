@@ -2833,9 +2833,10 @@ function Get-EDCAServerInventory {
         }
 
         $exchangeComputerMembership = [pscustomobject]@{
-            QuerySucceeded = $false
-            MissingGroups  = @()
-            PresentGroups  = @()
+            QuerySucceeded      = $false
+            MissingGroups       = @()
+            PresentGroups       = @()
+            TrustedForDelegation = $null
         }
 
         $amsiProviderIds = @()
@@ -4309,6 +4310,7 @@ function Get-EDCAServerInventory {
             $searcher.SearchScope = [System.DirectoryServices.SearchScope]::Subtree
             $searcher.PageSize = 1
             [void]$searcher.PropertiesToLoad.Add('memberOf')
+            [void]$searcher.PropertiesToLoad.Add('userAccountControl')
             $computerResult = $searcher.FindOne()
 
             if ($null -ne $computerResult) {
@@ -4333,9 +4335,12 @@ function Get-EDCAServerInventory {
                 }
 
                 $inventory.Exchange.ExchangeComputerMembership = [pscustomobject]@{
-                    QuerySucceeded = $true
-                    MissingGroups  = $missingGroups
-                    PresentGroups  = $presentGroups
+                    QuerySucceeded       = $true
+                    MissingGroups        = $missingGroups
+                    PresentGroups        = $presentGroups
+                    TrustedForDelegation = if ($computerResult.Properties['userAccountControl'].Count -gt 0) {
+                        [bool]([int]$computerResult.Properties['userAccountControl'][0] -band 0x80000)
+                    } else { $null }
                 }
             }
         }
