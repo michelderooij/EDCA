@@ -689,7 +689,26 @@ function Test-EDCAControl {
                                     [pscustomobject]@{ Server = $_.Domain; Status = 'Skipped'; Evidence = 'No public MX records found — likely an internal domain; MTA-STS check not applicable.' }
                                 }
                                 else {
-                                    [pscustomobject]@{ Server = $_.Domain; Status = $_.MtaSts.Status; Evidence = [string]$_.MtaSts.Evidence }
+                                    $mtaSts = $_.MtaSts
+                                    $mtaEvidence = [string]$mtaSts.Evidence
+                                    if (($mtaSts.PSObject.Properties.Name -contains 'PolicyStatus') -and [string]$mtaSts.PolicyStatus -eq 'Fetched') {
+                                        $evParts = @('DNS record: "{0}"' -f [string]$mtaSts.DnsRecord)
+                                        $evParts += ('Policy ({0}):' -f [string]$mtaSts.PolicyUrl)
+                                        if (($mtaSts.PSObject.Properties.Name -contains 'PolicyMode') -and $null -ne $mtaSts.PolicyMode) {
+                                            $evParts += ('  mode: {0}' -f [string]$mtaSts.PolicyMode)
+                                        }
+                                        if (($mtaSts.PSObject.Properties.Name -contains 'PolicyMaxAge') -and $null -ne $mtaSts.PolicyMaxAge) {
+                                            $evParts += ('  max_age: {0}' -f [string]$mtaSts.PolicyMaxAge)
+                                        }
+                                        if (($mtaSts.PSObject.Properties.Name -contains 'PolicyMxEntries') -and $null -ne $mtaSts.PolicyMxEntries) {
+                                            foreach ($mxEntry in @($mtaSts.PolicyMxEntries)) { $evParts += ('  mx: {0}' -f [string]$mxEntry) }
+                                        }
+                                        $issueList = @()
+                                        if ($mtaSts.PSObject.Properties.Name -contains 'Issues') { $issueList = @($mtaSts.Issues) }
+                                        foreach ($iss in $issueList) { $evParts += ('  issue: {0}' -f [string]$iss) }
+                                        $mtaEvidence = $evParts -join "`n"
+                                    }
+                                    [pscustomobject]@{ Server = $_.Domain; Status = $mtaSts.Status; Evidence = $mtaEvidence }
                                 }
                             }
                         })

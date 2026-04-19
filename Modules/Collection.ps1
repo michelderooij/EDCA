@@ -1388,23 +1388,29 @@ function Test-EDCAMtaStsConfiguration {
     $txtLookup = Resolve-EDCADnsRecord -Name $dnsName -Type 'TXT'
     if (-not $txtLookup.ResolverAvailable) {
         return [pscustomobject]@{
-            Status       = 'Unknown'
-            Evidence     = $txtLookup.Error
-            DnsRecord    = $null
-            PolicyUrl    = ('https://mta-sts.{0}/.well-known/mta-sts.txt' -f $Domain)
-            PolicyStatus = 'Unknown'
-            Issues       = @($txtLookup.Error)
+            Status          = 'Unknown'
+            Evidence        = $txtLookup.Error
+            DnsRecord       = $null
+            PolicyUrl       = ('https://mta-sts.{0}/.well-known/mta-sts.txt' -f $Domain)
+            PolicyStatus    = 'Unknown'
+            PolicyMode      = $null
+            PolicyMaxAge    = $null
+            PolicyMxEntries = @()
+            Issues          = @($txtLookup.Error)
         }
     }
 
     if (-not $txtLookup.Success) {
         return [pscustomobject]@{
-            Status       = 'Fail'
-            Evidence     = ('No MTA-STS DNS TXT record resolved: {0}' -f $txtLookup.Error)
-            DnsRecord    = $null
-            PolicyUrl    = ('https://mta-sts.{0}/.well-known/mta-sts.txt' -f $Domain)
-            PolicyStatus = 'NotChecked'
-            Issues       = @('MTA-STS DNS TXT record missing.')
+            Status          = 'Fail'
+            Evidence        = ('No MTA-STS DNS TXT record resolved: {0}' -f $txtLookup.Error)
+            DnsRecord       = $null
+            PolicyUrl       = ('https://mta-sts.{0}/.well-known/mta-sts.txt' -f $Domain)
+            PolicyStatus    = 'NotChecked'
+            PolicyMode      = $null
+            PolicyMaxAge    = $null
+            PolicyMxEntries = @()
+            Issues          = @('MTA-STS DNS TXT record missing.')
         }
     }
 
@@ -1412,23 +1418,29 @@ function Test-EDCAMtaStsConfiguration {
     $stsRecords = @($txtValues | Where-Object { $_ -match '^v=STSv1\s*;?' })
     if ($stsRecords.Count -eq 0) {
         return [pscustomobject]@{
-            Status       = 'Fail'
-            Evidence     = 'TXT records exist at _mta-sts, but no record starts with v=STSv1.'
-            DnsRecord    = $null
-            PolicyUrl    = ('https://mta-sts.{0}/.well-known/mta-sts.txt' -f $Domain)
-            PolicyStatus = 'NotChecked'
-            Issues       = @('MTA-STS DNS version marker missing.')
+            Status          = 'Fail'
+            Evidence        = 'TXT records exist at _mta-sts, but no record starts with v=STSv1.'
+            DnsRecord       = $null
+            PolicyUrl       = ('https://mta-sts.{0}/.well-known/mta-sts.txt' -f $Domain)
+            PolicyStatus    = 'NotChecked'
+            PolicyMode      = $null
+            PolicyMaxAge    = $null
+            PolicyMxEntries = @()
+            Issues          = @('MTA-STS DNS version marker missing.')
         }
     }
 
     if ($stsRecords.Count -gt 1) {
         return [pscustomobject]@{
-            Status       = 'Fail'
-            Evidence     = ('Multiple MTA-STS TXT records found ({0}); only one should exist.' -f $stsRecords.Count)
-            DnsRecord    = $stsRecords[0]
-            PolicyUrl    = ('https://mta-sts.{0}/.well-known/mta-sts.txt' -f $Domain)
-            PolicyStatus = 'NotChecked'
-            Issues       = @('Multiple MTA-STS DNS TXT records detected.')
+            Status          = 'Fail'
+            Evidence        = ('Multiple MTA-STS TXT records found ({0}); only one should exist.' -f $stsRecords.Count)
+            DnsRecord       = $stsRecords[0]
+            PolicyUrl       = ('https://mta-sts.{0}/.well-known/mta-sts.txt' -f $Domain)
+            PolicyStatus    = 'NotChecked'
+            PolicyMode      = $null
+            PolicyMaxAge    = $null
+            PolicyMxEntries = @()
+            Issues          = @('Multiple MTA-STS DNS TXT records detected.')
         }
     }
 
@@ -1456,6 +1468,8 @@ function Test-EDCAMtaStsConfiguration {
     $policyUrl = ('https://mta-sts.{0}/.well-known/mta-sts.txt' -f $Domain)
     $policyStatus = 'Unknown'
     $policyMode = ''
+    $policyMaxAge = $null
+    $policyMxEntries = @()
     try {
         $response = Invoke-WebRequest -Uri $policyUrl -UseBasicParsing -TimeoutSec 10 -ErrorAction Stop
         $policyLines = @([string]$response.Content -split "`r?`n") | ForEach-Object { $_.Trim() } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
@@ -1505,6 +1519,8 @@ function Test-EDCAMtaStsConfiguration {
             $issues += 'MTA-STS policy mode requires at least one mx: entry.'
         }
 
+        $policyMaxAge = if ($policyMap.ContainsKey('max_age')) { [string]$policyMap['max_age'] } else { $null }
+        $policyMxEntries = $mxEntries
         $policyStatus = 'Fetched'
     }
     catch {
@@ -1514,12 +1530,15 @@ function Test-EDCAMtaStsConfiguration {
 
     $status = if ($issues.Count -eq 0) { 'Pass' } else { 'Fail' }
     return [pscustomobject]@{
-        Status       = $status
-        Evidence     = ('MTA-STS DNS record: "{0}"; policy status: {1}; issues: {2}' -f $dnsRecord, $policyStatus, $issues.Count)
-        DnsRecord    = $dnsRecord
-        PolicyUrl    = $policyUrl
-        PolicyStatus = $policyStatus
-        Issues       = $issues
+        Status          = $status
+        Evidence        = ('MTA-STS DNS record: "{0}"; policy status: {1}; issues: {2}' -f $dnsRecord, $policyStatus, $issues.Count)
+        DnsRecord       = $dnsRecord
+        PolicyUrl       = $policyUrl
+        PolicyStatus    = $policyStatus
+        PolicyMode      = if ([string]::IsNullOrWhiteSpace($policyMode)) { $null } else { $policyMode }
+        PolicyMaxAge    = $policyMaxAge
+        PolicyMxEntries = $policyMxEntries
+        Issues          = $issues
     }
 }
 
