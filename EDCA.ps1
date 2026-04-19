@@ -2,7 +2,7 @@
 .SYNOPSIS
     EDCA — Exchange Deployment & Compliance Assessment.
 
-    Version: 0.3 Preview
+    Version: 0.4 Preview
     Author:  Michel de Rooij
     Source:  https://github.com/michelderooij/EDCA
     Website: https://eightwone.com
@@ -46,12 +46,17 @@
     directory are read as input for analysis.
 
 .PARAMETER RemediationScript
-    When specified, generates a PowerShell remediation script alongside the HTML report.
+    When specified, generates a PowerShell remediation script file in the Output folder alongside
+    the HTML report. Without -Collect, this switch behaves like -Report: it reads all *.json
+    collection files from the Data folder (-DataPath) as its input data source; no live collection
+    is performed. The generated script is a starting-point template containing sample code derived
+    from each failed control's scriptTemplate — review and adapt it for your environment before
+    running it in production.
 
 .PARAMETER Framework
     One or more framework names to include in the analysis. When specified, only controls tagged
     with at least one of the supplied frameworks are evaluated. Valid values are:
-    Best Practice, CIS, CISA, DISA, ENISA.
+    Best Practice, ANSSI, BSI, CIS, CISA, DISA, ENISA.
     When omitted, all controls are evaluated regardless of framework.
 
 .PARAMETER Update
@@ -111,14 +116,14 @@ param(
 
     [switch]$Update,
 
-    [ValidateSet('Best Practice', 'CIS', 'CISA', 'DISA', 'ENISA')]
+    [ValidateSet('Best Practice', 'ANSSI', 'BSI', 'CIS', 'CISA', 'DISA', 'ENISA')]
     [string[]]$Framework
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-$EDCAVersion = 'v0.3 Preview'
+$EDCAVersion = 'v0.4 Preview'
 
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 
@@ -198,6 +203,13 @@ if ($doCollect) {
     $stamp = Get-Date -Format 'yyyyMMdd_HHmmss'
     $exportedFiles = [System.Collections.Generic.List[string]]::new()
 
+    # Resolve OrganizationId before exporting server files so it can be stamped on each.
+    $rawOrgId = $null
+    if (($collectionData.Organization.PSObject.Properties.Name -contains 'OrganizationIdentity') -and
+        -not [string]::IsNullOrWhiteSpace([string]$collectionData.Organization.OrganizationIdentity)) {
+        $rawOrgId = [string]$collectionData.Organization.OrganizationIdentity
+    }
+
     foreach ($serverRecord in @($collectionData.Servers)) {
         $serverFqdn = if ($serverRecord.PSObject.Properties.Name -contains 'Server') { [string]$serverRecord.Server } else { 'unknown' }
         $safeName = $serverFqdn -replace '[^\w\.\-]', '_'
@@ -210,6 +222,7 @@ if ($doCollect) {
             CollectionTimestamp = $collectionData.Metadata.CollectionTimestamp
             ExecutedBy          = $collectionData.Metadata.ExecutedBy
             ServerName          = $serverFqdn
+            OrganizationId      = $rawOrgId
         }
 
         $perServerData = [pscustomobject]@{
@@ -223,11 +236,6 @@ if ($doCollect) {
     }
 
     # Write the organization-wide JSON file (separate from per-server files).
-    $rawOrgId = $null
-    if (($collectionData.Organization.PSObject.Properties.Name -contains 'OrganizationIdentity') -and
-        -not [string]::IsNullOrWhiteSpace([string]$collectionData.Organization.OrganizationIdentity)) {
-        $rawOrgId = [string]$collectionData.Organization.OrganizationIdentity
-    }
     $safeOrgId = if ($null -ne $rawOrgId) { $rawOrgId -replace '[^\w\.\-]', '_' } else { 'organization' }
     $orgJsonOut = Join-Path -Path $resolvedDataPath -ChildPath ('{0}_{1}.json' -f $safeOrgId, $stamp)
 
@@ -266,11 +274,11 @@ if ($doReport -and -not $doCollect) {
 
     Write-EDCALog -Message ('Found {0} JSON file(s) to evaluate.' -f $jsonFiles.Count)
 
-    # Parse all files. Organization files (FileType='Organization') are separated from server files.
-    $allParsed = [System.Collections.Generic.List[pscustomobject]]::new()
+    # Pass 1: parse all files and bucket them into org files vs server files.
+    # Org files are fully collected before server files are processed so the selected
+    # organization is known when server files are filtered in Pass 2.
     $allOrgFiles = [System.Collections.Generic.List[pscustomobject]]::new()
-    $latestBaseMetadata = $null
-    $latestBaseTimestamp = [datetime]::MinValue
+    $rawServerFiles = [System.Collections.Generic.List[pscustomobject]]::new()
 
     foreach ($jsonFile in $jsonFiles) {
         $parsed = Get-Content -Path $jsonFile -Raw | ConvertFrom-Json
@@ -281,12 +289,8 @@ if ($doReport -and -not $doCollect) {
             $ts = $parsed.Metadata.CollectionTimestamp
             if ($null -ne $ts) {
                 try {
-                    if ($ts -is [datetime]) {
-                        $fileTimestamp = $ts
-                    }
-                    else {
-                        $fileTimestamp = [datetime]::Parse([string]$ts)
-                    }
+                    if ($ts -is [datetime]) { $fileTimestamp = $ts }
+                    else { $fileTimestamp = [datetime]::Parse([string]$ts) }
                 }
                 catch { }
             }
@@ -301,7 +305,7 @@ if ($doReport -and -not $doCollect) {
             continue
         }
 
-        # Detect organization file: explicit FileType or has Organisation/EmailAuth but no Servers.
+        # Detect organization file: explicit FileType or has Organization/EmailAuth but no Servers.
         $fileType = ''
         if ($parsed.PSObject.Properties.Name -contains 'Metadata' -and
             $parsed.Metadata.PSObject.Properties.Name -contains 'FileType') {
@@ -318,10 +322,99 @@ if ($doReport -and -not $doCollect) {
                     Parsed    = $parsed
                     FilePath  = $jsonFile
                 })
+            # Legacy org files that also embed Servers are held for pass 2.
+            if ($parsed.PSObject.Properties.Name -contains 'Servers') {
+                $rawServerFiles.Add([pscustomobject]@{
+                        Timestamp = $fileTimestamp
+                        Parsed    = $parsed
+                        FilePath  = $jsonFile
+                    })
+            }
+        }
+        else {
+            $rawServerFiles.Add([pscustomobject]@{
+                    Timestamp = $fileTimestamp
+                    Parsed    = $parsed
+                    FilePath  = $jsonFile
+                })
+            # Legacy server files that also embed org data are added as org candidates too.
+            if ($parsed.PSObject.Properties.Name -contains 'Organization' -or
+                $parsed.PSObject.Properties.Name -contains 'EmailAuthentication') {
+                $allOrgFiles.Add([pscustomobject]@{
+                        Timestamp = $fileTimestamp
+                        Parsed    = $parsed
+                        FilePath  = $jsonFile
+                    })
+            }
+        }
+    }
+
+    # Determine the selected organization from the most recently collected org file.
+    # Also gather all collection timestamps that belong to that org (for legacy timestamp matching).
+    # Warn if org files from a different organization are present in the folder.
+    $selectedOrgId = $null
+    $selectedOrgTimestamps = @()
+    if ($allOrgFiles.Count -gt 0) {
+        $bestOrgEntry = $allOrgFiles | Sort-Object -Property Timestamp -Descending | Select-Object -First 1
+        if ($bestOrgEntry.Parsed.PSObject.Properties.Name -contains 'Metadata' -and
+            $bestOrgEntry.Parsed.Metadata.PSObject.Properties.Name -contains 'OrganizationId') {
+            $selectedOrgId = [string]$bestOrgEntry.Parsed.Metadata.OrganizationId
+        }
+        $selectedOrgTimestamps = @(
+            $allOrgFiles | Where-Object {
+                $oId = if ($_.Parsed.PSObject.Properties.Name -contains 'Metadata' -and
+                    $_.Parsed.Metadata.PSObject.Properties.Name -contains 'OrganizationId') {
+                    [string]$_.Parsed.Metadata.OrganizationId
+                }
+                else { $null }
+                ($null -eq $selectedOrgId) -or ($null -eq $oId) -or ($oId -eq $selectedOrgId)
+            } | ForEach-Object { $_.Timestamp }
+        )
+        $excludedOrgs = @(
+            $allOrgFiles | Where-Object {
+                $oId = if ($_.Parsed.PSObject.Properties.Name -contains 'Metadata' -and
+                    $_.Parsed.Metadata.PSObject.Properties.Name -contains 'OrganizationId') {
+                    [string]$_.Parsed.Metadata.OrganizationId
+                }
+                else { $null }
+                $null -ne $oId -and $null -ne $selectedOrgId -and $oId -ne $selectedOrgId
+            } | ForEach-Object { [string]$_.Parsed.Metadata.OrganizationId } | Select-Object -Unique
+        )
+        foreach ($xOrg in $excludedOrgs) {
+            Write-EDCALog -Level 'WARN' -Message ('Organization "{0}" files found but excluded; using most recent organization "{1}".' -f $xOrg, $selectedOrgId)
+        }
+    }
+
+    # Pass 2: filter server files to the selected organization and build the parsed record list.
+    $allParsed = [System.Collections.Generic.List[pscustomobject]]::new()
+    $latestBaseMetadata = $null
+    $latestBaseTimestamp = [datetime]::MinValue
+
+    foreach ($sf in $rawServerFiles) {
+        $parsed = $sf.Parsed
+        $fileTimestamp = $sf.Timestamp
+        $jsonFile = $sf.FilePath
+
+        # Determine which organization this server file declares.
+        $sfOrgId = $null
+        if ($parsed.PSObject.Properties.Name -contains 'Metadata' -and
+            $parsed.Metadata.PSObject.Properties.Name -contains 'OrganizationId') {
+            $sfOrgId = [string]$parsed.Metadata.OrganizationId
+        }
+
+        # Skip files whose OrganizationId explicitly belongs to a different organization.
+        if ($null -ne $sfOrgId -and $null -ne $selectedOrgId -and $sfOrgId -ne $selectedOrgId) {
+            Write-EDCALog -Level 'WARN' -Message ('Excluding server file "{0}": belongs to organization "{1}", not "{2}".' -f (Split-Path $jsonFile -Leaf), $sfOrgId, $selectedOrgId)
+            continue
+        }
+        # For legacy files without OrganizationId, match by CollectionTimestamp when possible.
+        if ($null -eq $sfOrgId -and $selectedOrgTimestamps.Count -gt 0 -and
+            $fileTimestamp -ne [datetime]::MinValue -and $fileTimestamp -notin $selectedOrgTimestamps) {
+            Write-Verbose ('Excluding legacy server file "{0}": CollectionTimestamp ({1}) does not match any collection run of the selected organization.' -f (Split-Path $jsonFile -Leaf), $fileTimestamp)
             continue
         }
 
-        # Server file — track base metadata from the most recent file seen so far.
+        # Track base metadata from the most recent accepted server file.
         if ($fileTimestamp -gt $latestBaseTimestamp) {
             if ($parsed.PSObject.Properties.Name -contains 'Metadata') {
                 $latestBaseMetadata = $parsed.Metadata
@@ -341,16 +434,6 @@ if ($doReport -and -not $doCollect) {
                     ServerName = $serverName
                     Record     = $srv
                     FilePath   = $jsonFile
-                })
-        }
-
-        # Legacy server files may still carry Organization/EmailAuthentication — treat as org candidate too.
-        if ($parsed.PSObject.Properties.Name -contains 'Organization' -or
-            $parsed.PSObject.Properties.Name -contains 'EmailAuthentication') {
-            $allOrgFiles.Add([pscustomobject]@{
-                    Timestamp = $fileTimestamp
-                    Parsed    = $parsed
-                    FilePath  = $jsonFile
                 })
         }
 

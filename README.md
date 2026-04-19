@@ -7,7 +7,7 @@ PowerShell-based tool to collect Exchange on-premises deployment data, evaluate 
 - `-Collect` switch to gather data from Exchange servers and write JSON files to the Data folder.
 - `-Report` switch to read JSON files from a prior collection run (default: `.\Data`) and generate an HTML report.
 - When neither `-Collect` nor `-Report` is specified, both phases run by default.
-- Interactive HTML dashboard with scores for Best Practice, ENISA/NIS2, CIS, DISA, and CISA.
+- Interactive HTML dashboard with scores for Best Practice, ANSSI, BSI, ENISA/NIS2, CIS, DISA, and CISA.
 - External controls catalog in `Config/controls.json`.
 - Optional remediation script generation for all failed controls.
 - Supports Exchange 2016, Exchange 2019, and Exchange SE.
@@ -67,6 +67,9 @@ From the `EDCA` folder:
 # Analyse only against CIS and DISA controls
 .\EDCA.ps1 -Servers EXCH01,EXCH02 -Framework CIS,DISA
 
+# Analyse against ANSSI controls only
+.\EDCA.ps1 -Servers EXCH01,EXCH02 -Framework ANSSI
+
 # Report mode scoped to specific frameworks
 .\EDCA.ps1 -Report -Framework 'Best Practice','CIS'
 ```
@@ -87,25 +90,27 @@ Report and remediation files are written to `Output`:
 
 ## Screenshots
 
-**Report dashboard** — framework scores (Total, Best Practice, CIS, CISA, ENISA, DISA) with colour-coded donut charts, and findings grouped by category with RAG indicators, search, and filters:
+**Report dashboard** — framework scores (Total, Best Practice, ANSSI, BSI, CIS, CISA, ENISA, DISA) with colour-coded donut charts, and findings grouped by category with RAG indicators, search, and filters:
 
-![EDCA report dashboard](Assets/EDCA_capture1.jpg)
+![EDCA report dashboard](Docs/EDCA_capture1.jpg)
 
 **Control detail panel** — per-control description, evidence table (subject, status, evidence text), remediation guidance, and optional script template:
 
-![EDCA control detail panel](Assets/EDCA_capture2.jpg)
+![EDCA control detail panel](Docs/EDCA_capture2.jpg)
 
 ## Frameworks
 
 EDCA evaluates controls against the following compliance frameworks. Each control in `Config/controls.json` is tagged with one or more framework identifiers; the HTML report displays a separate score for each.
 
-| Framework | Full name
-|---|---|
-| **Best Practice** | Common best practices for Exchange Server deployments, including [CSS Exchange](https://microsoft.github.io/CSS-Exchange/) |
-| **CIS** | [CIS Microsoft Exchange Server Benchmark](https://www.cisecurity.org/benchmark/microsoft_exchange_server) |
-| **CISA** | [CISA Microsoft Exchange Server Security Best Practices Guide](https://www.cisa.gov/resources-tools/resources/microsoft-exchange-server-security-best-practices-guide) |
-| **DISA** | [DISA STIG for Microsoft Exchange 2019 Mailbox Server](https://public.cyber.mil/stigs/downloads/) |
-| **ENISA** | [ENISA / NIS2 Directive (EU) 2022/2555](https://www.enisa.europa.eu/topics/cybersecurity-policy/nis-directive-new), including [NCSC-NL TLS Guidelines](https://www.ncsc.nl/documenten/publicaties/2021/januari/19/ict-beveiligingsrichtlijnen-voor-transport-layer-security-2.1) |
+| Framework | Official Reference(s) | Version / Date | Official URL | License |
+|---|---|---|---|---|
+| **Best Practice** | Common best practices for Exchange Server deployments, including [CSS Exchange](https://microsoft.github.io/CSS-Exchange/) | — | — | — |
+| **ANSSI** 🇫🇷 | [Mise en œuvre sécurisée d'un serveur Windows](https://messervices.cyber.gouv.fr/guides/mise-en-oeuvre-securisee-dun-serveur-windows)<br>[Recommandations de sécurité relatives à TLS](https://messervices.cyber.gouv.fr/guides/recommandations-de-securite-relatives-tls)<br>[Sécuriser la journalisation dans un environnement Microsoft AD](https://messervices.cyber.gouv.fr/guides/securiser-la-journalisation-dans-un-environnement-microsoft-active-directory)<br>[Transition post-quantique de TLS 1.3](https://messervices.cyber.gouv.fr/guides/Transition-post-quantique-protocole-TLS-1-3) | v1.0 · Oct 2025<br>v1.2 · Mar 2020<br>Jan 2022<br>Feb 2026 | [messervices.cyber.gouv.fr](https://messervices.cyber.gouv.fr/) | Free to access |
+| **BSI** 🇩🇪 | [IT-Grundschutz-Kompendium Edition 2023](https://www.bsi.bund.de/DE/Themen/Unternehmen-und-Organisationen/Standards-und-Zertifizierung/IT-Grundschutz/IT-Grundschutz-Kompendium/it-grundschutz-kompendium_node.html)<br>Modules: SYS.1.1 · SYS.1.2.3 · APP.2.2 · APP.5.2 | Edition 2023<br>February 2023 | [bsi.bund.de](https://www.bsi.bund.de/) | © BSI — free to download |
+| **CIS** 🇺🇸 | [CIS Microsoft Exchange Server 2019 Benchmark](https://www.cisecurity.org/benchmark/microsoft_exchange_server)<br>[CIS Microsoft Windows Server 2019/2022 Benchmark](https://www.cisecurity.org/benchmark/microsoft_windows_server)<br>[CIS Controls v8](https://www.cisecurity.org/insights/white-papers/cis-controls-v8) | v1.0.0<br>v4.0.0 (2019) · v5.0.0 (2022)<br>v8 | [cisecurity.org](https://www.cisecurity.org/benchmark/microsoft_exchange_server) | Free, non-commercial use only |
+| **CISA** 🇺🇸 | [Microsoft Exchange Server Security Best Practices Guide](https://www.cisa.gov/sites/default/files/publications/CSI_MS_Exchange_Security_Best_Practices_Final.pdf)<br>[Advisory AA21-062A: Mitigate Exchange Server Vulnerabilities](https://www.cisa.gov/news-events/cybersecurity-advisories/aa21-062a)<br>[Binding Operational Directive 18-01](https://www.cisa.gov/binding-operational-directive-18-01)<br>[Known Exploited Vulnerabilities Catalog](https://www.cisa.gov/known-exploited-vulnerabilities-catalog) | 2021<br>March 2021<br>October 2017<br>Ongoing | [cisa.gov](https://www.cisa.gov/) | Public domain (US Government) |
+| **DISA** 🇺🇸 | [Microsoft Exchange 2019 Mailbox Server STIG](https://public.cyber.mil/stigs/downloads/)<br>[Microsoft Exchange 2016 Mailbox Server STIG](https://public.cyber.mil/stigs/downloads/) | 2025-05-14<br>2023-12-18 | [public.cyber.mil/stigs](https://public.cyber.mil/stigs/downloads/) | Public domain (US Government) |
+| **ENISA** 🇪🇺 | [NIS2 Directive (EU) 2022/2555](https://eur-lex.europa.eu/eli/dir/2022/2555/oj)<br>[NCSC-NL TLS Guidelines 2025-05](https://www.ncsc.nl/transport-layer-security/ICT-beveiligingsrichtlijnen-voor-TLS) | December 2022<br>April 2026 | [eur-lex.europa.eu](https://eur-lex.europa.eu/eli/dir/2022/2555/oj)<br>[ncsc.nl](https://www.ncsc.nl/) | Open (EU law)<br>Free (Dutch Government) |
 
 ## Notes
 

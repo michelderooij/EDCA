@@ -554,7 +554,7 @@ function New-EDCAHtmlReport {
     <header>
         <div>
             <h1>EDCA: Exchange Deployment &amp; Compliance Assessment $($metadata.ToolVersion)</h1>
-            <p>Generated: $($metadata.CollectionTimestamp) | Executed by: $($metadata.ExecutedBy) | Author: <a href="https://eightwone.com" target="_blank" rel="noopener noreferrer" style="color:#93c5fd">Michel de Rooij</a></p>
+            <p>Generated: $($metadata.CollectionTimestamp) | Executed by: $($metadata.ExecutedBy)</p>
         </div>
         <div class="dark-toggle no-print">
             <button class="print-btn" onclick="window.print()" title="Print or save as PDF">&#128438;&nbsp;Print&nbsp;/&nbsp;PDF</button>

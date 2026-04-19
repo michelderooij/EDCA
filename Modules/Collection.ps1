@@ -1685,6 +1685,207 @@ function Test-EDCADaneConfiguration {
     }
 }
 
+function Test-EDCADkimConfiguration {
+    # Note: Get-DkimSigningConfig and Enable-DkimSigningConfig are Exchange Online PowerShell cmdlets.
+    # They do not exist in the Exchange Management Shell on Exchange Server on-premises.
+    # DKIM signing for on-premises Exchange always requires a third-party agent, gateway, or SaaS service.
+    # This function detects DKIM by probing well-known selectors across popular mail platforms.
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Domain
+    )
+
+    # Selectors used by common mail platforms:
+    #   selector1/selector2  Exchange Online (Microsoft 365)
+    #   google               Google Workspace
+    #   k1/k2                Mailchimp / Mandrill / Klaviyo
+    #   s1/s2                SendGrid / generic
+    #   pm                   Postmark
+    #   proofpoint           Proofpoint
+    #   default/mail/dkim    generic / self-hosted
+    $knownSelectors = @('selector1', 'selector2', 'google', 'k1', 'k2', 's1', 's2', 'pm', 'proofpoint', 'default', 'mail', 'dkim')
+
+    # Map CNAME target suffixes to signing service names.
+    $cnameServiceMap = [ordered]@{
+        '.onmicrosoft.com'   = 'Exchange Online (Microsoft 365)'
+        '.mimecast.com'      = 'Mimecast'
+        '.pphosted.com'      = 'Proofpoint'
+        '.amazonses.com'     = 'Amazon SES'
+        '.sendgrid.net'      = 'SendGrid'
+        '.mtasv.net'         = 'Postmark'
+        '.mandrillapp.com'   = 'Mailchimp / Mandrill'
+        '.klaviyo.com'       = 'Klaviyo'
+        '.mailgun.org'       = 'Mailgun'
+        '.sparkpostmail.com' = 'SparkPost'
+        '.mailjet.com'       = 'Mailjet'
+        '.socketlabs.com'    = 'SocketLabs'
+        '.exacttarget.com'   = 'Salesforce Marketing Cloud'
+        '.salesforce.com'    = 'Salesforce Marketing Cloud'
+        '.messagelabs.com'   = 'Symantec Email Security.cloud'
+    }
+
+    # Fallback service hints based on selector name when no CNAME suffix matches.
+    $selectorServiceHint = @{
+        'google'     = 'Google Workspace'
+        'proofpoint' = 'Proofpoint'
+        'pm'         = 'Postmark'
+    }
+
+    $issues = @()
+    $detectedSelectors = [ordered]@{}
+
+    foreach ($selector in $knownSelectors) {
+        $dnsName = ('{0}._domainkey.{1}' -f $selector, $Domain)
+        $txtLookup = Resolve-EDCADnsRecord -Name $dnsName -Type 'TXT'
+
+        if (-not $txtLookup.ResolverAvailable) {
+            return [pscustomobject]@{
+                Status            = 'Unknown'
+                Evidence          = $txtLookup.Error
+                Selector1         = $null
+                Selector2         = $null
+                DetectedSelectors = $null
+                SigningService    = $null
+                Issues            = @($txtLookup.Error)
+            }
+        }
+
+        if (-not $txtLookup.Success) { continue }
+
+        # Extract CNAME records (Resolve-DnsName may return the full chain).
+        $cnameTarget = @($txtLookup.Records |
+            Where-Object { $_.PSObject.Properties.Name -contains 'Type' -and [string]$_.Type -eq 'CNAME' } |
+            ForEach-Object { [string]$_.NameHost }) | Select-Object -Last 1
+
+        # Extract TXT values containing a DKIM public key (p= tag).
+        $txtValues = Get-EDCATxtRecordValues -Records $txtLookup.Records
+        $dkimTxt = @($txtValues | Where-Object { $_ -match 'p=' }) | Select-Object -First 1
+
+        if ([string]::IsNullOrWhiteSpace($cnameTarget) -and [string]::IsNullOrWhiteSpace($dkimTxt)) { continue }
+
+        # Determine service name from CNAME target suffix.
+        $service = $null
+        if (-not [string]::IsNullOrWhiteSpace($cnameTarget)) {
+            $lcTarget = $cnameTarget.ToLowerInvariant()
+            foreach ($suffix in $cnameServiceMap.Keys) {
+                if ($lcTarget.EndsWith($suffix)) {
+                    $service = $cnameServiceMap[$suffix]
+                    break
+                }
+            }
+        }
+        if ($null -eq $service -and $selectorServiceHint.ContainsKey($selector)) {
+            $service = $selectorServiceHint[$selector]
+        }
+
+        $detectedSelectors[$selector] = [pscustomobject]@{
+            Type    = if (-not [string]::IsNullOrWhiteSpace($cnameTarget)) { 'CNAME' } else { 'TXT' }
+            Cname   = $cnameTarget
+            Value   = $dkimTxt
+            Service = $service
+        }
+    }
+
+    if ($detectedSelectors.Count -eq 0) {
+        $probed = ($knownSelectors | ForEach-Object { '{0}._domainkey' -f $_ }) -join ', '
+        $issues += ('No DKIM selector records found. Probed: {0}.' -f $probed)
+    }
+
+    $status = if ($issues.Count -eq 0) { 'Pass' } else { 'Fail' }
+
+    $evidenceParts = @(
+        foreach ($sel in $detectedSelectors.Keys) {
+            $entry = $detectedSelectors[$sel]
+            $serviceTag = if ($null -ne $entry.Service) { ' [{0}]' -f $entry.Service } else { '' }
+            if ($entry.Type -eq 'CNAME') {
+                ('{0}._domainkey: CNAME -> {1}{2}' -f $sel, $entry.Cname, $serviceTag)
+            }
+            else {
+                ('{0}._domainkey: TXT found{1}' -f $sel, $serviceTag)
+            }
+        }
+    )
+    if ($evidenceParts.Count -eq 0) { $evidenceParts = @($issues) }
+
+    $signingService = @($detectedSelectors.Values | ForEach-Object { $_.Service } | Where-Object { $null -ne $_ } | Select-Object -Unique) -join ', '
+
+    return [pscustomobject]@{
+        Status            = $status
+        Evidence          = $evidenceParts -join '; '
+        Selector1         = if ($detectedSelectors.Contains('selector1')) { $detectedSelectors['selector1'].Value } else { $null }
+        Selector2         = if ($detectedSelectors.Contains('selector2')) { $detectedSelectors['selector2'].Value } else { $null }
+        DetectedSelectors = $detectedSelectors
+        SigningService    = if ([string]::IsNullOrWhiteSpace($signingService)) { $null } else { $signingService }
+        Issues            = $issues
+    }
+}
+
+function Test-EDCATlsRptConfiguration {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Domain
+    )
+
+    $dnsName = ('_smtp._tls.{0}' -f $Domain)
+    $txtLookup = Resolve-EDCADnsRecord -Name $dnsName -Type 'TXT'
+
+    if (-not $txtLookup.ResolverAvailable) {
+        return [pscustomobject]@{
+            Status   = 'Unknown'
+            Evidence = $txtLookup.Error
+            Record   = $null
+            Issues   = @($txtLookup.Error)
+        }
+    }
+
+    if (-not $txtLookup.Success) {
+        return [pscustomobject]@{
+            Status   = 'Fail'
+            Evidence = ('No TLS-RPT TXT record resolved at {0}: {1}' -f $dnsName, $txtLookup.Error)
+            Record   = $null
+            Issues   = @('TLS-RPT record missing.')
+        }
+    }
+
+    $txtValues = Get-EDCATxtRecordValues -Records $txtLookup.Records
+    $tlsrptRecords = @($txtValues | Where-Object { $_ -match '^v=TLSRPTv1\s*;?' })
+    if ($tlsrptRecords.Count -eq 0) {
+        return [pscustomobject]@{
+            Status   = 'Fail'
+            Evidence = ('TXT records found at {0} but none starts with v=TLSRPTv1.' -f $dnsName)
+            Record   = $null
+            Issues   = @('TLS-RPT record version marker missing or invalid.')
+        }
+    }
+
+    $record = [string]$tlsrptRecords[0]
+    $issues = @()
+    $tags = @{}
+    foreach ($fragment in ($record -split ';')) {
+        $trimmed = $fragment.Trim()
+        if ([string]::IsNullOrWhiteSpace($trimmed)) { continue }
+        $pair = $trimmed -split '=', 2
+        if ($pair.Count -ne 2) { continue }
+        $key = $pair[0].Trim().ToLowerInvariant()
+        $value = $pair[1].Trim()
+        if (-not [string]::IsNullOrWhiteSpace($key)) { $tags[$key] = $value }
+    }
+
+    if (-not $tags.ContainsKey('rua') -or [string]::IsNullOrWhiteSpace([string]$tags['rua'])) {
+        $issues += 'TLS-RPT record is missing rua= reporting endpoint.'
+    }
+
+    $status = if ($issues.Count -eq 0) { 'Pass' } else { 'Fail' }
+    return [pscustomobject]@{
+        Status   = $status
+        Evidence = ('TLS-RPT record: {0}; issues: {1}' -f $record, $issues.Count)
+        Record   = $record
+        Issues   = $issues
+    }
+}
+
 function Invoke-EDCAEmailAuthenticationChecks {
     [CmdletBinding()]
     param(
@@ -1724,6 +1925,8 @@ function Invoke-EDCAEmailAuthenticationChecks {
             Dmarc  = Test-EDCADmarcConfiguration -Domain $domain
             MtaSts = Test-EDCAMtaStsConfiguration -Domain $domain
             Dane   = Test-EDCADaneConfiguration -Domain $domain
+            Dkim   = Test-EDCADkimConfiguration -Domain $domain
+            TlsRpt = Test-EDCATlsRptConfiguration -Domain $domain
         }
     }
 
@@ -2428,6 +2631,50 @@ function Get-EDCAServerInventory {
             $weakKeyExchangeStates += [pscustomobject]@{ Name = $keaName; Enabled = $keaEnabled }
         }
 
+        $kerberosEncryptionTypes = $null
+        try {
+            $kerbPath = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System\Kerberos\Parameters'
+            if (Test-Path -Path $kerbPath) {
+                $kerbItem = Get-ItemProperty -Path $kerbPath -Name SupportedEncryptionTypes -ErrorAction SilentlyContinue
+                if ($null -ne $kerbItem -and $kerbItem.PSObject.Properties.Name -contains 'SupportedEncryptionTypes') {
+                    $kerberosEncryptionTypes = [int]$kerbItem.SupportedEncryptionTypes
+                }
+            }
+        }
+        catch {
+        }
+
+        $cipherSuiteOrder = $null
+        if (Get-Command -Name Get-TlsCipherSuite -ErrorAction SilentlyContinue) {
+            try {
+                $allSuites = @(Get-TlsCipherSuite -ErrorAction SilentlyContinue)
+                # Treat suites without a Protocol property, or those not labelled TLS 1.3, as TLS 1.2.
+                $tls12Suites = @($allSuites | Where-Object { [string]$_.Protocol -ne 'TLS 1.3' })
+                $nonPfsSuites = @($tls12Suites | Where-Object { $_.Name -notmatch 'ECDHE|DHE' } | Select-Object -ExpandProperty Name)
+                # Find DHE (non-ECDHE) suites that appear before the first ECDHE suite.
+                $firstEcdheIndex = -1
+                for ($i = 0; $i -lt $tls12Suites.Count; $i++) {
+                    if ($tls12Suites[$i].Name -match 'ECDHE') { $firstEcdheIndex = $i; break }
+                }
+                $dheBeforeEcdhe = @()
+                if ($firstEcdheIndex -gt 0) {
+                    $dheBeforeEcdhe = @($tls12Suites[0..($firstEcdheIndex - 1)] | Where-Object { $_.Name -match '\bDHE\b' -and $_.Name -notmatch 'ECDHE' } | Select-Object -ExpandProperty Name)
+                }
+                $cipherSuiteOrder = [pscustomobject]@{
+                    QuerySucceeded = $true
+                    Tls12Suites    = @($tls12Suites | Select-Object -ExpandProperty Name)
+                    NonPfsSuites   = $nonPfsSuites
+                    DheBeforeEcdhe = $dheBeforeEcdhe
+                }
+            }
+            catch {
+                $cipherSuiteOrder = [pscustomobject]@{
+                    QuerySucceeded = $false
+                    Error          = $_.Exception.Message
+                }
+            }
+        }
+
         $serializedDataSigningEnabled = $null
         try {
             $diagnosticSettings = Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\ExchangeServer\v15\Diagnostics' -ErrorAction SilentlyContinue
@@ -2812,7 +3059,9 @@ function Get-EDCAServerInventory {
                 WeakCiphers                = $weakCipherStates
                 WeakHashes                 = $weakHashStates
                 WeakKeyExchange            = $weakKeyExchangeStates
+                CipherSuiteOrder           = $cipherSuiteOrder
             }
+            KerberosEncryptionTypes   = $kerberosEncryptionTypes
             NetFrameworkRelease       = $netFrameworkRelease
             VmwareIntrospection       = $vmwareIntrospection
         }
@@ -5108,10 +5357,10 @@ function Invoke-EDCAParallelServerCollection {
         $activeJobs = @($activeJobs | Where-Object { $_.Job.Id -ne $completedJob.Id })
         $collectionError = if ($result.PSObject.Properties.Name -contains 'CollectionError') { $result.CollectionError } else { $null }
         if (-not [string]::IsNullOrWhiteSpace($collectionError)) {
-            Write-Host ('  [{0}/{1}] ERROR {2}: {3}' -f ($meta.Index + 1), $targetServers.Count, $meta.Server, $collectionError) -ForegroundColor Red
+            Write-EDCALog -Level 'ERROR' -Message ('[{0}/{1}] {2}: {3}' -f ($meta.Index + 1), $targetServers.Count, $meta.Server, $collectionError)
         }
         else {
-            Write-Host ('  [{0}/{1}] Done:  {2}' -f ($meta.Index + 1), $targetServers.Count, $meta.Server) -ForegroundColor Green
+            Write-EDCALog -Message ('[{0}/{1}] Done: {2}' -f ($meta.Index + 1), $targetServers.Count, $meta.Server)
         }
     }
 
@@ -5270,6 +5519,7 @@ function Get-EDCAOrganizationInventory {
         MobileDevicePolicies        = @()
         IrmConfiguration            = $null
         DcCoreRatio                 = $null
+        DomainObjectDacl            = $null
         CollectionWarnings          = @()
     }
 
@@ -5725,6 +5975,101 @@ function Get-EDCAOrganizationInventory {
                 Ratio         = $null
                 DcAccessError = $_.Exception.Message
             })
+    }
+
+    # Collect domain object DACL state for EDCA-IAC-028 (Exchange-AD-Privesc WriteDACL ACE check).
+    # Uses pure .NET ADSI — no ActiveDirectory PowerShell module required.
+    try {
+        $adDomain = [System.DirectoryServices.ActiveDirectory.Domain]::GetCurrentDomain()
+        $domainDN = $adDomain.GetDirectoryEntry().distinguishedName
+        $domainEntry = [System.DirectoryServices.DirectoryEntry]"LDAP://$domainDN"
+        $domainAcl = $domainEntry.get_objectSecurity()
+
+        # GUIDs for inherited object types carrying the vulnerable WriteDACL ACEs
+        $userObjTypeGuid = [Guid]'bf967aba-0de6-11d0-a285-00aa003049e2'  # User class
+        $inetOrgPersonGuid = [Guid]'4828cc14-1437-45bc-9b07-ad6f015e5f28'  # inetOrgPerson class
+        $groupObjTypeGuid = [Guid]'bf967a9c-0de6-11d0-a285-00aa003049e2'  # Group class (AdminSDHolder, Exchange 2016+)
+        $writeDaclRight = [System.DirectoryServices.ActiveDirectoryRights]::WriteDacl
+        $inheritOnlyFlag = [System.Security.AccessControl.PropagationFlags]::InheritOnly
+
+        # Resolve EWP SID — translate to SecurityIdentifier for reliable matching regardless of domain name
+        $ewpSid = $null
+        try {
+            $ewpSid = (New-Object System.Security.Principal.NTAccount 'Exchange Windows Permissions').Translate([System.Security.Principal.SecurityIdentifier]).Value
+        }
+        catch {
+            # Group may not exist (e.g. split permissions or Exchange not installed in this domain)
+        }
+
+        # Resolve Exchange Trusted Subsystem SID for AdminSDHolder check (Exchange 2016+ only)
+        $etsSid = $null
+        try {
+            $etsSid = (New-Object System.Security.Principal.NTAccount 'Exchange Trusted Subsystem').Translate([System.Security.Principal.SecurityIdentifier]).Value
+        }
+        catch {}
+
+        $domainRules = @($domainAcl.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier]))
+
+        $ewpUserAceInheritOnly = $null
+        $ewpInetOrgPersonAceInheritOnly = $null
+
+        if ($null -ne $ewpSid) {
+            foreach ($guid in @($userObjTypeGuid, $inetOrgPersonGuid)) {
+                $matchingAce = $domainRules | Where-Object {
+                    $_.IdentityReference.Value -eq $ewpSid -and
+                    ($_.ActiveDirectoryRights -band $writeDaclRight) -and
+                    $_.ObjectType -eq $guid -and
+                    $_.AccessControlType -eq [System.Security.AccessControl.AccessControlType]::Allow
+                } | Select-Object -First 1
+
+                $hasInheritOnly = $null
+                if ($null -ne $matchingAce) {
+                    $hasInheritOnly = [bool]($matchingAce.PropagationFlags -band $inheritOnlyFlag)
+                }
+                if ($guid -eq $userObjTypeGuid) {
+                    $ewpUserAceInheritOnly = $hasInheritOnly
+                }
+                else {
+                    $ewpInetOrgPersonAceInheritOnly = $hasInheritOnly
+                }
+            }
+        }
+
+        # AdminSDHolder check: ETS WriteDACL Group ACE must be absent (Exchange 2016+)
+        $etsGroupAceOnAdminSdHolderAbsent = $null
+        if ($null -ne $etsSid) {
+            try {
+                $adminSdEntry = [System.DirectoryServices.DirectoryEntry]"LDAP://CN=AdminSDHolder,CN=System,$domainDN"
+                $adminSdAcl = $adminSdEntry.get_objectSecurity()
+                $adminSdRules = @($adminSdAcl.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier]))
+                $etsGroupAce = $adminSdRules | Where-Object {
+                    $_.IdentityReference.Value -eq $etsSid -and
+                    ($_.ActiveDirectoryRights -band $writeDaclRight) -and
+                    $_.ObjectType -eq $groupObjTypeGuid -and
+                    $_.AccessControlType -eq [System.Security.AccessControl.AccessControlType]::Allow
+                } | Select-Object -First 1
+                $etsGroupAceOnAdminSdHolderAbsent = ($null -eq $etsGroupAce)
+            }
+            catch {
+                # AdminSDHolder unreadable — leave $null
+            }
+        }
+
+        $organization.DomainObjectDacl = [pscustomobject]@{
+            EwpUserAceInheritOnly            = $ewpUserAceInheritOnly
+            EwpInetOrgPersonAceInheritOnly   = $ewpInetOrgPersonAceInheritOnly
+            EtsGroupAceOnAdminSdHolderAbsent = $etsGroupAceOnAdminSdHolderAbsent
+            CollectionError                  = $null
+        }
+    }
+    catch {
+        $organization.DomainObjectDacl = [pscustomobject]@{
+            EwpUserAceInheritOnly            = $null
+            EwpInetOrgPersonAceInheritOnly   = $null
+            EtsGroupAceOnAdminSdHolderAbsent = $null
+            CollectionError                  = $_.Exception.Message
+        }
+        $organization.CollectionWarnings += ('DomainObjectDacl collection failed: ' + $_.Exception.Message)
     }
 
     return $organization

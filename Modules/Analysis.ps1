@@ -223,7 +223,7 @@ function Test-EDCAControl {
         [pscustomobject]$CollectionData
     )
 
-    if ($Control.id -in @('EDCA-MON-001', 'EDCA-IAC-001', 'EDCA-DATA-002', 'EDCA-IAC-004', 'EDCA-IAC-008', 'EDCA-SEC-032', 'EDCA-TLS-026', 'EDCA-TLS-023', 'EDCA-TLS-025', 'EDCA-TLS-024', 'EDCA-SEC-004', 'EDCA-SEC-003', 'EDCA-SEC-005', 'EDCA-TLS-003', 'EDCA-IAC-011', 'EDCA-GOV-004', 'EDCA-IAC-009', 'EDCA-TLS-004', 'EDCA-TLS-005', 'EDCA-TLS-006', 'EDCA-TLS-007', 'EDCA-TLS-008', 'EDCA-TLS-009', 'EDCA-MON-008', 'EDCA-TLS-010', 'EDCA-TLS-011', 'EDCA-TLS-014', 'EDCA-IAC-014', 'EDCA-IAC-015', 'EDCA-IAC-016', 'EDCA-IAC-017', 'EDCA-IAC-018', 'EDCA-IAC-019', 'EDCA-IAC-020', 'EDCA-IAC-021', 'EDCA-IAC-022', 'EDCA-IAC-023', 'EDCA-IAC-024', 'EDCA-IAC-025', 'EDCA-TLS-012', 'EDCA-TLS-018', 'EDCA-TLS-019', 'EDCA-DATA-016', 'EDCA-RES-012', 'EDCA-GOV-009', 'EDCA-PERF-012', 'EDCA-GOV-011', 'EDCA-SEC-036')) {
+    if ($Control.id -in @('EDCA-MON-001', 'EDCA-IAC-001', 'EDCA-DATA-002', 'EDCA-IAC-004', 'EDCA-IAC-008', 'EDCA-SEC-032', 'EDCA-TLS-026', 'EDCA-TLS-023', 'EDCA-TLS-025', 'EDCA-TLS-024', 'EDCA-TLS-027', 'EDCA-TLS-028', 'EDCA-SEC-004', 'EDCA-SEC-003', 'EDCA-SEC-005', 'EDCA-TLS-003', 'EDCA-IAC-011', 'EDCA-GOV-004', 'EDCA-IAC-009', 'EDCA-TLS-004', 'EDCA-TLS-005', 'EDCA-TLS-006', 'EDCA-TLS-007', 'EDCA-TLS-008', 'EDCA-TLS-009', 'EDCA-MON-008', 'EDCA-TLS-010', 'EDCA-TLS-011', 'EDCA-TLS-014', 'EDCA-IAC-014', 'EDCA-IAC-015', 'EDCA-IAC-016', 'EDCA-IAC-017', 'EDCA-IAC-018', 'EDCA-IAC-019', 'EDCA-IAC-020', 'EDCA-IAC-021', 'EDCA-IAC-022', 'EDCA-IAC-023', 'EDCA-IAC-024', 'EDCA-TLS-012', 'EDCA-TLS-018', 'EDCA-TLS-019', 'EDCA-DATA-016', 'EDCA-RES-012', 'EDCA-GOV-009', 'EDCA-PERF-012', 'EDCA-GOV-011', 'EDCA-SEC-036', 'EDCA-IAC-028')) {
         $status = 'Unknown'
         $evidence = ''
         $domainServerResults = $null
@@ -278,14 +278,106 @@ function Test-EDCAControl {
                 }
             }
             'EDCA-IAC-004' {
-                if (($CollectionData.PSObject.Properties.Name -contains 'Organization') -and $null -ne $CollectionData.Organization -and ($CollectionData.Organization.PSObject.Properties.Name -contains 'OAuth2ClientProfileEnabled') -and $null -ne $CollectionData.Organization.OAuth2ClientProfileEnabled) {
-                    $enabled = [bool]$CollectionData.Organization.OAuth2ClientProfileEnabled
-                    $status = if ($enabled) { 'Pass' } else { 'Fail' }
-                    $evidence = ('OAuth2ClientProfileEnabled is {0}.' -f (Get-EDCAStateDescriptor -Value $enabled -Expectation 'Enabled'))
+                $maIssues = @()
+
+                # Check 1: OAuth2ClientProfileEnabled
+                $oauthEnabled = $null
+                if (($CollectionData.PSObject.Properties.Name -contains 'Organization') -and $null -ne $CollectionData.Organization -and
+                    ($CollectionData.Organization.PSObject.Properties.Name -contains 'OAuth2ClientProfileEnabled')) {
+                    $oauthEnabled = $CollectionData.Organization.OAuth2ClientProfileEnabled
+                }
+                if ($null -eq $oauthEnabled) {
+                    $maIssues += 'OAuth2ClientProfileEnabled: data unavailable (cannot verify)'
+                }
+                elseif ([bool]$oauthEnabled -eq $false) {
+                    $maIssues += 'OAuth2ClientProfileEnabled is False — run: Set-OrganizationConfig -OAuth2ClientProfileEnabled $true'
+                }
+
+                # Check 2: auth server with IsDefaultAuthorizationEndpoint = true and a configured AuthMetadataUrl
+                # Detected type: HMA (login.windows.net/login.microsoftonline.com) or ADFS (on-premises endpoint)
+                $detectedModernAuthType = 'None'
+                $detectedAuthMetadataUrl = ''
+                foreach ($srv in @($CollectionData.Servers)) {
+                    if (($srv.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $srv.Exchange -and
+                        ($srv.Exchange.PSObject.Properties.Name -contains 'HybridApplication') -and $null -ne $srv.Exchange.HybridApplication) {
+                        $hybApp = $srv.Exchange.HybridApplication
+                        if (($hybApp.PSObject.Properties.Name -contains 'ModernAuthType') -and
+                            [string]$hybApp.ModernAuthType -ne 'None' -and
+                            -not [string]::IsNullOrWhiteSpace([string]$hybApp.ModernAuthType)) {
+                            $detectedModernAuthType = [string]$hybApp.ModernAuthType
+                            $detectedAuthMetadataUrl = if ($hybApp.PSObject.Properties.Name -contains 'DefaultAuthServerAuthMetadataUrl') {
+                                [string]$hybApp.DefaultAuthServerAuthMetadataUrl
+                            }
+                            else { '' }
+                            break
+                        }
+                    }
+                }
+                if ($detectedModernAuthType -eq 'None') {
+                    $maIssues += 'No auth server has IsDefaultAuthorizationEndpoint = True with a configured AuthMetadataUrl — configure HMA (run: Set-AuthServer -Identity EvoSts -IsDefaultAuthorizationEndpoint $true after running the Hybrid Configuration Wizard) or AD FS (run: New-AuthServer -Type ADFS -Name <name> -AuthMetadataUrl https://<adfs-fqdn>/FederationMetadata/2007-06/FederationMetadata.xml, then Set-AuthServer -Identity <name> -IsDefaultAuthorizationEndpoint $true)'
+                }
+
+                # Check 3: SSL Offloading disabled (incompatible with Modern Authentication)
+                $sslOffloadingServers = @()
+                foreach ($srv in @($CollectionData.Servers)) {
+                    if (($srv.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $srv.Exchange -and
+                        ($srv.Exchange.PSObject.Properties.Name -contains 'OutlookAnywhereSSLOffloading')) {
+                        foreach ($oa in @($srv.Exchange.OutlookAnywhereSSLOffloading)) {
+                            if ($null -ne $oa.SSLOffloading -and [bool]$oa.SSLOffloading -eq $true) {
+                                $sslOffloadingServers += [string]$oa.Identity
+                            }
+                        }
+                    }
+                }
+                if ($sslOffloadingServers.Count -gt 0) {
+                    $maIssues += ('SSL Offloading is enabled on {0} Outlook Anywhere connector(s) — incompatible with Modern Authentication: {1}' -f $sslOffloadingServers.Count, ($sslOffloadingServers -join ', '))
+                }
+
+                # Check 4: OAuth enabled on EWS and Autodiscover vdirs
+                # Note: Set-MapiVirtualDirectory and Set-ActiveSyncVirtualDirectory do not expose -OAuthAuthentication; those vdirs are excluded.
+                $targetTypes = @('Get-WebServicesVirtualDirectory', 'Get-AutodiscoverVirtualDirectory')
+                $nonCompliantVdirs = @()
+                $checkedVdirCount = 0
+                $vdirDataAvailable = $false
+                foreach ($srv in @($CollectionData.Servers)) {
+                    if (($srv.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $srv.Exchange -and
+                        ($srv.Exchange.PSObject.Properties.Name -contains 'ExtendedProtectionStatus') -and
+                        @($srv.Exchange.ExtendedProtectionStatus).Count -gt 0) {
+                        $vdirDataAvailable = $true
+                        foreach ($vdir in @($srv.Exchange.ExtendedProtectionStatus)) {
+                            if ([string]$vdir.VirtualDirectoryType -notin $targetTypes) { continue }
+                            $checkedVdirCount++
+                            $oauthValue = if ($vdir.PSObject.Properties.Name -contains 'OAuthAuthentication') { $vdir.OAuthAuthentication } else { $null }
+                            if ($null -eq $oauthValue) {
+                                $nonCompliantVdirs += ('{0}: OAuthAuthentication data unavailable' -f [string]$vdir.Identity)
+                            }
+                            elseif ([bool]$oauthValue -eq $false) {
+                                $nonCompliantVdirs += ('{0}: OAuthAuthentication = False' -f [string]$vdir.Identity)
+                            }
+                        }
+                    }
+                }
+                if (-not $vdirDataAvailable) {
+                    $maIssues += 'Virtual directory data unavailable — cannot verify OAuthAuthentication on EWS/Autodiscover vdirs'
+                }
+                elseif ($nonCompliantVdirs.Count -gt 0) {
+                    foreach ($vdirIssue in $nonCompliantVdirs) {
+                        $maIssues += ('OAuthAuthentication not enabled: {0}' -f $vdirIssue)
+                    }
+                }
+
+                if ($maIssues.Count -eq 0) {
+                    $authTypeLabel = switch ($detectedModernAuthType) {
+                        'HMA' { 'HMA (Entra/Azure AD)' }
+                        'ADFS' { 'AD FS' }
+                        default { $detectedModernAuthType }
+                    }
+                    $status = 'Pass'
+                    $evidence = ('Modern Authentication prerequisites satisfied: OAuth2ClientProfileEnabled = True, {0} authorization endpoint configured (AuthMetadataUrl: {1}), SSL Offloading disabled, OAuth enabled on all {2} checked virtual directory(s).' -f $authTypeLabel, $detectedAuthMetadataUrl, $checkedVdirCount)
                 }
                 else {
-                    $status = 'Unknown'
-                    $evidence = 'Modern Authentication organization setting unavailable.'
+                    $status = 'Fail'
+                    $evidence = Format-EDCAEvidenceWithElements -Summary ('{0} Modern Authentication prerequisite issue(s) detected:' -f $maIssues.Count) -Elements $maIssues
                 }
             }
             'EDCA-IAC-008' {
@@ -362,6 +454,116 @@ function Test-EDCAControl {
                     else {
                         $status = 'Skipped'
                         $evidence = 'All accepted domains are non-internet-routable — SPF check not applicable.'
+                    }
+                }
+            }
+            'EDCA-TLS-027' {
+                $subjectLabel = 'Domain'
+                $domainResults = @()
+                if (($CollectionData.PSObject.Properties.Name -contains 'EmailAuthentication') -and $null -ne $CollectionData.EmailAuthentication -and ($CollectionData.EmailAuthentication.PSObject.Properties.Name -contains 'DomainResults')) {
+                    $domainResults = @($CollectionData.EmailAuthentication.DomainResults)
+                }
+
+                if ($domainResults.Count -eq 0) {
+                    $status = 'Unknown'
+                    if (($CollectionData.PSObject.Properties.Name -contains 'EmailAuthentication') -and ($CollectionData.EmailAuthentication.PSObject.Properties.Name -contains 'Reason')) {
+                        $evidence = ('No domain-level DKIM evidence available. {0}' -f [string]$CollectionData.EmailAuthentication.Reason)
+                    }
+                    else {
+                        $evidence = 'No domain-level DKIM evidence available.'
+                    }
+                }
+                else {
+                    $domainServerResults = @($domainResults | ForEach-Object {
+                            if ([string]$_.Domain -match '(?i)\.(local|lan|internal|corp|home|localdomain|localhost)$') {
+                                [pscustomobject]@{ Server = $_.Domain; Status = 'Skipped'; Evidence = 'Non-internet-routable domain — DKIM check not applicable.' }
+                            }
+                            else {
+                                $noPublicMx = ($null -eq $_.Dane -or $null -eq $_.Dane.MxHosts -or @($_.Dane.MxHosts).Count -eq 0)
+                                $hasSpfRecords = ($null -ne $_.Spf -and ($_.Spf.PSObject.Properties.Name -contains 'Records') -and @($_.Spf.Records).Count -gt 0)
+                                if ($noPublicMx -and -not $hasSpfRecords) {
+                                    [pscustomobject]@{ Server = $_.Domain; Status = 'Skipped'; Evidence = 'No public MX records found — likely an internal domain; DKIM check not applicable.' }
+                                }
+                                else {
+                                    $dkimStatus = 'Unknown'
+                                    $dkimEvidence = 'DKIM data not collected.'
+                                    if (($_.PSObject.Properties.Name -contains 'Dkim') -and $null -ne $_.Dkim) {
+                                        $dkimStatus = [string]$_.Dkim.Status
+                                        $dkimEvidence = [string]$_.Dkim.Evidence
+                                    }
+                                    [pscustomobject]@{ Server = $_.Domain; Status = $dkimStatus; Evidence = $dkimEvidence }
+                                }
+                            }
+                        })
+                    $failed = @($domainServerResults | Where-Object { $_.Status -eq 'Fail' })
+                    $unknown = @($domainServerResults | Where-Object { $_.Status -eq 'Unknown' })
+                    if ($failed.Count -gt 0) {
+                        $status = 'Fail'
+                    }
+                    elseif ($unknown.Count -gt 0) {
+                        $status = 'Unknown'
+                    }
+                    elseif (@($domainServerResults | Where-Object { $_.Status -eq 'Pass' }).Count -gt 0) {
+                        $status = 'Pass'
+                    }
+                    else {
+                        $status = 'Skipped'
+                        $evidence = 'All accepted domains are non-internet-routable — DKIM check not applicable.'
+                    }
+                }
+            }
+            'EDCA-TLS-028' {
+                $subjectLabel = 'Domain'
+                $domainResults = @()
+                if (($CollectionData.PSObject.Properties.Name -contains 'EmailAuthentication') -and $null -ne $CollectionData.EmailAuthentication -and ($CollectionData.EmailAuthentication.PSObject.Properties.Name -contains 'DomainResults')) {
+                    $domainResults = @($CollectionData.EmailAuthentication.DomainResults)
+                }
+
+                if ($domainResults.Count -eq 0) {
+                    $status = 'Unknown'
+                    if (($CollectionData.PSObject.Properties.Name -contains 'EmailAuthentication') -and ($CollectionData.EmailAuthentication.PSObject.Properties.Name -contains 'Reason')) {
+                        $evidence = ('No domain-level TLS-RPT evidence available. {0}' -f [string]$CollectionData.EmailAuthentication.Reason)
+                    }
+                    else {
+                        $evidence = 'No domain-level TLS-RPT evidence available.'
+                    }
+                }
+                else {
+                    $domainServerResults = @($domainResults | ForEach-Object {
+                            if ([string]$_.Domain -match '(?i)\.(local|lan|internal|corp|home|localdomain|localhost)$') {
+                                [pscustomobject]@{ Server = $_.Domain; Status = 'Skipped'; Evidence = 'Non-internet-routable domain — TLS-RPT check not applicable.' }
+                            }
+                            else {
+                                $noPublicMx = ($null -eq $_.Dane -or $null -eq $_.Dane.MxHosts -or @($_.Dane.MxHosts).Count -eq 0)
+                                $hasSpfRecords = ($null -ne $_.Spf -and ($_.Spf.PSObject.Properties.Name -contains 'Records') -and @($_.Spf.Records).Count -gt 0)
+                                if ($noPublicMx -and -not $hasSpfRecords) {
+                                    [pscustomobject]@{ Server = $_.Domain; Status = 'Skipped'; Evidence = 'No public MX records found — likely an internal domain; TLS-RPT check not applicable.' }
+                                }
+                                else {
+                                    $tlsRptStatus = 'Unknown'
+                                    $tlsRptEvidence = 'TLS-RPT data not collected.'
+                                    if (($_.PSObject.Properties.Name -contains 'TlsRpt') -and $null -ne $_.TlsRpt) {
+                                        $tlsRptStatus = [string]$_.TlsRpt.Status
+                                        $tlsRptEvidence = [string]$_.TlsRpt.Evidence
+                                    }
+                                    [pscustomobject]@{ Server = $_.Domain; Status = $tlsRptStatus; Evidence = $tlsRptEvidence }
+                                }
+                            }
+                        })
+                    $failed = @($domainServerResults | Where-Object { $_.Status -eq 'Fail' })
+                    $unknown = @($domainServerResults | Where-Object { $_.Status -eq 'Unknown' })
+                    if ($failed.Count -gt 0) {
+                        $status = 'Fail'
+                    }
+                    elseif ($unknown.Count -gt 0) {
+                        $status = 'Unknown'
+                    }
+                    elseif (@($domainServerResults | Where-Object { $_.Status -eq 'Pass' }).Count -gt 0) {
+                        $status = 'Pass'
+                    }
+                    else {
+                        $status = 'Skipped'
+                        $evidence = 'All accepted domains are non-internet-routable — TLS-RPT check not applicable.'
                     }
                 }
             }
@@ -814,108 +1016,6 @@ function Test-EDCAControl {
                         $status = 'Unknown'
                         $evidence = Format-EDCAEvidenceWithElements -Summary ('{0}: Basic Authentication is still permitted for {1} of {2} tracked protocol(s):' -f $policyLabel, $allowedProtocols.Count, $basicAuthPropNames.Count) -Elements $allowedProtocols
                     }
-                }
-            }
-            'EDCA-IAC-025' {
-                $maIssues = @()
-
-                # Check 1: OAuth2ClientProfileEnabled
-                $oauthEnabled = $null
-                if (($CollectionData.PSObject.Properties.Name -contains 'Organization') -and $null -ne $CollectionData.Organization -and
-                    ($CollectionData.Organization.PSObject.Properties.Name -contains 'OAuth2ClientProfileEnabled')) {
-                    $oauthEnabled = $CollectionData.Organization.OAuth2ClientProfileEnabled
-                }
-                if ($null -eq $oauthEnabled) {
-                    $maIssues += 'OAuth2ClientProfileEnabled: data unavailable (cannot verify)'
-                }
-                elseif ([bool]$oauthEnabled -eq $false) {
-                    $maIssues += 'OAuth2ClientProfileEnabled is False — run: Set-OrganizationConfig -OAuth2ClientProfileEnabled $true'
-                }
-
-                # Check 2: auth server with IsDefaultAuthorizationEndpoint = true and a configured AuthMetadataUrl
-                # Detected type: HMA (login.windows.net/login.microsoftonline.com) or ADFS (on-premises endpoint)
-                $detectedModernAuthType = 'None'
-                $detectedAuthMetadataUrl = ''
-                foreach ($srv in @($CollectionData.Servers)) {
-                    if (($srv.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $srv.Exchange -and
-                        ($srv.Exchange.PSObject.Properties.Name -contains 'HybridApplication') -and $null -ne $srv.Exchange.HybridApplication) {
-                        $hybApp = $srv.Exchange.HybridApplication
-                        if (($hybApp.PSObject.Properties.Name -contains 'ModernAuthType') -and
-                            [string]$hybApp.ModernAuthType -ne 'None' -and
-                            -not [string]::IsNullOrWhiteSpace([string]$hybApp.ModernAuthType)) {
-                            $detectedModernAuthType = [string]$hybApp.ModernAuthType
-                            $detectedAuthMetadataUrl = if ($hybApp.PSObject.Properties.Name -contains 'DefaultAuthServerAuthMetadataUrl') {
-                                [string]$hybApp.DefaultAuthServerAuthMetadataUrl
-                            }
-                            else { '' }
-                            break
-                        }
-                    }
-                }
-                if ($detectedModernAuthType -eq 'None') {
-                    $maIssues += 'No auth server has IsDefaultAuthorizationEndpoint = True with a configured AuthMetadataUrl — configure HMA (run: Set-AuthServer -Identity EvoSts -IsDefaultAuthorizationEndpoint $true after running the Hybrid Configuration Wizard) or AD FS (run: New-AuthServer -Type ADFS -Name <name> -AuthMetadataUrl https://<adfs-fqdn>/FederationMetadata/2007-06/FederationMetadata.xml, then Set-AuthServer -Identity <name> -IsDefaultAuthorizationEndpoint $true)'
-                }
-
-                # Check 3: SSL Offloading disabled (incompatible with Modern Authentication)
-                $sslOffloadingServers = @()
-                foreach ($srv in @($CollectionData.Servers)) {
-                    if (($srv.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $srv.Exchange -and
-                        ($srv.Exchange.PSObject.Properties.Name -contains 'OutlookAnywhereSSLOffloading')) {
-                        foreach ($oa in @($srv.Exchange.OutlookAnywhereSSLOffloading)) {
-                            if ($null -ne $oa.SSLOffloading -and [bool]$oa.SSLOffloading -eq $true) {
-                                $sslOffloadingServers += [string]$oa.Identity
-                            }
-                        }
-                    }
-                }
-                if ($sslOffloadingServers.Count -gt 0) {
-                    $maIssues += ('SSL Offloading is enabled on {0} Outlook Anywhere connector(s) — incompatible with Modern Authentication: {1}' -f $sslOffloadingServers.Count, ($sslOffloadingServers -join ', '))
-                }
-
-                # Check 4: OAuth enabled on MAPI, EWS, ActiveSync, Autodiscover vdirs
-                $targetTypes = @('Get-MapiVirtualDirectory', 'Get-WebServicesVirtualDirectory', 'Get-ActiveSyncVirtualDirectory', 'Get-AutodiscoverVirtualDirectory')
-                $nonCompliantVdirs = @()
-                $checkedVdirCount = 0
-                $vdirDataAvailable = $false
-                foreach ($srv in @($CollectionData.Servers)) {
-                    if (($srv.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $srv.Exchange -and
-                        ($srv.Exchange.PSObject.Properties.Name -contains 'ExtendedProtectionStatus') -and
-                        @($srv.Exchange.ExtendedProtectionStatus).Count -gt 0) {
-                        $vdirDataAvailable = $true
-                        foreach ($vdir in @($srv.Exchange.ExtendedProtectionStatus)) {
-                            if ([string]$vdir.VirtualDirectoryType -notin $targetTypes) { continue }
-                            $checkedVdirCount++
-                            $oauthValue = if ($vdir.PSObject.Properties.Name -contains 'OAuthAuthentication') { $vdir.OAuthAuthentication } else { $null }
-                            if ($null -eq $oauthValue) {
-                                $nonCompliantVdirs += ('{0}: OAuthAuthentication data unavailable' -f [string]$vdir.Identity)
-                            }
-                            elseif ([bool]$oauthValue -eq $false) {
-                                $nonCompliantVdirs += ('{0}: OAuthAuthentication = False' -f [string]$vdir.Identity)
-                            }
-                        }
-                    }
-                }
-                if (-not $vdirDataAvailable) {
-                    $maIssues += 'Virtual directory data unavailable — cannot verify OAuthAuthentication on MAPI/EWS/ActiveSync/Autodiscover vdirs'
-                }
-                elseif ($nonCompliantVdirs.Count -gt 0) {
-                    foreach ($vdirIssue in $nonCompliantVdirs) {
-                        $maIssues += ('OAuthAuthentication not enabled: {0}' -f $vdirIssue)
-                    }
-                }
-
-                if ($maIssues.Count -eq 0) {
-                    $authTypeLabel = switch ($detectedModernAuthType) {
-                        'HMA' { 'HMA (Entra/Azure AD)' }
-                        'ADFS' { 'AD FS' }
-                        default { $detectedModernAuthType }
-                    }
-                    $status = 'Pass'
-                    $evidence = ('Modern Authentication prerequisites satisfied: OAuth2ClientProfileEnabled = True, {0} authorization endpoint configured (AuthMetadataUrl: {1}), SSL Offloading disabled, OAuth enabled on all {2} checked virtual directory(s).' -f $authTypeLabel, $detectedAuthMetadataUrl, $checkedVdirCount)
-                }
-                else {
-                    $status = 'Fail'
-                    $evidence = Format-EDCAEvidenceWithElements -Summary ('{0} Modern Authentication prerequisite issue(s) detected:' -f $maIssues.Count) -Elements $maIssues
                 }
             }
             'EDCA-TLS-004' {
@@ -2078,6 +2178,143 @@ function Test-EDCAControl {
                 $status = 'Skipped'
                 $evidence = 'Partition layout cannot be assessed remotely — manual verification required.'
             }
+            'EDCA-IAC-028' {
+                # Minimum qualifying builds: Exchange 2016 CU12, Exchange 2019 CU1, ExchangeSE all builds
+                $minBuild2016 = [System.Version]'15.1.1713.5'
+                $minBuild2019 = [System.Version]'15.2.330.5'
+
+                # Step 1: Not applicable under AD split permissions
+                $splitPerms = $null
+                if (($CollectionData.PSObject.Properties.Name -contains 'Organization') -and $null -ne $CollectionData.Organization) {
+                    if ($CollectionData.Organization.PSObject.Properties.Name -contains 'AdSplitPermissionEnabled') {
+                        $splitPerms = $CollectionData.Organization.AdSplitPermissionEnabled
+                    }
+                }
+                if ($null -ne $splitPerms -and [bool]$splitPerms) {
+                    $status = 'Skipped'
+                    $evidence = 'AD Split Permissions is enabled — the Exchange Windows Permissions group does not hold WriteDACL rights on the domain object; this control is not applicable.'
+                }
+                else {
+                    # Step 2: Check collection data availability
+                    $dacl = $null
+                    if (($CollectionData.PSObject.Properties.Name -contains 'Organization') -and $null -ne $CollectionData.Organization -and
+                        ($CollectionData.Organization.PSObject.Properties.Name -contains 'DomainObjectDacl') -and
+                        $null -ne $CollectionData.Organization.DomainObjectDacl) {
+                        $dacl = $CollectionData.Organization.DomainObjectDacl
+                    }
+
+                    if ($null -eq $dacl) {
+                        $status = 'Unknown'
+                        $evidence = 'Domain object DACL data not collected — upgrade collection data by re-running with the current EDCA build.'
+                    }
+                    elseif (-not [string]::IsNullOrWhiteSpace([string]$dacl.CollectionError)) {
+                        $status = 'Unknown'
+                        $evidence = ('Domain object DACL collection failed: {0}' -f [string]$dacl.CollectionError)
+                    }
+                    else {
+                        # Step 3: Determine whether the fix has been applied
+                        $ewpUserOk = $dacl.PSObject.Properties.Name -contains 'EwpUserAceInheritOnly' -and $null -ne $dacl.EwpUserAceInheritOnly
+                        $ewpInetOk = $dacl.PSObject.Properties.Name -contains 'EwpInetOrgPersonAceInheritOnly' -and $null -ne $dacl.EwpInetOrgPersonAceInheritOnly
+                        $ewpUserCompliant = $ewpUserOk -and [bool]$dacl.EwpUserAceInheritOnly
+                        $ewpInetCompliant = $ewpInetOk -and [bool]$dacl.EwpInetOrgPersonAceInheritOnly
+
+                        # Determine whether AdminSDHolder check is applicable (any Exchange 2016+ server)
+                        $has2016Plus = $false
+                        foreach ($srv in @($CollectionData.Servers)) {
+                            if (($srv.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $srv.Exchange -and
+                                ($srv.Exchange.PSObject.Properties.Name -contains 'IsExchangeServer') -and [bool]$srv.Exchange.IsExchangeServer) {
+                                $pl = Get-EDCAProductLineFromServerData -Server $srv
+                                if ($pl -in @('Exchange2016', 'Exchange2019', 'ExchangeSE')) {
+                                    $has2016Plus = $true
+                                    break
+                                }
+                            }
+                        }
+
+                        $adminSdCompliant = $true
+                        $adminSdApplicable = $false
+                        if ($has2016Plus) {
+                            $adminSdApplicable = $true
+                            $etsAbsent = $dacl.PSObject.Properties.Name -contains 'EtsGroupAceOnAdminSdHolderAbsent' -and $null -ne $dacl.EtsGroupAceOnAdminSdHolderAbsent
+                            $adminSdCompliant = -not $etsAbsent -or [bool]$dacl.EtsGroupAceOnAdminSdHolderAbsent
+                        }
+
+                        $aclFixed = $ewpUserCompliant -and $ewpInetCompliant -and (-not $adminSdApplicable -or $adminSdCompliant)
+
+                        if ($aclFixed) {
+                            $status = 'Pass'
+                            $ewpUserDisplay = if ($ewpUserOk) { 'InheritOnly=True' } else { 'not present' }
+                            $ewpInetDisplay = if ($ewpInetOk) { 'InheritOnly=True' } else { 'not present' }
+                            $adminSdDisplay = if ($adminSdApplicable) { (', ETS WriteDACL Group ACE on AdminSDHolder: absent') } else { '' }
+                            $evidence = ('EWP WriteDACL User ACE: {0}; EWP WriteDACL inetOrgPerson ACE: {1}{2}.' -f $ewpUserDisplay, $ewpInetDisplay, $adminSdDisplay)
+                        }
+                        else {
+                            # Build evidence detail lines
+                            $issueLines = @()
+                            if ($ewpUserOk -and -not $ewpUserCompliant) {
+                                $issueLines += 'EWP WriteDACL ACE for User (bf967aba): Inherit-Only flag is NOT set — WriteDACL applies to the domain object itself.'
+                            }
+                            elseif (-not $ewpUserOk) {
+                                $issueLines += 'EWP WriteDACL ACE for User (bf967aba): not found in domain object DACL — cannot determine state.'
+                            }
+                            if ($ewpInetOk -and -not $ewpInetCompliant) {
+                                $issueLines += 'EWP WriteDACL ACE for inetOrgPerson (4828cc14): Inherit-Only flag is NOT set — WriteDACL applies to the domain object itself.'
+                            }
+                            elseif (-not $ewpInetOk) {
+                                $issueLines += 'EWP WriteDACL ACE for inetOrgPerson (4828cc14): not found in domain object DACL — cannot determine state.'
+                            }
+                            if ($adminSdApplicable -and -not $adminSdCompliant) {
+                                $issueLines += 'ETS WriteDACL Group ACE on AdminSDHolder: present — must be removed (Exchange 2016+ environment).'
+                            }
+
+                            # Step 4: Determine if qualifying build exists
+                            $qualifyingBuilds = @()
+                            $nonQualifyingBuilds = @()
+                            foreach ($srv in @($CollectionData.Servers)) {
+                                if (($srv.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $srv.Exchange -and
+                                    ($srv.Exchange.PSObject.Properties.Name -contains 'IsExchangeServer') -and [bool]$srv.Exchange.IsExchangeServer) {
+                                    $srvName = ([string]$srv.Server -split '\.')[0]
+                                    $pl = Get-EDCAProductLineFromServerData -Server $srv
+                                    $buildStr = if ($srv.Exchange.PSObject.Properties.Name -contains 'BuildNumber') { [string]$srv.Exchange.BuildNumber } else { '' }
+                                    $buildVer = $null
+                                    if (-not [string]::IsNullOrWhiteSpace($buildStr)) {
+                                        try { $buildVer = [System.Version]$buildStr } catch {}
+                                    }
+                                    $qualifies = switch ($pl) {
+                                        'ExchangeSE' { $true }
+                                        'Exchange2019' { $null -ne $buildVer -and $buildVer -ge $minBuild2019 }
+                                        'Exchange2016' { $null -ne $buildVer -and $buildVer -ge $minBuild2016 }
+                                        default { $false }
+                                    }
+                                    if ($qualifies) {
+                                        $qualifyingBuilds += ('{0} ({1} {2})' -f $srvName, $pl, $buildStr)
+                                    }
+                                    else {
+                                        $nonQualifyingBuilds += ('{0} ({1} {2} — minimum: {3})' -f $srvName, $pl, $(if ([string]::IsNullOrWhiteSpace($buildStr)) { 'unknown build' } else { $buildStr }),
+                                            $(switch ($pl) { 'Exchange2016' { $minBuild2016 } 'Exchange2019' { $minBuild2019 } default { 'N/A' } }))
+                                    }
+                                }
+                            }
+
+                            $summary = 'Domain object DACL WriteDACL ACE misconfiguration detected.'
+                            if ($qualifyingBuilds.Count -gt 0) {
+                                $status = 'Fail'
+                                $remediationHint = ('Qualifying Exchange build(s) present — run Setup /PrepareAD then Setup /PrepareDomain in each forest domain: {0}.' -f ($qualifyingBuilds -join '; '))
+                                $issueLines += $remediationHint
+                            }
+                            else {
+                                $status = 'Warning'
+                                $upgradeHint = 'No qualifying Exchange build found — install Exchange 2016 CU12 (15.1.1713.5) or Exchange 2019 CU1 (15.2.330.5) or later before running Setup /PrepareAD.'
+                                if ($nonQualifyingBuilds.Count -gt 0) {
+                                    $upgradeHint += (' Servers below minimum: {0}.' -f ($nonQualifyingBuilds -join '; '))
+                                }
+                                $issueLines += $upgradeHint
+                            }
+                            $evidence = Format-EDCAEvidenceWithElements -Summary $summary -Elements $issueLines
+                        }
+                    }
+                }
+            }
         }
 
         return [pscustomobject]@{
@@ -2138,6 +2375,7 @@ function Test-EDCAControl {
         'EDCA-DATA-011',
         'EDCA-DATA-012',
         'EDCA-DATA-013',
+        'EDCA-IAC-026',
         'EDCA-RES-004',
         'EDCA-RES-005',
         'EDCA-RES-006',
@@ -2173,6 +2411,7 @@ function Test-EDCAControl {
         'EDCA-SEC-039',
         'EDCA-MON-012',
         'EDCA-DATA-017',
+        'EDCA-DATA-018',
         'EDCA-SEC-040'
     )
 
@@ -2878,9 +3117,9 @@ function Test-EDCAControl {
                 else {
                     $status = 'Pass'
                     $details = @($ackAdapters | ForEach-Object {
-                        $val = if ($null -eq $_.TcpAckFrequency) { 'not set' } else { 'TcpAckFrequency={0}' -f [int]$_.TcpAckFrequency }
-                        '{0} ({1})' -f [string]$_.AdapterDescription, $val
-                    })
+                            $val = if ($null -eq $_.TcpAckFrequency) { 'not set' } else { 'TcpAckFrequency={0}' -f [int]$_.TcpAckFrequency }
+                            '{0} ({1})' -f [string]$_.AdapterDescription, $val
+                        })
                     $evidence = ('TcpAckFrequency is at the default on all {0} IP-enabled adapter(s): {1}.' -f $ackAdapters.Count, ($details -join '; '))
                 }
             }
@@ -3090,17 +3329,6 @@ function Test-EDCAControl {
                         $status = 'Pass'
                         $evidence = ('Database/log volume block size validated at 65536 (64KB): {0}' -f ($volPaths -join ', '))
                     }
-                }
-            }
-            'EDCA-IAC-004' {
-                if (($server.PSObject.Properties.Name -contains 'Exchange') -and ($server.Exchange.PSObject.Properties.Name -contains 'OAuth2ClientProfileEnabled') -and $null -ne $server.Exchange.OAuth2ClientProfileEnabled) {
-                    $enabled = [bool]$server.Exchange.OAuth2ClientProfileEnabled
-                    $status = if ($enabled) { 'Pass' } else { 'Fail' }
-                    $evidence = ('OAuth2ClientProfileEnabled is {0}.' -f (Get-EDCAStateDescriptor -Value $enabled -Expectation 'Enabled'))
-                }
-                else {
-                    $status = 'Unknown'
-                    $evidence = 'Modern Authentication data unavailable.'
                 }
             }
             'EDCA-SEC-021' {
@@ -4746,6 +4974,39 @@ function Test-EDCAControl {
                     }
                 }
             }
+            'EDCA-IAC-026' {
+                $kerberosEncryptionTypes = $null
+                if (($server.PSObject.Properties.Name -contains 'OS') -and $null -ne $server.OS -and
+                    ($server.OS.PSObject.Properties.Name -contains 'KerberosEncryptionTypes')) {
+                    $kerberosEncryptionTypes = $server.OS.KerberosEncryptionTypes
+                }
+                if ($null -eq $kerberosEncryptionTypes) {
+                    # Registry key absent: Windows uses its own defaults, which include RC4.
+                    $status = 'Fail'
+                    $evidence = 'KerberosEncryptionTypes registry value (HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System\Kerberos\Parameters\SupportedEncryptionTypes) is not set. Windows default includes RC4-HMAC. Set to 24 (AES128 + AES256 only).'
+                }
+                else {
+                    $encVal = [int]$kerberosEncryptionTypes
+                    $weakTypes = @()
+                    if ($encVal -band 1) { $weakTypes += 'DES-CBC-CRC (bit 0)' }
+                    if ($encVal -band 2) { $weakTypes += 'DES-CBC-MD5 (bit 1)' }
+                    if ($encVal -band 4) { $weakTypes += 'RC4-HMAC (bit 2)' }
+                    $hasAes128 = ($encVal -band 8) -ne 0
+                    $hasAes256 = ($encVal -band 16) -ne 0
+                    if ($weakTypes.Count -gt 0) {
+                        $status = 'Fail'
+                        $evidence = Format-EDCAEvidenceWithElements -Summary ('SupportedEncryptionTypes={0}: {1} weak Kerberos encryption type(s) are enabled. AES128={2}, AES256={3}.' -f $encVal, $weakTypes.Count, $hasAes128, $hasAes256) -Elements $weakTypes
+                    }
+                    elseif (-not $hasAes128 -or -not $hasAes256) {
+                        $status = 'Fail'
+                        $evidence = ('SupportedEncryptionTypes={0}: no weak types enabled, but AES coverage is incomplete (AES128={1}, AES256={2}). Expected value: 24 (AES128 + AES256).' -f $encVal, $hasAes128, $hasAes256)
+                    }
+                    else {
+                        $status = 'Pass'
+                        $evidence = ('SupportedEncryptionTypes={0}: AES128 and AES256 are enabled; DES and RC4 are not set.' -f $encVal)
+                    }
+                }
+            }
             'EDCA-SEC-027' {
                 $iisModules = $null
                 if (($server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $server.Exchange -and ($server.Exchange.PSObject.Properties.Name -contains 'IisModules')) {
@@ -5906,6 +6167,39 @@ function Test-EDCAControl {
                     }
                 }
             }
+            'EDCA-DATA-018' {
+                $cipherSuiteOrder = $null
+                if (($server.PSObject.Properties.Name -contains 'OS') -and $null -ne $server.OS -and
+                    ($server.OS.PSObject.Properties.Name -contains 'TlsHardening') -and $null -ne $server.OS.TlsHardening -and
+                    ($server.OS.TlsHardening.PSObject.Properties.Name -contains 'CipherSuiteOrder')) {
+                    $cipherSuiteOrder = $server.OS.TlsHardening.CipherSuiteOrder
+                }
+                if ($null -eq $cipherSuiteOrder) {
+                    $status = 'Unknown'
+                    $evidence = 'Cipher suite order data unavailable (Get-TlsCipherSuite not supported on this OS).'
+                }
+                elseif ($cipherSuiteOrder.QuerySucceeded -ne $true) {
+                    $status = 'Unknown'
+                    $evidence = ('Cipher suite order query failed: {0}' -f [string]$cipherSuiteOrder.Error)
+                }
+                else {
+                    $nonPfs = @($cipherSuiteOrder.NonPfsSuites)
+                    $dheFirst = @($cipherSuiteOrder.DheBeforeEcdhe)
+                    $total = @($cipherSuiteOrder.Tls12Suites).Count
+                    if ($nonPfs.Count -gt 0) {
+                        $status = 'Fail'
+                        $evidence = Format-EDCAEvidenceWithElements -Summary ('{0} of {1} active TLS 1.2 cipher suite(s) lack forward secrecy (no ECDHE/DHE key exchange).' -f $nonPfs.Count, $total) -Elements $nonPfs
+                    }
+                    elseif ($dheFirst.Count -gt 0) {
+                        $status = 'Fail'
+                        $evidence = Format-EDCAEvidenceWithElements -Summary ('{0} DHE cipher suite(s) appear before the first ECDHE suite; ECDHE suites must be prioritised over DHE.' -f $dheFirst.Count) -Elements $dheFirst
+                    }
+                    else {
+                        $status = 'Pass'
+                        $evidence = ('All {0} active TLS 1.2 cipher suites provide forward secrecy and ECDHE suites are prioritised over DHE suites.' -f $total)
+                    }
+                }
+            }
             'EDCA-SEC-040' {
                 $databaseStoragePaths = @()
                 if (($server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $server.Exchange -and
@@ -6375,7 +6669,7 @@ function Get-EDCAScores {
         [object[]]$Findings
     )
 
-    $frameworks = @('Best Practice', 'CIS', 'CISA', 'ENISA', 'DISA')
+    $frameworks = @('Best Practice', 'ANSSI', 'BSI', 'CIS', 'CISA', 'ENISA', 'DISA')
     $scores = @()
 
     # Overall score across all verifiable controls (each counted once); Skipped excluded from denominator
@@ -6399,6 +6693,7 @@ function Get-EDCAScores {
         Score           = $allScore
         TotalControls   = $allEligible.Count
         FailedControls  = @($allEligible | Where-Object { $_.OverallStatus -eq 'Fail' }).Count
+        WarningControls = @($allEligible | Where-Object { $_.OverallStatus -eq 'Warning' }).Count
         UnknownControls = @($allEligible | Where-Object { $_.OverallStatus -eq 'Unknown' }).Count
         SkippedControls = $allSkipped.Count
     }
@@ -6442,6 +6737,7 @@ function Get-EDCAScores {
             Score           = $score
             TotalControls   = $eligible.Count
             FailedControls  = $failedCount
+            WarningControls = @($eligible | Where-Object { $_.OverallStatus -eq 'Warning' }).Count
             UnknownControls = $unknownCount
             SkippedControls = $skippedCount
         }
