@@ -488,20 +488,49 @@ function Test-EDCAControl {
                                     $dkimStatus = 'Unknown'
                                     $dkimEvidence = 'DKIM data not collected.'
                                     if (($_.PSObject.Properties.Name -contains 'Dkim') -and $null -ne $_.Dkim) {
-                                        $dkimStatus = [string]$_.Dkim.Status
-                                        $dkimEvidence = [string]$_.Dkim.Evidence
+                                        $rawDkimStatus = [string]$_.Dkim.Status
+                                        if ($rawDkimStatus -eq 'Pass') {
+                                            $passParts = @()
+                                            if ($null -ne $_.Dkim.DetectedSelectors) {
+                                                foreach ($selProp in $_.Dkim.DetectedSelectors.PSObject.Properties) {
+                                                    $selName = $selProp.Name
+                                                    $selEntry = $selProp.Value
+                                                    $record = ('{0}._domainkey.{1}' -f $selName, [string]$_.Domain)
+                                                    if ([string]$selEntry.Type -eq 'CNAME' -and -not [string]::IsNullOrWhiteSpace([string]$selEntry.Cname)) {
+                                                        $passParts += ('{0} → CNAME: {1}' -f $record, [string]$selEntry.Cname)
+                                                    }
+                                                    else {
+                                                        $passParts += ('{0} → TXT record found' -f $record)
+                                                    }
+                                                }
+                                            }
+                                            $dkimStatus = 'Pass'
+                                            $dkimEvidence = if ($passParts.Count -gt 0) { $passParts -join "`n" } else { [string]$_.Dkim.Evidence }
+                                        }
+                                        elseif ($rawDkimStatus -eq 'Fail') {
+                                            $dkimStatus = 'Warn'
+                                            $dkimEvidence = 'DKIM signing could not be verified — no selector records found matching the predefined set of popular DKIM-supporting platforms. ' + [string]$_.Dkim.Evidence
+                                        }
+                                        else {
+                                            $dkimStatus = $rawDkimStatus
+                                            $dkimEvidence = [string]$_.Dkim.Evidence
+                                        }
                                     }
                                     [pscustomobject]@{ Server = $_.Domain; Status = $dkimStatus; Evidence = $dkimEvidence }
                                 }
                             }
                         })
                     $failed = @($domainServerResults | Where-Object { $_.Status -eq 'Fail' })
+                    $warned = @($domainServerResults | Where-Object { $_.Status -eq 'Warn' })
                     $unknown = @($domainServerResults | Where-Object { $_.Status -eq 'Unknown' })
                     if ($failed.Count -gt 0) {
                         $status = 'Fail'
                     }
                     elseif ($unknown.Count -gt 0) {
                         $status = 'Unknown'
+                    }
+                    elseif ($warned.Count -gt 0) {
+                        $status = 'Warn'
                     }
                     elseif (@($domainServerResults | Where-Object { $_.Status -eq 'Pass' }).Count -gt 0) {
                         $status = 'Pass'
