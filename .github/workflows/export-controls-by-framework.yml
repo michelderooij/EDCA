@@ -1,0 +1,72 @@
+name: Export Controls by Framework
+
+on:
+  push:
+    paths:
+      - Config/controls.json
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  export-controls:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Validate controls.json and export framework files
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          $controlsPath = 'Config/controls.json'
+          $outputDir = 'Controls'
+          $frameworks = @(
+            'ANSSI',
+            'BSI',
+            'CIS',
+            'CISA',
+            'DISA',
+            'DPIA',
+            'ENISA',
+            'Best Practice'
+          )
+
+          $controls = Get-Content -Raw -Path $controlsPath | ConvertFrom-Json
+
+          New-Item -Path $outputDir -ItemType Directory -Force | Out-Null
+
+          foreach ($framework in $frameworks) {
+            $safeName = ($framework.ToLowerInvariant() -replace '[^a-z0-9]+', '-').Trim('-')
+            $outputPath = Join-Path $outputDir "controls-$safeName.json"
+
+            $filtered = @(
+              $controls | Where-Object {
+                $_.frameworks -is [System.Collections.IEnumerable] -and
+                $_.frameworks -contains $framework
+              }
+            )
+
+            $filtered | ConvertTo-Json -Depth 100 -AsArray | Set-Content -Path $outputPath -Encoding UTF8
+            Write-Host "Wrote $($filtered.Count) controls to $outputPath"
+          }
+
+      - name: Commit and push exported controls if changed
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if git diff --quiet -- Controls/; then
+            echo "No controls export changes detected."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add Controls/controls-*.json
+          git commit -m "Update framework control exports"
+          git push

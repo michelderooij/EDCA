@@ -1,4 +1,7 @@
 .github
+!.github/
+!.github/workflows/
+!.github/workflows/*.yml
 Resources
 Output
 Reports
