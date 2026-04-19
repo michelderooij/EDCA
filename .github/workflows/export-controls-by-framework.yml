@@ -40,7 +40,7 @@ jobs:
           New-Item -Path $outputDir -ItemType Directory -Force | Out-Null
 
           foreach ($framework in $frameworks) {
-            $safeName = ($framework.ToLowerInvariant() -replace '[^a-z0-9]+', '-').Trim('-')
+            $safeName = $framework -replace '\s+', ''
             $outputPath = Join-Path $outputDir "controls-$safeName.json"
 
             $filtered = @(
