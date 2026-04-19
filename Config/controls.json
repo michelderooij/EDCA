@@ -3595,7 +3595,14 @@
       {
         "name": "Exchange DKIM Signer - Open-source DKIM signing agent for Exchange Server",
         "url": "https://github.com/pro/dkim-exchange"
+      },
+      {
+        "name": "EmailArchitect – DKIM for Exchange Server for Exchange Server",
+        "url": "https://www.emailarchitect.net/domainkeys/"
       }
+
+
+
     ],
     "remediation": {
       "automatable": false,

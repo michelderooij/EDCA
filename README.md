@@ -33,8 +33,8 @@ The account running EDCA needs the following access rights. Rights marked **requ
 |---|---|---|
 | Exchange **Organization Management** or **View-Only Organization Management** role | Exchange organization | Core collection — Exchange cmdlets (`Get-ExchangeServer`, `Get-OrganizationConfig`, `Get-Mailbox`, and all other Exchange management commands). |
 | **Local Administrator** | Each Exchange server | Core collection — WMI queries for OS, hardware, volume/disk, BitLocker state, network configuration; reading local registry values (TLS, update metadata). |
-| **Active Directory read** (Domain User is sufficient) | AD forest/domain | Core collection — LDAP RootDSE queries for forest and domain functional level; AD site enumeration (`EX-BP-009`); Exchange server AD site lookup. |
-| **Local Administrator** | Each Domain Controller / Global Catalog in the Exchange AD site | `EDCA-PERF-012` (Exchange-to-DC/GC core ratio) — WMI `Win32_Processor` on domain controller servers. |
+| **Active Directory read** (Domain User is sufficient) | AD forest/domain | Core collection — LDAP RootDSE queries for forest and domain functional level; AD site enumeration; Exchange server AD site lookup. |
+| **Local Administrator** | Each Domain Controller / Global Catalog in the Exchange AD site | Exchange-to-DC/GC core ratio — WMI `Win32_Processor` on domain controller servers. |
 
 > **Note:** If the required permissions are not in place, affected controls will report **Fail** rather than *Unknown* so that missing access is surfaced as a finding rather than silently skipped.
 
@@ -42,18 +42,11 @@ The account running EDCA needs the following access rights. Rights marked **requ
 
 From the `EDCA` folder:
 
-```powershell
-# Update exchange build catalog, then collect + analyse + HTML (default: both phases)
-.\EDCA.ps1 -Update -Servers EXCH01,EXCH02
+# Collect + analysis + HTML for all Exchange servers in current environment
+.\EDCA.ps1
 
 # Collect + analysis + HTML (both phases run by default)
 .\EDCA.ps1 -Servers EXCH01,EXCH02
-
-# Collect with detailed execution trace
-.\EDCA.ps1 -Servers EXCH01,EXCH02 -Verbose
-
-# Collect + analysis + HTML for all Exchange servers in current environment
-.\EDCA.ps1
 
 # Collect only (no report), limit parallel collection jobs
 .\EDCA.ps1 -Collect -Servers EXCH01,EXCH02 -ThrottleLimit 2
@@ -64,14 +57,9 @@ From the `EDCA` folder:
 # Report mode using files from previously collected server and organization files
 .\EDCA.ps1 -Report
 
-# Analyse only against CIS and DISA controls
-.\EDCA.ps1 -Servers EXCH01,EXCH02 -Framework CIS,DISA
+# Analyse only against CIS and ENISA controls
+.\EDCA.ps1 -Servers EXCH01,EXCH02 -Framework CIS,ENISA
 
-# Analyse against ANSSI controls only
-.\EDCA.ps1 -Servers EXCH01,EXCH02 -Framework ANSSI
-
-# Report mode scoped to specific frameworks
-.\EDCA.ps1 -Report -Framework 'Best Practice','CIS'
 ```
 
 ## Output
@@ -115,20 +103,8 @@ EDCA evaluates controls against the following compliance frameworks. Each contro
 ## Notes
 
 - Controls with `verify: false` are documented but excluded from scoring.
-- Some controls are marked manual remediation only.
-- Use `-Framework` to scope a run to one or more specific frameworks (e.g. `-Framework CIS,DISA`). Multiple values are OR-combined: a control is included when it is tagged with *any* of the specified frameworks. When omitted, all controls are evaluated.
+- Some controls can be manual remediation only.
 
 ## Changelog
 
-### v0.3 Preview
-- Control IDs renamed from `EX-BP-xxx` scheme to `EDCA-<Category>-<number>` (e.g. `EDCA-SEC-001`, `EDCA-PERF-012`).
-- New controls: `EDCA-MON-001` (admin audit logging), `EDCA-IAC-025`, `EDCA-PERF-013`, `EDCA-PERF-014`, `EDCA-PERF-015`.
-- HTML report now follows the system colour-scheme preference (`prefers-color-scheme: dark`) when no manual override is stored.
-- Markdown syntax in control descriptions and evidence text is rendered as HTML in the report.
-- Findings in the HTML report are sorted by category then by control ID.
-- Exchange database/log volume block-size check now supports volumes mounted as directory paths (not just drive letters).
-- Exchange build number read from the registry in addition to `Get-ExchangeServer`, improving accuracy on servers where Exchange cmdlets are unavailable.
-- Server inventory collection migrated from `Get-WmiObject` to `Get-CimInstance`.
-- Script block logging absent now results in **Fail** (previously **Unknown**).
-- IRM not configured results in **Skipped** (previously **Fail**).
-- Startup banner displayed when EDCA begins execution.
+See [CHANGELOG.md](CHANGELOG.md) for the full version history.

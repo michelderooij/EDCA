@@ -19,12 +19,11 @@ function New-EDCARemediationScript {
 
     $builder = New-Object System.Text.StringBuilder
     $null = $builder.AppendLine('# =============================================================')
-    $null = $builder.AppendLine('# EDCA REMEDIATION SCRIPT — SAMPLE SCRIPT ONLY')
-    $null = $builder.AppendLine('# THIS SCRIPT IS PROVIDED AS A STARTING-POINT TEMPLATE DERIVED FROM FAILED CONTROL')
-    $null = $builder.AppendLine('# EVALUATIONS. IT HAS NOT BEEN REVIEWED OR VALIDATED FOR YOUR SPECIFIC ENVIRONMENT.')
-    $null = $builder.AppendLine('# REVIEW, TEST, AND ADAPT THIS SCRIPT THOROUGHLY IN A NON-PRODUCTION ENVIRONMENT')
-    $null = $builder.AppendLine('# BEFORE EXECUTING IT IN PRODUCTION. THE AUTHOR PROVIDES THIS SCRIPT AS-IS WITHOUT')
-    $null = $builder.AppendLine('# WARRANTY OF ANY KIND, EXPRESS OR IMPLIED. USE ENTIRELY AT YOUR OWN RISK.')
+    $null = $builder.AppendLine('# EDCA - Generated Sample Script')
+    $null = $builder.AppendLine('# This script is provided as template derived from failed control evaluations.')
+    $null = $builder.AppendLine('# It has not been reviewed or validated for your specific environment.')
+    $null = $builder.AppendLine('# Review, test, and adapt this script thoroughly in a non-production environment')
+    $null = $builder.AppendLine('# The author provides this script as-is without warranty or support. Use at your own risk.')
     $null = $builder.AppendLine('# =============================================================')
     $null = $builder.AppendLine('')
     $null = $builder.AppendLine('#requires -version 5.1')
