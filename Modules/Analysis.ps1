@@ -1,4 +1,7 @@
-﻿# Author:  Michel de Rooij
+﻿# Script:  Analysis.ps1
+# Synopsis: Part of EDCA (Exchange Deployment & Compliance Assessment)
+#           https://github.com/michelderooij/EDCA
+# Author:  Michel de Rooij
 # Website: https://eightwone.com
 
 Set-StrictMode -Version Latest
@@ -1087,14 +1090,14 @@ function Test-EDCAControl {
                                 }
                                 $evLines += ('Enabled: {0}' -f $(if ($null -eq $enabled) { 'unknown' } else { [string]$enabled }))
 
-                                # TlsDomainCapabilities must contain AcceptOorgProtocol for mail.protection.outlook.com
+                                # TlsDomainCapabilities must contain AcceptCloudServicesMail or AcceptOorgProtocol for mail.protection.outlook.com
                                 $oorgOk = (-not [string]::IsNullOrWhiteSpace($tlsDomainCaps)) -and
-                                ($tlsDomainCaps -match '(?i)mail\.protection\.outlook\.com\s*:\s*AcceptOorgProtocol')
+                                ($tlsDomainCaps -match '(?i)mail\.protection\.outlook\.com\s*:\s*(?:AcceptCloudServicesMail|AcceptOorgProtocol)')
                                 if ([string]::IsNullOrWhiteSpace($tlsDomainCaps)) {
-                                    $connIssues += 'TlsDomainCapabilities: not set (must include mail.protection.outlook.com:AcceptOorgProtocol)'
+                                    $connIssues += 'TlsDomainCapabilities: not set (must include mail.protection.outlook.com:AcceptCloudServicesMail or AcceptOorgProtocol)'
                                 }
                                 elseif (-not $oorgOk) {
-                                    $connIssues += ('TlsDomainCapabilities: AcceptOorgProtocol for mail.protection.outlook.com not found — {0}' -f $tlsDomainCaps)
+                                    $connIssues += ('TlsDomainCapabilities: AcceptCloudServicesMail/AcceptOorgProtocol for mail.protection.outlook.com not found — {0}' -f $tlsDomainCaps)
                                 }
                                 $evLines += ('TlsDomainCapabilities: {0}' -f $(if ([string]::IsNullOrWhiteSpace($tlsDomainCaps)) { 'not set' } else { $tlsDomainCaps }))
 

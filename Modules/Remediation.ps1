@@ -1,4 +1,7 @@
-﻿# Author:  Michel de Rooij
+﻿# Script:  Remediation.ps1
+# Synopsis: Part of EDCA (Exchange Deployment & Compliance Assessment)
+#           https://github.com/michelderooij/EDCA
+# Author:  Michel de Rooij
 # Website: https://eightwone.com
 
 Set-StrictMode -Version Latest
@@ -15,6 +18,15 @@ function New-EDCARemediationScript {
     $failed = @($AnalysisData.Findings | Where-Object { $_.OverallStatus -eq 'Fail' -and $_.Verify })
 
     $builder = New-Object System.Text.StringBuilder
+    $null = $builder.AppendLine('# =============================================================')
+    $null = $builder.AppendLine('# EDCA REMEDIATION SCRIPT — SAMPLE SCRIPT ONLY')
+    $null = $builder.AppendLine('# THIS SCRIPT IS PROVIDED AS A STARTING-POINT TEMPLATE DERIVED FROM FAILED CONTROL')
+    $null = $builder.AppendLine('# EVALUATIONS. IT HAS NOT BEEN REVIEWED OR VALIDATED FOR YOUR SPECIFIC ENVIRONMENT.')
+    $null = $builder.AppendLine('# REVIEW, TEST, AND ADAPT THIS SCRIPT THOROUGHLY IN A NON-PRODUCTION ENVIRONMENT')
+    $null = $builder.AppendLine('# BEFORE EXECUTING IT IN PRODUCTION. THE AUTHOR PROVIDES THIS SCRIPT AS-IS WITHOUT')
+    $null = $builder.AppendLine('# WARRANTY OF ANY KIND, EXPRESS OR IMPLIED. USE ENTIRELY AT YOUR OWN RISK.')
+    $null = $builder.AppendLine('# =============================================================')
+    $null = $builder.AppendLine('')
     $null = $builder.AppendLine('#requires -version 5.1')
     $null = $builder.AppendLine('param([switch]$WhatIfMode)')
     $null = $builder.AppendLine('Set-StrictMode -Version Latest')
@@ -25,7 +37,7 @@ function New-EDCARemediationScript {
     $null = $builder.AppendLine('')
 
     foreach ($finding in $failed) {
-        $functionName = ('InvokeFix_{0}' -f ($finding.ControlId -replace '[^A-Za-z0-9]', '_'))
+        $functionName = ('Invoke-{0}' -f $finding.ControlId)
         $null = $builder.AppendLine(('function {0} {{' -f $functionName))
         $null = $builder.AppendLine(('    Write-Host "[{0}] {1}" -ForegroundColor Cyan' -f $finding.ControlId, ($finding.Title -replace '"', "'")))
 
@@ -37,7 +49,8 @@ function New-EDCARemediationScript {
             $null = $builder.AppendLine('        return')
             $null = $builder.AppendLine('    }')
             $null = $builder.AppendLine(('    {0}' -f $template))
-        } else {
+        }
+        else {
             $description = ([string]$finding.Remediation.description) -replace '"', "'"
             $null = $builder.AppendLine(('    Write-Host "Manual remediation required: {0}" -ForegroundColor Yellow' -f $description))
         }
@@ -48,7 +61,7 @@ function New-EDCARemediationScript {
 
     $null = $builder.AppendLine('Write-Host "Applying remediation actions for failed checks..." -ForegroundColor Green')
     foreach ($finding in $failed) {
-        $functionName = ('InvokeFix_{0}' -f ($finding.ControlId -replace '[^A-Za-z0-9]', '_'))
+        $functionName = ('Invoke-{0}' -f $finding.ControlId)
         $null = $builder.AppendLine($functionName)
     }
 
