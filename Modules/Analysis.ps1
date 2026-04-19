@@ -478,11 +478,12 @@ function Test-EDCAControl {
                 }
                 else {
                     $domainServerResults = @($domainResults | ForEach-Object {
+                            if ($null -eq $_ -or -not ($_.PSObject.Properties.Name -contains 'Domain')) { return }
                             if ([string]$_.Domain -match '(?i)\.(local|lan|internal|corp|home|localdomain|localhost)$') {
                                 [pscustomobject]@{ Server = $_.Domain; Status = 'Skipped'; Evidence = 'Non-internet-routable domain — DKIM check not applicable.' }
                             }
                             else {
-                                $noPublicMx = ($null -eq $_.Dane -or $null -eq $_.Dane.MxHosts -or @($_.Dane.MxHosts).Count -eq 0)
+                                $noPublicMx = (-not ($_.PSObject.Properties.Name -contains 'Dane') -or $null -eq $_.Dane -or -not ($_.Dane.PSObject.Properties.Name -contains 'MxHosts') -or $null -eq $_.Dane.MxHosts -or @($_.Dane.MxHosts).Count -eq 0)
                                 $hasSpfRecords = ($null -ne $_.Spf -and ($_.Spf.PSObject.Properties.Name -contains 'Records') -and @($_.Spf.Records).Count -gt 0)
                                 if ($noPublicMx -and -not $hasSpfRecords) {
                                     [pscustomobject]@{ Server = $_.Domain; Status = 'Skipped'; Evidence = 'No public MX records found — likely an internal domain; DKIM check not applicable.' }
@@ -491,13 +492,14 @@ function Test-EDCAControl {
                                     $dkimStatus = 'Unknown'
                                     $dkimEvidence = 'DKIM data not collected.'
                                     if (($_.PSObject.Properties.Name -contains 'Dkim') -and $null -ne $_.Dkim) {
-                                        $rawDkimStatus = [string]$_.Dkim.Status
+                                        $rawDkimStatus = if ($_.Dkim.PSObject.Properties.Name -contains 'Status') { [string]$_.Dkim.Status } else { 'Unknown' }
                                         if ($rawDkimStatus -eq 'Pass') {
                                             $passParts = @()
-                                            if (($_.Dkim.PSObject.Properties.Name -contains 'DetectedSelectors') -and $null -ne $_.Dkim.DetectedSelectors) {
+                                            if (($_.Dkim.PSObject.Properties.Name -contains 'DetectedSelectors') -and $null -ne $_.Dkim.DetectedSelectors -and $_.Dkim.DetectedSelectors -is [PSCustomObject]) {
                                                 $domainNorm = ([string]$_.Domain).TrimEnd('.').ToLowerInvariant()
                                                 $platformGroups = [ordered]@{}
                                                 foreach ($selProp in $_.Dkim.DetectedSelectors.PSObject.Properties) {
+                                                    if ($null -eq $selProp) { continue }
                                                     $selName = $selProp.Name
                                                     $selEntry = $selProp.Value
                                                     if ($null -eq $selEntry) { continue }
@@ -524,15 +526,15 @@ function Test-EDCAControl {
                                                 }
                                             }
                                             $dkimStatus = 'Pass'
-                                            $dkimEvidence = if ($passParts.Count -gt 0) { $passParts -join "`n" } else { [string]$_.Dkim.Evidence }
+                                            $dkimEvidence = if ($passParts.Count -gt 0) { $passParts -join "`n" } elseif ($_.Dkim.PSObject.Properties.Name -contains 'Evidence') { [string]$_.Dkim.Evidence } else { '' }
                                         }
                                         elseif ($rawDkimStatus -eq 'Fail') {
                                             $dkimStatus = 'Warn'
-                                            $dkimEvidence = 'DKIM signing could not be verified — no selector records found matching the predefined set of popular DKIM-supporting platforms. ' + [string]$_.Dkim.Evidence
+                                            $dkimEvidence = 'DKIM signing could not be verified — no selector records found matching the predefined set of popular DKIM-supporting platforms. ' + (if ($_.Dkim.PSObject.Properties.Name -contains 'Evidence') { [string]$_.Dkim.Evidence } else { '' })
                                         }
                                         else {
                                             $dkimStatus = $rawDkimStatus
-                                            $dkimEvidence = [string]$_.Dkim.Evidence
+                                            $dkimEvidence = if ($_.Dkim.PSObject.Properties.Name -contains 'Evidence') { [string]$_.Dkim.Evidence } else { '' }
                                         }
                                     }
                                     [pscustomobject]@{ Server = $_.Domain; Status = $dkimStatus; Evidence = $dkimEvidence }
