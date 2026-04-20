@@ -9,7 +9,6 @@
 - **HTML report**: added **Compliance Trend** stacked bar chart to the Framework Scoreboard section. When `-Report` is used, EDCA loads the last 10 `analysis_*.json` files from the `Data/` folder and renders a colour-coded bar chart (Pass/Unknown/Fail/Skip) with date labels and a hover tooltip. The chart card spans three gauge widths and is rendered in pure Canvas (no external libraries).
 
 ## v0.5 Preview
-- README updated
 - **EDCA-SEC-041** (LAPS deployment): evaluator implemented. Collection reads `AdmPwdEnabled` from `HKLM:\SOFTWARE\Policies\Microsoft Services\AdmPwd` (legacy LAPS) and `BackupDirectory` from `HKLM:\SOFTWARE\Microsoft\Policies\LAPS` (Windows LAPS). Reports Pass when either legacy LAPS or Windows LAPS is configured via Group Policy, Fail when neither is detected.
 - **EDCA-SEC-042** (NetBIOS over TCP/IP): evaluator implemented. Collection enumerates `NetbiosOptions` for all interfaces under `HKLM:\SYSTEM\CurrentControlSet\Services\NetBT\Parameters\Interfaces`. Reports Pass when all interfaces have `NetbiosOptions=2` (disabled), Fail when any interface has a DHCP-controlled (0) or explicitly enabled (1) value.
 - **EDCA-SEC-043** (SMB packet signing): evaluator implemented. Collection reads `RequireSecuritySignature` from `HKLM:\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters` (SMB server) and `LanmanWorkstation\Parameters` (SMB client). Reports Pass when both server and client require signing (value=1), Fail when either does not.

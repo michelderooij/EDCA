@@ -200,26 +200,33 @@ function New-EDCAHtmlReport {
     }
 
     # Build compliance trend chart data from history analysis files.
+    # Each entry embeds scores for every framework keyed by framework name,
+    # so the chart JS can slice to the active filter without a round-trip.
     $trendCardHtml = ''
     if ($null -ne $HistoryData -and @($HistoryData).Count -gt 0) {
         $trendPoints = @(foreach ($entry in @($HistoryData)) {
-                $allScore = $entry.Scores | Where-Object { $_.Framework -eq 'All' } | Select-Object -First 1
-                if ($null -eq $allScore) { continue }
-                $tFail = [int]$allScore.FailedControls
-                $tWarn = [int]$allScore.UnknownControls
-                $tSkip = [int]$allScore.SkippedControls
-                $tTotal = [int]$allScore.TotalControls
-                $tPass = [math]::Max(0, $tTotal - $tFail - $tWarn - $tSkip)
+                $hasAll = $entry.Scores | Where-Object { $_.Framework -eq 'All' }
+                if (-not $hasAll) { continue }
                 $dateLabel = ''
                 try {
                     $ts = [datetime]::Parse($entry.Metadata.AnalysisTimestamp)
                     $dateLabel = $ts.ToString('d MMM')
                 }
                 catch { $dateLabel = '' }
-                '{{"d":"{0}","p":{1},"w":{2},"f":{3},"s":{4}}}' -f $dateLabel, $tPass, $tWarn, $tFail, $tSkip
+                $parts = '"d":"' + $dateLabel + '"'
+                foreach ($sc in @($entry.Scores)) {
+                    $fk = [string]$sc.Framework
+                    $tFail = [int]$sc.FailedControls
+                    $tWarn = [int]$sc.UnknownControls
+                    $tSkip = [int]$sc.SkippedControls
+                    $tTotal = [int]$sc.TotalControls
+                    $tPass = [math]::Max(0, $tTotal - $tFail - $tWarn - $tSkip)
+                    $parts += ',"' + $fk + '":{"p":' + $tPass + ',"w":' + $tWarn + ',"f":' + $tFail + ',"s":' + $tSkip + '}'
+                }
+                '{' + $parts + '}'
             })
         $trendJson = ('[' + ($trendPoints -join ',') + ']') -replace '"', '&quot;'
-        $trendCardHtml = ('<div class="score-card trend-card" data-trend="{0}"><canvas class="trend-canvas" width="420" height="160"></canvas><p class="card-label">Compliance Trend</p></div>' -f $trendJson)
+        $trendCardHtml = ('<div class="score-card trend-card" data-trend="{0}"><canvas class="trend-canvas" width="264" height="160"></canvas><p class="card-label">Total Compliance Trend</p></div>' -f $trendJson)
     }
 
     $findingGroups = @{}
@@ -486,8 +493,8 @@ function New-EDCAHtmlReport {
         .score-card.active { outline: 2px solid #3b82f6; box-shadow: 0 4px 14px rgba(59,130,246,.35); }
         .donut-canvas { display: block; }
         .card-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; margin: 6px 0 0; color: var(--id-color); text-align: center; }
-        /* Trend chart card — spans 3 gauge widths */
-        .trend-card { width: 452px; min-width: 452px; cursor: default; }
+        /* Trend chart card — spans 2 gauge widths */
+        .trend-card { width: 296px; min-width: 296px; cursor: default; }
         .trend-card:hover { transform: none; box-shadow: 0 4px 14px rgba(0,0,0,.08); }
         .trend-canvas { display: block; }
         /* RAG icons */
@@ -719,7 +726,8 @@ function New-EDCAHtmlReport {
         (function () {
             var trendCard = document.querySelector('.trend-card');
             if (!trendCard) { return; }
-            var canvas = trendCard.querySelector('canvas.trend-canvas');
+            var canvas  = trendCard.querySelector('canvas.trend-canvas');
+            var labelEl = trendCard.querySelector('.card-label');
             if (!canvas) { return; }
             var raw = (trendCard.getAttribute('data-trend') || '[]').replace(/&quot;/g, '"');
             var entries;
@@ -727,85 +735,113 @@ function New-EDCAHtmlReport {
             if (!entries || entries.length === 0) { return; }
 
             var W = canvas.width, H = canvas.height;
-            var padL = 32, padR = 10, padT = 10, padB = 28;
+            var padL = 32, padR = 8, padT = 10, padB = 30;
             var chartW = W - padL - padR;
             var chartH = H - padT - padB;
-            var ctx = canvas.getContext('2d');
-
-            /* derive max total for Y axis */
-            var maxTotal = 0;
-            for (var i = 0; i < entries.length; i++) {
-                var t = (entries[i].p || 0) + (entries[i].w || 0) + (entries[i].f || 0) + (entries[i].s || 0);
-                if (t > maxTotal) { maxTotal = t; }
-            }
-            if (maxTotal === 0) { return; }
-            /* round up to nearest 10 for a clean axis */
-            var yMax = Math.ceil(maxTotal / 10) * 10 || 10;
-
-            var textColor = getComputedStyle(document.documentElement).getPropertyValue('--donut-text').trim() || '#64748b';
-            ctx.font = '10px Segoe UI, Arial, sans-serif';
-            ctx.fillStyle = textColor;
-            ctx.strokeStyle = 'rgba(148,163,184,.25)';
-
-            /* Y-axis grid lines + labels (0, 25%, 50%, 75%, 100% of yMax) */
-            var steps = 4;
-            for (var s = 0; s <= steps; s++) {
-                var yVal = Math.round(yMax * s / steps);
-                var yPx  = padT + chartH - Math.round((yVal / yMax) * chartH);
-                ctx.beginPath();
-                ctx.moveTo(padL, yPx);
-                ctx.lineTo(padL + chartW, yPx);
-                ctx.stroke();
-                ctx.textAlign = 'right';
-                ctx.textBaseline = 'middle';
-                ctx.fillText(yVal, padL - 4, yPx);
-            }
-
-            /* bars */
-            var n = entries.length;
-            var barW = Math.min(Math.floor(chartW / n) - 4, 48);
-            var slotW = chartW / n;
+            var ctx    = canvas.getContext('2d');
             var colors = { p: '#16a34a', w: '#d97706', f: '#dc2626', s: '#94a3b8' };
-            var order  = ['s', 'f', 'w', 'p']; /* bottom: skip, then fail, warn, pass on top */
+            var order  = ['s', 'f', 'w', 'p'];
+            var currentEntries = [];
+            var n = 0, slotW = 0;
 
             /* hover tooltip */
             var tip = document.createElement('div');
             tip.style.cssText = 'display:none;position:fixed;background:#0f172a;color:#f8fafc;font-size:12px;padding:6px 10px;border-radius:8px;pointer-events:none;white-space:nowrap;z-index:9999;line-height:1.6;';
             document.body.appendChild(tip);
 
-            for (var bi = 0; bi < n; bi++) {
-                var e   = entries[bi];
-                var xL  = padL + Math.round(bi * slotW + (slotW - barW) / 2);
-                var yBase = padT + chartH;
-                var stack = 0;
-                for (var oi = 0; oi < order.length; oi++) {
-                    var key = order[oi];
-                    var val = e[key] || 0;
-                    if (val <= 0) { continue; }
-                    var barH = Math.round((val / yMax) * chartH);
-                    ctx.fillStyle = colors[key];
-                    ctx.fillRect(xL, yBase - stack - barH, barW, barH);
-                    stack += barH;
+            function drawChart(fw) {
+                var key = (fw && fw !== 'All') ? fw : 'All';
+                /* update card label to reflect active filter */
+                if (labelEl) {
+                    var fwSel = document.getElementById('frameworkFilter');
+                    var lbl;
+                    if (!fw || fw === 'All') {
+                        lbl = 'Total';
+                    } else {
+                        lbl = (fwSel && fwSel.selectedIndex >= 0) ? fwSel.options[fwSel.selectedIndex].text : fw;
+                    }
+                    labelEl.textContent = lbl + ' Compliance Trend';
                 }
-                /* x-axis date label */
-                ctx.fillStyle = textColor;
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'top';
-                ctx.fillText(e.d || '', xL + barW / 2, padT + chartH + 4);
+                /* build currentEntries for the selected framework; fall back to All */
+                currentEntries = [];
+                for (var i = 0; i < entries.length; i++) {
+                    var e  = entries[i];
+                    var sc = e[key] || e['All'];
+                    if (!sc) { continue; }
+                    currentEntries.push({ d: e.d, p: sc.p || 0, w: sc.w || 0, f: sc.f || 0, s: sc.s || 0 });
+                }
+                n = currentEntries.length;
+                if (n === 0) { ctx.clearRect(0, 0, W, H); return; }
+                slotW = chartW / n;
+                /* derive Y max */
+                var maxTotal = 0;
+                for (var j = 0; j < n; j++) {
+                    var ce = currentEntries[j];
+                    var t  = (ce.p || 0) + (ce.w || 0) + (ce.f || 0) + (ce.s || 0);
+                    if (t > maxTotal) { maxTotal = t; }
+                }
+                var yMax = Math.ceil(maxTotal / 10) * 10 || 10;
+                var textColor = getComputedStyle(document.documentElement).getPropertyValue('--donut-text').trim() || '#64748b';
+                ctx.clearRect(0, 0, W, H);
+                ctx.font = '10px Segoe UI, Arial, sans-serif';
+                /* Y-axis grid lines + labels */
+                var steps = 4;
+                for (var s = 0; s <= steps; s++) {
+                    var yVal = Math.round(yMax * s / steps);
+                    var yPx  = padT + chartH - Math.round((yVal / yMax) * chartH);
+                    ctx.beginPath();
+                    ctx.moveTo(padL, yPx);
+                    ctx.lineTo(padL + chartW, yPx);
+                    ctx.strokeStyle = 'rgba(148,163,184,.25)';
+                    ctx.stroke();
+                    ctx.fillStyle = textColor;
+                    ctx.textAlign = 'right';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(yVal, padL - 4, yPx);
+                }
+                /* bars */
+                var barW = Math.min(Math.floor(slotW) - 4, 40);
+                for (var bi = 0; bi < n; bi++) {
+                    var ce2   = currentEntries[bi];
+                    var xL    = padL + Math.round(bi * slotW + (slotW - barW) / 2);
+                    var yBase = padT + chartH;
+                    var stack = 0;
+                    for (var oi = 0; oi < order.length; oi++) {
+                        var ok   = order[oi];
+                        var val  = ce2[ok] || 0;
+                        if (val <= 0) { continue; }
+                        var barH = Math.round((val / yMax) * chartH);
+                        ctx.fillStyle = colors[ok];
+                        ctx.fillRect(xL, yBase - stack - barH, barW, barH);
+                        stack += barH;
+                    }
+                    /* x-axis date label */
+                    ctx.fillStyle = textColor;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'top';
+                    ctx.fillText(ce2.d || '', xL + barW / 2, padT + chartH + 4);
+                }
+            }
+
+            var fwFilter = document.getElementById('frameworkFilter');
+            drawChart(fwFilter ? fwFilter.value : 'All');
+            if (fwFilter) {
+                fwFilter.addEventListener('change', function () { drawChart(fwFilter.value); });
             }
 
             /* mouse hover interaction */
             canvas.addEventListener('mousemove', function (ev) {
+                if (n === 0) { return; }
                 var rect = canvas.getBoundingClientRect();
                 var mx   = ev.clientX - rect.left;
                 var idx  = Math.floor((mx - padL) / slotW);
                 if (idx < 0 || idx >= n) { tip.style.display = 'none'; return; }
-                var e = entries[idx];
-                tip.innerHTML = '<strong>' + (e.d || '') + '</strong><br>' +
-                    '&#10004;&nbsp;Pass:&nbsp;' + (e.p || 0) + '<br>' +
-                    '&#9888;&nbsp;Unknown:&nbsp;' + (e.w || 0) + '<br>' +
-                    '&#10006;&nbsp;Fail:&nbsp;' + (e.f || 0) + '<br>' +
-                    '&#8856;&nbsp;Skip:&nbsp;' + (e.s || 0);
+                var ce = currentEntries[idx];
+                tip.innerHTML = '<strong>' + (ce.d || '') + '</strong><br>' +
+                    '&#10004;&nbsp;Pass:&nbsp;' + (ce.p || 0) + '<br>' +
+                    '&#9888;&nbsp;Unknown:&nbsp;' + (ce.w || 0) + '<br>' +
+                    '&#10006;&nbsp;Fail:&nbsp;' + (ce.f || 0) + '<br>' +
+                    '&#8856;&nbsp;Skip:&nbsp;' + (ce.s || 0);
                 tip.style.display = 'block';
                 tip.style.left = (ev.clientX + 14) + 'px';
                 tip.style.top  = (ev.clientY - 36) + 'px';
