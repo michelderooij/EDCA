@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.6 Preview
+- **EDCA-RES-011** (Single Item Recovery): fixed double-counting — `Get-Mailbox -ResultSize Unlimited` is org-scoped and stored identically on every server; the analysis now takes the value from the first available server instead of summing across all servers (which multiplied the count by the server count).
+- **EDCA-RES-011** remediation `scriptTemplate` updated to use `-RecipientTypeDetails UserMailbox` as a native server-side parameter instead of a `Where-Object` post-filter on `RecipientTypeDetails`.
+- **EDCA-SEC-041** (LAPS deployment): absent LAPS registry policy keys now result in **Fail** ("LAPS is not implemented") instead of **Unknown**.
+- **EDCA-SEC-042** (NetBIOS over TCP/IP): removed remediation instructions from Fail evidence (instructions are in the remediation section).
+- `Config/controls.json`: controls re-ordered by control ID (alphabetical category, then numeric within category).
+
 ## v0.5 Preview
 - README updated
 - **EDCA-SEC-041** (LAPS deployment): evaluator implemented. Collection reads `AdmPwdEnabled` from `HKLM:\SOFTWARE\Policies\Microsoft Services\AdmPwd` (legacy LAPS) and `BackupDirectory` from `HKLM:\SOFTWARE\Microsoft\Policies\LAPS` (Windows LAPS). Reports Pass when either legacy LAPS or Windows LAPS is configured via Group Policy, Fail when neither is detected.

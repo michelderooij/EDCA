@@ -2,7 +2,7 @@
 .SYNOPSIS
     EDCA — Exchange Deployment & Compliance Assessment.
 
-    Version: 0.5 Preview
+    Version: 0.6 Preview
     Author:  Michel de Rooij
     Source:  https://github.com/michelderooij/EDCA
     Website: https://eightwone.com
@@ -123,7 +123,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-$EDCAVersion = 'v0.5 Preview'
+$EDCAVersion = 'v0.6 Preview'
 
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 

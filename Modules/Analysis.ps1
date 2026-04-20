@@ -2169,32 +2169,29 @@ function Test-EDCAControl {
                 }
             }
             'EDCA-RES-011' {
-                $totalDisabled = 0
-                $allDisabled = @()
-                $hasData = $false
+                # SingleItemRecoveryDisabledCount is collected via org-scoped Get-Mailbox on each server.
+                # All servers store identical org-level data — take the first server's value to avoid multiplication.
+                $disabledCount = $null
                 foreach ($srv in @($CollectionData.Servers)) {
                     if (($srv.PSObject.Properties.Name -contains 'CollectionError') -and -not [string]::IsNullOrWhiteSpace([string]$srv.CollectionError)) { continue }
                     if (-not (($srv.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $srv.Exchange -and
                             ($srv.Exchange.PSObject.Properties.Name -contains 'IsExchangeServer') -and [bool]$srv.Exchange.IsExchangeServer)) { continue }
                     if ($srv.Exchange.PSObject.Properties.Name -contains 'SingleItemRecoveryDisabledCount' -and $null -ne $srv.Exchange.SingleItemRecoveryDisabledCount) {
-                        $hasData = $true
-                        $totalDisabled += [int]$srv.Exchange.SingleItemRecoveryDisabledCount
-                        if (($srv.Exchange.PSObject.Properties.Name -contains 'SingleItemRecoveryDisabledMailboxes') -and $null -ne $srv.Exchange.SingleItemRecoveryDisabledMailboxes) {
-                            $allDisabled += @($srv.Exchange.SingleItemRecoveryDisabledMailboxes)
-                        }
+                        $disabledCount = [int]$srv.Exchange.SingleItemRecoveryDisabledCount
+                        break
                     }
                 }
-                if (-not $hasData) {
+                if ($null -eq $disabledCount) {
                     $status = 'Unknown'
                     $evidence = 'Single Item Recovery mailbox data unavailable.'
                 }
-                elseif ($totalDisabled -eq 0) {
+                elseif ($disabledCount -eq 0) {
                     $status = 'Pass'
                     $evidence = 'Compliant — all user mailboxes have Single Item Recovery enabled.'
                 }
                 else {
                     $status = 'Fail'
-                    $evidence = Format-EDCAEvidenceWithElements -Summary ('{0} user mailbox(es) have Single Item Recovery disabled.' -f $totalDisabled) -Elements $allDisabled
+                    $evidence = ('{0} user mailbox(es) have Single Item Recovery disabled.' -f $disabledCount)
                 }
             }
             'EDCA-DATA-002' {
@@ -6946,7 +6943,7 @@ function Test-EDCAControl {
                                     ('{0}: NetbiosOptions={1}' -f $_.Interface, $optLabel)
                                 })
                             $status = 'Fail'
-                            $evidence = Format-EDCAEvidenceWithElements -Summary ('{0} of {1} interface(s) do not have NetBIOS over TCP/IP disabled. Set NetbiosOptions=2 via DHCP option 001 or group policy.' -f $notDisabled.Count, $interfaceOptions.Count) -Elements $issueLines
+                            $evidence = Format-EDCAEvidenceWithElements -Summary ('{0} of {1} interface(s) do not have NetBIOS over TCP/IP disabled.' -f $notDisabled.Count, $interfaceOptions.Count) -Elements $issueLines
                         }
                     }
                 }
