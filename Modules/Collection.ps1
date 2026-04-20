@@ -2312,10 +2312,73 @@ function Get-EDCAServerInventory {
         }
 
         $smb1Value = $null
+        $smbServerRequireSecuritySignature = $null
         try {
             $smbServerParams = Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters' -ErrorAction SilentlyContinue
-            if ($null -ne $smbServerParams -and $smbServerParams.PSObject.Properties.Name -contains 'SMB1') {
-                $smb1Value = [int]$smbServerParams.SMB1
+            if ($null -ne $smbServerParams) {
+                if ($smbServerParams.PSObject.Properties.Name -contains 'SMB1') {
+                    $smb1Value = [int]$smbServerParams.SMB1
+                }
+                if ($smbServerParams.PSObject.Properties.Name -contains 'RequireSecuritySignature') {
+                    $smbServerRequireSecuritySignature = [int]$smbServerParams.RequireSecuritySignature
+                }
+            }
+        }
+        catch {
+        }
+
+        $smbClientRequireSecuritySignature = $null
+        try {
+            $smbClientParams = Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters' -ErrorAction SilentlyContinue
+            if ($null -ne $smbClientParams -and $smbClientParams.PSObject.Properties.Name -contains 'RequireSecuritySignature') {
+                $smbClientRequireSecuritySignature = [int]$smbClientParams.RequireSecuritySignature
+            }
+        }
+        catch {
+        }
+
+        $ldapClientIntegrity = $null
+        try {
+            $ldapParams = Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\LDAP' -ErrorAction SilentlyContinue
+            if ($null -ne $ldapParams -and $ldapParams.PSObject.Properties.Name -contains 'LdapClientIntegrity') {
+                $ldapClientIntegrity = [int]$ldapParams.LdapClientIntegrity
+            }
+        }
+        catch {
+        }
+
+        $netBiosInterfaceOptions = @()
+        try {
+            $netBtInterfacesPath = 'HKLM:\SYSTEM\CurrentControlSet\Services\NetBT\Parameters\Interfaces'
+            if (Test-Path -Path $netBtInterfacesPath) {
+                foreach ($netBtInterface in @(Get-ChildItem -Path $netBtInterfacesPath -ErrorAction SilentlyContinue)) {
+                    $netBtProps = Get-ItemProperty -Path $netBtInterface.PSPath -ErrorAction SilentlyContinue
+                    if ($null -ne $netBtProps -and $netBtProps.PSObject.Properties.Name -contains 'NetbiosOptions') {
+                        $netBiosInterfaceOptions += [pscustomobject]@{
+                            Interface      = [string]$netBtInterface.PSChildName
+                            NetbiosOptions = [int]$netBtProps.NetbiosOptions
+                        }
+                    }
+                }
+            }
+        }
+        catch {
+        }
+
+        $lapsLegacyEnabled = $null
+        $lapsWindowsBackupDirectory = $null
+        try {
+            $lapsLegacyPolicy = Get-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft Services\AdmPwd' -ErrorAction SilentlyContinue
+            if ($null -ne $lapsLegacyPolicy -and $lapsLegacyPolicy.PSObject.Properties.Name -contains 'AdmPwdEnabled') {
+                $lapsLegacyEnabled = ([int]$lapsLegacyPolicy.AdmPwdEnabled -eq 1)
+            }
+        }
+        catch {
+        }
+        try {
+            $lapsWindowsPolicy = Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Policies\LAPS' -ErrorAction SilentlyContinue
+            if ($null -ne $lapsWindowsPolicy -and $lapsWindowsPolicy.PSObject.Properties.Name -contains 'BackupDirectory') {
+                $lapsWindowsBackupDirectory = [int]$lapsWindowsPolicy.BackupDirectory
             }
         }
         catch {
@@ -2833,9 +2896,9 @@ function Get-EDCAServerInventory {
         }
 
         $exchangeComputerMembership = [pscustomobject]@{
-            QuerySucceeded      = $false
-            MissingGroups       = @()
-            PresentGroups       = @()
+            QuerySucceeded       = $false
+            MissingGroups        = @()
+            PresentGroups        = @()
             TrustedForDelegation = $null
         }
 
@@ -3043,25 +3106,31 @@ function Get-EDCAServerInventory {
                 Adapters         = $vmxnet3Adapters
             }
             CisPolicy                 = [pscustomobject]@{
-                Smb1Value                  = $smb1Value
-                FirewallProfiles           = $firewallProfiles
-                FirewallAllProfilesEnabled = $firewallAllProfilesEnabled
-                LlmnrEnableMulticast       = $llmnrValue
-                LmCompatibilityLevel       = $lmCompatibilityLevel
-                NtlmMinClientSec           = $ntlmMinClientSec
-                NtlmMinServerSec           = $ntlmMinServerSec
-                WdigestUseLogonCredential  = $wdigestUseLogonCredential
-                RdpNlaRequired             = $rdpNlaRequired
-                DefenderAvailable          = $defenderAvailable
-                DefenderRtpEnabled         = $defenderRealtimeProtectionEnabled
-                DefenderExclusionPaths     = $defenderExclusionPaths
-                DefenderExclusionProcesses = $defenderExclusionProcesses
-                CredentialGuardEnabled     = $credentialGuardEnabled
-                ScriptBlockLoggingEnabled  = $scriptBlockLoggingEnabled
-                TcpKeepAlive               = $tcpKeepAliveTime
-                RpcMinConnectionTimeout    = $rpcMinConnectionTimeout
-                IPv6DisabledComponents     = $ipv6DisabledComponents
-                DisableRootAutoUpdate      = $disableRootAutoUpdate
+                Smb1Value                         = $smb1Value
+                FirewallProfiles                  = $firewallProfiles
+                FirewallAllProfilesEnabled        = $firewallAllProfilesEnabled
+                LlmnrEnableMulticast              = $llmnrValue
+                LmCompatibilityLevel              = $lmCompatibilityLevel
+                NtlmMinClientSec                  = $ntlmMinClientSec
+                NtlmMinServerSec                  = $ntlmMinServerSec
+                WdigestUseLogonCredential         = $wdigestUseLogonCredential
+                RdpNlaRequired                    = $rdpNlaRequired
+                DefenderAvailable                 = $defenderAvailable
+                DefenderRtpEnabled                = $defenderRealtimeProtectionEnabled
+                DefenderExclusionPaths            = $defenderExclusionPaths
+                DefenderExclusionProcesses        = $defenderExclusionProcesses
+                CredentialGuardEnabled            = $credentialGuardEnabled
+                ScriptBlockLoggingEnabled         = $scriptBlockLoggingEnabled
+                TcpKeepAlive                      = $tcpKeepAliveTime
+                RpcMinConnectionTimeout           = $rpcMinConnectionTimeout
+                IPv6DisabledComponents            = $ipv6DisabledComponents
+                DisableRootAutoUpdate             = $disableRootAutoUpdate
+                SmbServerRequireSecuritySignature = $smbServerRequireSecuritySignature
+                SmbClientRequireSecuritySignature = $smbClientRequireSecuritySignature
+                LdapClientIntegrity               = $ldapClientIntegrity
+                NetBiosInterfaceOptions           = $netBiosInterfaceOptions
+                LapsLegacyEnabled                 = $lapsLegacyEnabled
+                LapsWindowsBackupDirectory        = $lapsWindowsBackupDirectory
             }
             PendingReboot             = [pscustomobject]@{
                 Pending   = $pendingReboot
@@ -4340,7 +4409,8 @@ function Get-EDCAServerInventory {
                     PresentGroups        = $presentGroups
                     TrustedForDelegation = if ($computerResult.Properties['userAccountControl'].Count -gt 0) {
                         [bool]([int]$computerResult.Properties['userAccountControl'][0] -band 0x80000)
-                    } else { $null }
+                    }
+                    else { $null }
                 }
             }
         }

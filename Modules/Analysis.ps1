@@ -226,7 +226,7 @@ function Test-EDCAControl {
         [pscustomobject]$CollectionData
     )
 
-    if ($Control.id -in @('EDCA-MON-001', 'EDCA-IAC-001', 'EDCA-DATA-002', 'EDCA-IAC-004', 'EDCA-IAC-008', 'EDCA-SEC-032', 'EDCA-TLS-026', 'EDCA-TLS-023', 'EDCA-TLS-025', 'EDCA-TLS-024', 'EDCA-TLS-027', 'EDCA-TLS-028', 'EDCA-TLS-029', 'EDCA-SEC-004', 'EDCA-SEC-003', 'EDCA-SEC-005', 'EDCA-TLS-003', 'EDCA-IAC-011', 'EDCA-GOV-004', 'EDCA-IAC-009', 'EDCA-TLS-004', 'EDCA-TLS-005', 'EDCA-TLS-006', 'EDCA-TLS-007', 'EDCA-TLS-008', 'EDCA-TLS-009', 'EDCA-MON-008', 'EDCA-TLS-010', 'EDCA-TLS-011', 'EDCA-TLS-014', 'EDCA-IAC-014', 'EDCA-IAC-015', 'EDCA-IAC-016', 'EDCA-IAC-017', 'EDCA-IAC-018', 'EDCA-IAC-019', 'EDCA-IAC-020', 'EDCA-IAC-021', 'EDCA-IAC-022', 'EDCA-IAC-023', 'EDCA-IAC-024', 'EDCA-TLS-012', 'EDCA-TLS-018', 'EDCA-TLS-019', 'EDCA-DATA-016', 'EDCA-RES-012', 'EDCA-GOV-009', 'EDCA-PERF-012', 'EDCA-GOV-011', 'EDCA-SEC-036', 'EDCA-IAC-028')) {
+    if ($Control.id -in @('EDCA-MON-001', 'EDCA-IAC-001', 'EDCA-DATA-002', 'EDCA-IAC-004', 'EDCA-IAC-008', 'EDCA-SEC-032', 'EDCA-TLS-026', 'EDCA-TLS-023', 'EDCA-TLS-025', 'EDCA-TLS-024', 'EDCA-TLS-027', 'EDCA-TLS-028', 'EDCA-TLS-029', 'EDCA-SEC-004', 'EDCA-SEC-003', 'EDCA-SEC-005', 'EDCA-TLS-003', 'EDCA-IAC-011', 'EDCA-GOV-004', 'EDCA-IAC-009', 'EDCA-TLS-004', 'EDCA-TLS-005', 'EDCA-TLS-006', 'EDCA-TLS-007', 'EDCA-TLS-008', 'EDCA-TLS-009', 'EDCA-MON-008', 'EDCA-TLS-010', 'EDCA-TLS-011', 'EDCA-TLS-014', 'EDCA-IAC-014', 'EDCA-IAC-015', 'EDCA-IAC-016', 'EDCA-IAC-017', 'EDCA-IAC-018', 'EDCA-IAC-019', 'EDCA-IAC-020', 'EDCA-IAC-021', 'EDCA-IAC-022', 'EDCA-IAC-023', 'EDCA-IAC-024', 'EDCA-TLS-012', 'EDCA-TLS-018', 'EDCA-TLS-019', 'EDCA-DATA-016', 'EDCA-RES-012', 'EDCA-GOV-009', 'EDCA-PERF-012', 'EDCA-GOV-011', 'EDCA-SEC-036', 'EDCA-IAC-028', 'EDCA-RES-011')) {
         $status = 'Unknown'
         $evidence = ''
         $domainServerResults = $null
@@ -1418,7 +1418,7 @@ function Test-EDCAControl {
                     else {
                         $limit = 26214400 # 25 MB in bytes
                         $status = if ($maxSendBytes -le $limit) { 'Pass' } else { 'Fail' }
-                        $evidence = ('MaxSendSize is {0} ({1} bytes); CIS L1 limit is 25 MB ({2} bytes).' -f $maxSendDisplay, $maxSendBytes, $limit)
+                        $evidence = ('MaxSendSize is {0} ({1} bytes).' -f $maxSendDisplay, $maxSendBytes)
                     }
                 }
             }
@@ -1442,7 +1442,7 @@ function Test-EDCAControl {
                     else {
                         $limit = 26214400 # 25 MB in bytes
                         $status = if ($maxReceiveBytes -le $limit) { 'Pass' } else { 'Fail' }
-                        $evidence = ('MaxReceiveSize is {0} ({1} bytes); CIS L1 limit is 25 MB ({2} bytes).' -f $maxReceiveDisplay, $maxReceiveBytes, $limit)
+                        $evidence = ('MaxReceiveSize is {0} ({1} bytes).' -f $maxReceiveDisplay, $maxReceiveBytes)
                     }
                 }
             }
@@ -1813,7 +1813,7 @@ function Test-EDCAControl {
                     else {
                         $intVal = [int]$val
                         $status = if ($intVal -ge 4) { 'Pass' } else { 'Fail' }
-                        $evidence = ('PasswordHistory is {0} on the default mobile device mailbox policy; CIS L1 minimum is 4.' -f $intVal)
+                        $evidence = ('PasswordHistory is {0} on the default mobile device mailbox policy.' -f $intVal)
                     }
                 }
             }
@@ -1838,7 +1838,7 @@ function Test-EDCAControl {
                     else {
                         $intVal = [int]$val
                         $status = if ($intVal -ge 4) { 'Pass' } else { 'Fail' }
-                        $evidence = ('MinPasswordLength is {0} on the default mobile device mailbox policy; CIS L1 minimum is 4.' -f $intVal)
+                        $evidence = ('MinPasswordLength is {0} on the default mobile device mailbox policy.' -f $intVal)
                     }
                 }
             }
@@ -1862,12 +1862,12 @@ function Test-EDCAControl {
                     }
                     elseif ([string]$val -eq 'Unlimited') {
                         $status = 'Fail'
-                        $evidence = 'MaxPasswordFailedAttempts is Unlimited on the default mobile device mailbox policy; CIS L1 maximum is 10.'
+                        $evidence = 'MaxPasswordFailedAttempts is Unlimited on the default mobile device mailbox policy.'
                     }
                     else {
                         $intVal = [int]$val
                         $status = if ($intVal -le 10) { 'Pass' } else { 'Fail' }
-                        $evidence = ('MaxPasswordFailedAttempts is {0} on the default mobile device mailbox policy; CIS L1 maximum is 10.' -f $intVal)
+                        $evidence = ('MaxPasswordFailedAttempts is {0} on the default mobile device mailbox policy.' -f $intVal)
                     }
                 }
             }
@@ -1891,13 +1891,13 @@ function Test-EDCAControl {
                     }
                     elseif ([string]$val -eq 'Unlimited') {
                         $status = 'Fail'
-                        $evidence = 'PasswordExpiration is Unlimited on the default mobile device mailbox policy; CIS L1 maximum is 365 days.'
+                        $evidence = 'PasswordExpiration is Unlimited on the default mobile device mailbox policy.'
                     }
                     else {
                         try {
                             $ts = [timespan]::Parse([string]$val)
                             $status = if ($ts.TotalDays -le 365) { 'Pass' } else { 'Fail' }
-                            $evidence = ('PasswordExpiration is {0} days on the default mobile device mailbox policy; CIS L1 maximum is 365 days.' -f [math]::Round($ts.TotalDays, 1))
+                            $evidence = ('PasswordExpiration is {0} days on the default mobile device mailbox policy.' -f [math]::Round($ts.TotalDays, 1))
                         }
                         catch {
                             $status = 'Unknown'
@@ -1926,13 +1926,13 @@ function Test-EDCAControl {
                     }
                     elseif ([string]$val -eq 'Unlimited') {
                         $status = 'Fail'
-                        $evidence = 'DevicePolicyRefreshInterval is Unlimited on the default mobile device mailbox policy; CIS L1 maximum is 1 day.'
+                        $evidence = 'DevicePolicyRefreshInterval is Unlimited on the default mobile device mailbox policy.'
                     }
                     else {
                         try {
                             $ts = [timespan]::Parse([string]$val)
                             $status = if ($ts.TotalDays -le 1) { 'Pass' } else { 'Fail' }
-                            $evidence = ('DevicePolicyRefreshInterval is {0} hours on the default mobile device mailbox policy; CIS L1 maximum is 24 hours (1 day).' -f [math]::Round($ts.TotalHours, 2))
+                            $evidence = ('DevicePolicyRefreshInterval is {0} hours on the default mobile device mailbox policy.' -f [math]::Round($ts.TotalHours, 2))
                         }
                         catch {
                             $status = 'Unknown'
@@ -2085,13 +2085,13 @@ function Test-EDCAControl {
                     }
                     elseif ([string]$val -eq 'Unlimited') {
                         $status = 'Fail'
-                        $evidence = 'MaxInactivityTimeLock is Unlimited on the default mobile device mailbox policy; CIS L1 maximum is 15 minutes.'
+                        $evidence = 'MaxInactivityTimeLock is Unlimited on the default mobile device mailbox policy.'
                     }
                     else {
                         try {
                             $ts = [timespan]::Parse([string]$val)
                             $status = if ($ts.TotalMinutes -le 15) { 'Pass' } else { 'Fail' }
-                            $evidence = ('MaxInactivityTimeLock is {0} minutes on the default mobile device mailbox policy; CIS L1 maximum is 15 minutes.' -f [math]::Round($ts.TotalMinutes, 1))
+                            $evidence = ('MaxInactivityTimeLock is {0} minutes on the default mobile device mailbox policy.' -f [math]::Round($ts.TotalMinutes, 1))
                         }
                         catch {
                             $status = 'Unknown'
@@ -6531,7 +6531,7 @@ function Test-EDCAControl {
                     else {
                         $volPaths = @($matchedVolumeInfos | ForEach-Object { $_.Path })
                         $status = 'Pass'
-                        $evidence = ('All database and log volumes are formatted with ReFS: {0}' -f ($volPaths -join ', '))
+                        $evidence = Format-EDCAEvidenceWithElements -Summary ('All {0} database and log volume(s) are formatted with ReFS.' -f $volPaths.Count) -Elements $volPaths
                     }
                 }
             }
@@ -6861,6 +6861,194 @@ function Test-EDCAControl {
                         $allItems = @($passItems) + @($missingItems)
                         $status = 'Pass'
                         $evidence = Format-EDCAEvidenceWithElements -Summary 'POP3, IMAP4 and UM services are disabled or not present.' -Elements $allItems
+                    }
+                }
+            }
+            'EDCA-SEC-041' {
+                $cisPolicy = $null
+                if (($server.PSObject.Properties.Name -contains 'OS') -and $null -ne $server.OS -and
+                    ($server.OS.PSObject.Properties.Name -contains 'CisPolicy')) {
+                    $cisPolicy = $server.OS.CisPolicy
+                }
+
+                if ($null -eq $cisPolicy) {
+                    $status = 'Unknown'
+                    $evidence = 'OS security policy data unavailable.'
+                }
+                else {
+                    $legacyEnabled = $null
+                    $windowsBackupDir = $null
+                    if ($cisPolicy.PSObject.Properties.Name -contains 'LapsLegacyEnabled') {
+                        $legacyEnabled = $cisPolicy.LapsLegacyEnabled
+                    }
+                    if ($cisPolicy.PSObject.Properties.Name -contains 'LapsWindowsBackupDirectory') {
+                        $windowsBackupDir = $cisPolicy.LapsWindowsBackupDirectory
+                    }
+
+                    if ($null -eq $legacyEnabled -and $null -eq $windowsBackupDir) {
+                        $status = 'Unknown'
+                        $evidence = 'LAPS registry policy keys not found — re-run collection with the current EDCA build to evaluate this control.'
+                    }
+                    elseif ($legacyEnabled -eq $true) {
+                        $status = 'Pass'
+                        $evidence = 'Legacy LAPS (AdmPwd) is enabled via Group Policy (AdmPwdEnabled=1).'
+                    }
+                    elseif ($null -ne $windowsBackupDir -and [int]$windowsBackupDir -ge 1) {
+                        $backupTarget = switch ([int]$windowsBackupDir) {
+                            1 { 'Active Directory' }
+                            2 { 'Microsoft Entra ID' }
+                            default { ('Unknown backup target ({0})' -f $windowsBackupDir) }
+                        }
+                        $status = 'Pass'
+                        $evidence = ('Windows LAPS is configured to back up passwords to {0} (BackupDirectory={1}).' -f $backupTarget, $windowsBackupDir)
+                    }
+                    else {
+                        $status = 'Fail'
+                        $evidence = 'Neither Windows LAPS nor legacy LAPS (AdmPwd) is configured via Group Policy on this server. Local administrator accounts have unmanaged passwords — a compromised password on one server can be used for lateral movement to all servers sharing the same credential.'
+                    }
+                }
+            }
+            'EDCA-SEC-042' {
+                $cisPolicy = $null
+                if (($server.PSObject.Properties.Name -contains 'OS') -and $null -ne $server.OS -and
+                    ($server.OS.PSObject.Properties.Name -contains 'CisPolicy')) {
+                    $cisPolicy = $server.OS.CisPolicy
+                }
+
+                if ($null -eq $cisPolicy) {
+                    $status = 'Unknown'
+                    $evidence = 'OS security policy data unavailable.'
+                }
+                else {
+                    $interfaceOptions = $null
+                    if ($cisPolicy.PSObject.Properties.Name -contains 'NetBiosInterfaceOptions') {
+                        $interfaceOptions = @($cisPolicy.NetBiosInterfaceOptions)
+                    }
+
+                    if ($null -eq $interfaceOptions -or $interfaceOptions.Count -eq 0) {
+                        $status = 'Unknown'
+                        $evidence = 'NetBIOS interface options not available — re-run collection with the current EDCA build to evaluate this control.'
+                    }
+                    else {
+                        # NetbiosOptions: 0 = default (DHCP), 1 = Enabled, 2 = Disabled
+                        $notDisabled = @($interfaceOptions | Where-Object { [int]$_.NetbiosOptions -ne 2 })
+                        if ($notDisabled.Count -eq 0) {
+                            $status = 'Pass'
+                            $evidence = Format-EDCAEvidenceWithElements -Summary ('NetBIOS over TCP/IP is disabled on all {0} interface(s) (NetbiosOptions=2).' -f $interfaceOptions.Count) -Elements @($interfaceOptions | ForEach-Object { ('{0}: NetbiosOptions={1}' -f $_.Interface, $_.NetbiosOptions) })
+                        }
+                        else {
+                            $issueLines = @($notDisabled | ForEach-Object {
+                                    $optLabel = switch ([int]$_.NetbiosOptions) {
+                                        0 { 'DHCP-controlled (0)' }
+                                        1 { 'Enabled (1)' }
+                                        default { ('Value {0}' -f $_.NetbiosOptions) }
+                                    }
+                                    ('{0}: NetbiosOptions={1}' -f $_.Interface, $optLabel)
+                                })
+                            $status = 'Fail'
+                            $evidence = Format-EDCAEvidenceWithElements -Summary ('{0} of {1} interface(s) do not have NetBIOS over TCP/IP disabled. Set NetbiosOptions=2 via DHCP option 001 or group policy.' -f $notDisabled.Count, $interfaceOptions.Count) -Elements $issueLines
+                        }
+                    }
+                }
+            }
+            'EDCA-SEC-043' {
+                $cisPolicy = $null
+                if (($server.PSObject.Properties.Name -contains 'OS') -and $null -ne $server.OS -and
+                    ($server.OS.PSObject.Properties.Name -contains 'CisPolicy')) {
+                    $cisPolicy = $server.OS.CisPolicy
+                }
+
+                if ($null -eq $cisPolicy) {
+                    $status = 'Unknown'
+                    $evidence = 'OS security policy data unavailable.'
+                }
+                else {
+                    $serverSig = $null
+                    $clientSig = $null
+                    if ($cisPolicy.PSObject.Properties.Name -contains 'SmbServerRequireSecuritySignature') {
+                        $serverSig = $cisPolicy.SmbServerRequireSecuritySignature
+                    }
+                    if ($cisPolicy.PSObject.Properties.Name -contains 'SmbClientRequireSecuritySignature') {
+                        $clientSig = $cisPolicy.SmbClientRequireSecuritySignature
+                    }
+
+                    if ($null -eq $serverSig -and $null -eq $clientSig) {
+                        $status = 'Unknown'
+                        $evidence = 'SMB signing registry values not available — re-run collection with the current EDCA build to evaluate this control.'
+                    }
+                    else {
+                        $details = @()
+                        $issues = @()
+
+                        if ($null -eq $serverSig -or [int]$serverSig -ne 1) {
+                            $val = if ($null -eq $serverSig) { 'not set (default 0)' } else { [string]$serverSig }
+                            $issues += 'SMB server signing not required'
+                            $details += ('SMB server (LanmanServer): RequireSecuritySignature={0}' -f $val)
+                        }
+                        else {
+                            $details += 'SMB server (LanmanServer): RequireSecuritySignature=1 (required)'
+                        }
+
+                        if ($null -eq $clientSig -or [int]$clientSig -ne 1) {
+                            $val = if ($null -eq $clientSig) { 'not set (default 0)' } else { [string]$clientSig }
+                            $issues += 'SMB client signing not required'
+                            $details += ('SMB client (LanmanWorkstation): RequireSecuritySignature={0}' -f $val)
+                        }
+                        else {
+                            $details += 'SMB client (LanmanWorkstation): RequireSecuritySignature=1 (required)'
+                        }
+
+                        if ($issues.Count -gt 0) {
+                            $status = 'Fail'
+                            $evidence = Format-EDCAEvidenceWithElements -Summary ('SMB packet signing is not enforced: {0}.' -f ($issues -join '; ')) -Elements $details
+                        }
+                        else {
+                            $status = 'Pass'
+                            $evidence = Format-EDCAEvidenceWithElements -Summary 'SMB packet signing is required on both server (LanmanServer) and client (LanmanWorkstation).' -Elements $details
+                        }
+                    }
+                }
+            }
+            'EDCA-SEC-044' {
+                $cisPolicy = $null
+                if (($server.PSObject.Properties.Name -contains 'OS') -and $null -ne $server.OS -and
+                    ($server.OS.PSObject.Properties.Name -contains 'CisPolicy')) {
+                    $cisPolicy = $server.OS.CisPolicy
+                }
+
+                if ($null -eq $cisPolicy) {
+                    $status = 'Unknown'
+                    $evidence = 'OS security policy data unavailable.'
+                }
+                else {
+                    $ldapIntegrity = $null
+                    if ($cisPolicy.PSObject.Properties.Name -contains 'LdapClientIntegrity') {
+                        $ldapIntegrity = $cisPolicy.LdapClientIntegrity
+                    }
+
+                    if ($null -eq $ldapIntegrity) {
+                        $status = 'Unknown'
+                        $evidence = 'LDAP client integrity value not available — re-run collection with the current EDCA build to evaluate this control.'
+                    }
+                    else {
+                        switch ([int]$ldapIntegrity) {
+                            0 {
+                                $status = 'Fail'
+                                $evidence = 'LDAP client signing is disabled (LdapClientIntegrity=0). LDAP traffic is sent without signing, exposing credentials and session data to relay and interception attacks. Set LdapClientIntegrity=2 via Group Policy (Network security: LDAP client signing requirements = Require signing).'
+                            }
+                            1 {
+                                $status = 'Fail'
+                                $evidence = 'LDAP client signing is set to negotiate (LdapClientIntegrity=1). Signing is requested but not enforced — servers that do not require signing will receive unsigned LDAP binds. Set LdapClientIntegrity=2 to require signing on all connections.'
+                            }
+                            2 {
+                                $status = 'Pass'
+                                $evidence = 'LDAP client signing is required (LdapClientIntegrity=2). All LDAP connections must use signing.'
+                            }
+                            default {
+                                $status = 'Unknown'
+                                $evidence = ('Unexpected LdapClientIntegrity value: {0}.' -f $ldapIntegrity)
+                            }
+                        }
                     }
                 }
             }

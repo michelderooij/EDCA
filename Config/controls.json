@@ -2,7 +2,7 @@
   {
     "id": "EDCA-GOV-004",
     "title": "Exchange Hybrid Application baseline",
-    "description": "Validate Exchange Hybrid Application configuration.",
+    "description": "The Exchange Hybrid Application MUST be correctly configured to support hybrid coexistence between on-premises Exchange and Exchange Online. Microsoft is transitioning hybrid connectivity from Exchange Web Services (EWS) to Microsoft Graph API, requiring a dedicated Hybrid Application registration created by the ConfigureExchangeHybridApplication tool. Without a correctly configured Hybrid Application, hybrid mail flow, free/busy lookups, and cross-premises mailbox moves will fail. EDCA validates AuthServer and IntraOrganizationConnector configuration to detect missing or misconfigured hybrid application entries.",
     "verify": false,
     "subject": "Organization",
     "category": "Governance",
@@ -178,7 +178,7 @@
     "remediation": {
       "automatable": false,
       "description": "Create and maintain a documented software baseline, and implement file integrity monitoring for the Exchange installation directory.",
-      "scriptTemplate": "# Document baseline file hashes for Exchange binaries."
+      "scriptTemplate": "# Document Exchange binary baseline hashes. Run from EMS on each Exchange server.\n$exchPath = $exinstall\nGet-ChildItem $exchPath -Recurse -File -ErrorAction SilentlyContinue | Get-FileHash -Algorithm SHA256 | Select-Object Hash, Path | Export-Csv ($env:COMPUTERNAME + '-ExchangeBaseline.csv') -NoTypeInformation\nWrite-Host ('Baseline written to ' + $env:COMPUTERNAME + '-ExchangeBaseline.csv')"
     },
     "considerations": "File integrity monitoring solutions (e.g., Microsoft Defender for Endpoint, Tripwire, AIDE) are typically required to meet this control in an automated fashion. Store baselines in a write-protected location. Refresh the baseline after each Exchange Cumulative Update."
   },
@@ -814,7 +814,7 @@
   {
     "id": "EDCA-IAC-020",
     "title": "Mobile device mailbox policy refresh interval is 1 day or less",
-    "description": "The DevicePolicyRefreshInterval property on the default mobile device mailbox policy MUST be 1 day or less. A short refresh interval ensures devices re-apply the latest security policy promptly, reducing the risk of policy drift. The CIS benchmark requires the refresh interval to be 1.",
+    "description": "The DevicePolicyRefreshInterval property on the default mobile device mailbox policy MUST be 1 day or less. A short refresh interval ensures devices re-apply the latest security policy promptly, reducing the risk of policy drift. The CIS benchmark requires the refresh interval to be 1 day or fewer.",
     "verify": true,
     "subject": "Organization",
     "category": "Identity and Access Control",
@@ -904,7 +904,7 @@
   {
     "id": "EDCA-IAC-003",
     "title": "NTLMv2 authentication enforcement baseline",
-    "description": "LAN Manager authentication level and NTLM minimum session security MUST be configured together to enforce NTLMv2 only and refuse LM/NTLM. Applicability: Exchange 2016/2019/SE with modern clients. Exception: validated legacy interoperability requirements must be risk accepted. The CIS benchmark requires 'Network security: LAN Manager authentication level' to be set to 'Send NTLMv2 response only. Refuse LM & NTLM' (LmCompatibilityLevel = 5). The CIS benchmark requires minimum session security for NTLM SSP clients, and The CIS benchmark for servers, both set to 'Require NTLMv2 session security, Require 128-bit encryption' (NtlmMinClientSec and NtlmMinServerSec = 537395200).",
+    "description": "LAN Manager authentication level and NTLM minimum session security MUST be configured together to enforce NTLMv2 only and refuse LM/NTLM. Applicability: Exchange 2016/2019/SE with modern clients. Exception: validated legacy interoperability requirements must be risk accepted. The CIS benchmark requires 'Network security: LAN Manager authentication level' to be set to 'Send NTLMv2 response only. Refuse LM & NTLM' (LmCompatibilityLevel = 5). The CIS benchmark requires minimum session security for both NTLM SSP clients and servers to be set to 'Require NTLMv2 session security, Require 128-bit encryption' (NtlmMinClientSec and NtlmMinServerSec = 537395200).",
     "verify": true,
     "subject": "Server",
     "category": "Identity and Access Control",
@@ -1114,7 +1114,7 @@
     "remediation": {
       "automatable": false,
       "description": "If ASA is required, use a dedicated account, keep credentials synchronized across Client Access servers, and rotate with RollAlternateServiceAccountPassword.ps1; otherwise remove ASA credentials.",
-      "scriptTemplate": "# Diagnose: Check Alternate Service Account credential status on Client Access servers\nGet-ClientAccessServer -IncludeAlternateServiceAccountCredentialStatus | Select-Object Name, AlternateServiceAccountConfiguration | Format-List\n# Review for stale or multiple credential entries. Only the current ASA password should be active."
+      "scriptTemplate": "# Diagnose: Check Alternate Service Account credential status on Client Access servers\nGet-ClientAccessServer -IncludeAlternateServiceAccountCredentialStatus | Select-Object Name, AlternateServiceAccountConfiguration | Format-List\n# Review for stale or multiple credential entries. Only the current ASA password should be active.\n\n# To initially assign an ASA credential to Client Access services (run once per server):\n# Set-ClientAccessService -Identity $env:COMPUTERNAME -AlternateServiceAccountCredential (Get-Credential)\n\n# To rotate the ASA password across all Client Access servers using the built-in Exchange rollover script:\n$rollScript = Join-Path $exinstall 'Scripts' | Join-Path -ChildPath 'RollAlternateServiceAccountPassword.ps1'\n# & $rollScript -ToEntireForest -GenerateNewPasswordFor 'DOMAIN\\ASAAccountName' -Verbose"
     },
     "considerations": "The Kerberos Alternate Service Account (ASA) must be configured identically on all load-balanced Exchange Client Access servers. The ASA password must be periodically rotated and kept consistent across all servers. Misconfiguration will break Kerberos authentication and fall back to NTLM, which may be blocked by other security policies."
   },
@@ -1335,7 +1335,7 @@
       "description": "Raise the AD Domain functional level to the minimum required for the installed Exchange version. All domain controllers in the domain must be running the corresponding Windows Server version before raising the domain functional level.",
       "scriptTemplate": "# Check current domain functional level and raise if required:\n# Set-ADDomainMode -Identity <DomainFQDN> -DomainMode Windows2012R2Domain"
     },
-    "considerations": "Applying OS updates or upgrading the OS version of an Exchange server is a significant operation. Test all Exchange services after applying updates. Use DAG maintenance mode during patching to preserve service availability."
+    "considerations": "Raising the AD domain functional level is irreversible without a full forest recovery. Ensure all domain controllers in the domain are running the required Windows Server version before raising the functional level. Test in a non-production environment first. Coordinate with the Active Directory team, as the change affects all services in the domain — not only Exchange."
   },
   {
     "id": "EDCA-SEC-004",
@@ -1360,7 +1360,7 @@
       "description": "Raise the AD Forest functional level to the minimum required for the installed Exchange version. All domain controllers in the forest must be running the corresponding Windows Server version before raising the forest functional level.",
       "scriptTemplate": "# Check current forest functional level and raise if required:\n# Set-ADForestMode -Identity <ForestFQDN> -ForestMode Windows2012R2Forest"
     },
-    "considerations": "Hardware changes affecting CPU, memory, or storage should be planned during a maintenance window with DAG failover coordination. Verify new hardware meets Exchange sizing guidance for the installed role."
+    "considerations": "Raising the AD forest functional level requires all domain controllers in all domains in the forest to be running the required Windows Server version. The change is irreversible without a full forest recovery. Coordinate with all domain administrators in the forest before proceeding, as the impact spans every domain and every service relying on AD in the entire forest."
   },
   {
     "id": "EDCA-SEC-005",
@@ -1676,7 +1676,7 @@
   {
     "id": "EDCA-SEC-031",
     "title": "TokenCacheModule loaded status reviewed",
-    "description": "Track TokenCacheModule IIS module state and review related mitigation posture for CVE-2023-21709 / CVE-2023-36434.",
+    "description": "The IIS TokenCacheModule MUST be present on all Exchange servers running builds that include the August 2023 Security Update or later. Microsoft added TokenCacheModule to Exchange IIS configuration as the permanent remediation for CVE-2023-21709 (privilege escalation via elevation of service account) and CVE-2023-36434. Its presence on a fully-patched Exchange build is expected and correct. Absence of the module on a patched server indicates it was accidentally removed or the security update was rolled back, leaving the server exposed to both CVEs.",
     "verify": true,
     "subject": "Server",
     "category": "Platform Security",
@@ -1693,7 +1693,7 @@
     ],
     "remediation": {
       "automatable": false,
-      "description": "Review module state relative to current patch level and mitigation strategy before changing TokenCacheModule configuration.",
+      "description": "If TokenCacheModule is present, no action is required — this is the expected state on a patched server. If TokenCacheModule is absent on a server running Exchange 2019 CU13 or later (or Exchange SE), re-run Exchange Setup /Mode:Upgrade to restore the module, or re-apply the August 2023 Security Update. Do not manually remove TokenCacheModule from IIS; doing so re-exposes the server to CVE-2023-21709 and CVE-2023-36434.",
       "scriptTemplate": "# Diagnose: Check if TokenCacheModule is loaded in IIS global modules\nImport-Module WebAdministration -ErrorAction SilentlyContinue\nGet-WebConfiguration 'system.webServer/globalModules/*' | Where-Object { $_.Name -eq 'TokenCacheModule' } | Select-Object Name, Image\nGet-ExchangeServer $env:COMPUTERNAME | Select-Object Name, AdminDisplayVersion\n# If TokenCacheModule is present on November 2021-patched Exchange, apply KB5008631 rollback guidance."
     },
     "considerations": "The TokenCacheModule mitigates CVE-2023-21709 and CVE-2023-36434. Removing it would re-expose the server to these vulnerabilities. If the module is not present after patching, check whether the rollback procedure was applied and re-apply the Exchange patch that includes the module."
@@ -1778,7 +1778,7 @@
     "remediation": {
       "automatable": false,
       "description": "Ensure Exchange is installed on a volume not shared with other application binaries. Review installed applications on Exchange servers.",
-      "scriptTemplate": "# Verify no other applications share the Exchange installation volume."
+      "scriptTemplate": "# Diagnose: Identify the Exchange install drive and list top-level directories not part of Exchange or Windows.\n$exchDrive = Split-Path $exinstall -Qualifier\nGet-ChildItem $exchDrive -Directory -ErrorAction SilentlyContinue |\n    Where-Object { $_.Name -notin @('Exchange', 'ExchangeSetupLogs', 'Program Files', 'Program Files (x86)', 'Windows', 'Users', 'PerfLogs', 'inetpub') } |\n    Select-Object FullName\n# Unexpected directories on the Exchange volume may indicate other applications are co-located."
     },
     "considerations": "Migrating Exchange to a different volume is a complex operation that may require reinstallation. In many environments this is a planning concern addressed at deployment time. Document deviations with a risk acceptance if remediation is not feasible."
   },
@@ -1841,7 +1841,7 @@
     "remediation": {
       "automatable": false,
       "description": "Review and tighten NTFS ACLs on the Exchange installation directory (default: %ExchangeInstallPath%).",
-      "scriptTemplate": "# Review ACLs on Exchange installation directory."
+      "scriptTemplate": "# Diagnose: Review NTFS ACLs on the Exchange installation directory.\n(Get-Acl $exinstall).Access | Select-Object IdentityReference, FileSystemRights, AccessControlType, IsInherited | Sort-Object IdentityReference | Format-Table -AutoSize\n# Verify that only privileged principals (SYSTEM, Administrators, Exchange Trusted Subsystem) have Write or FullControl.\n# Unexpected Write or FullControl entries should be investigated and removed."
     },
     "considerations": "Changing Exchange directory ACLs may break Exchange services or update processes. Only remove permissions that are explicitly not required. Test ACL changes in a non-production environment and verify that all Exchange services start successfully after changes."
   },
@@ -2775,7 +2775,7 @@
   {
     "id": "EDCA-SEC-028",
     "title": "Dynamic memory disabled for virtualized Exchange hosts",
-    "description": "Virtualized Exchange hosts SHOULD avoid dynamic memory allocation to maintain stable performance characteristics.",
+    "description": "Virtualized Exchange hosts MUST NOT use dynamic memory allocation. Dynamic memory causes unpredictable memory pressure on the Exchange JET database cache (store.exe) and the transport service, which can trigger out-of-memory crashes, transport stalls, and inconsistent client response times. Exchange sizing guidance always specifies static memory allocation sized to the calculated user and mailbox load.",
     "verify": true,
     "subject": "Server",
     "category": "Platform Security",
@@ -2938,7 +2938,7 @@
     "remediation": {
       "automatable": false,
       "description": "If the Internal Transport Certificate is missing or expired, create a new one using New-ExchangeCertificate with the server NetBIOS name, FQDN, and SMTP service assignment. Run Enable-ExchangeCertificate -Services SMTP after confirming propagation to all Exchange servers.",
-      "scriptTemplate": "New-ExchangeCertificate -PrivateKeyExportable $false -Services SMTP -SubjectName 'CN=ServerFQDN' -DomainName 'ServerFQDN','ServerNetBIOSName'"
+      "scriptTemplate": "# Replace the placeholder values with the actual server FQDN and NetBIOS name before running.\n# The FQDN is the fully qualified DNS name (e.g. ex1.contoso.com); the NetBIOS name is typically $env:COMPUTERNAME.\n$serverFQDN = [System.Net.Dns]::GetHostEntry('').HostName\n$serverNetBIOS = $env:COMPUTERNAME\nNew-ExchangeCertificate -PrivateKeyExportable $false -Services SMTP -SubjectName ('CN=' + $serverFQDN) -DomainName $serverFQDN, $serverNetBIOS"
     },
     "considerations": "The internal transport certificate is used for Exchange-to-Exchange SMTP TLS. Replacing it requires the certificate to be propagated to all Exchange servers in the organization before activation. A brief interruption to inter-server TLS may occur during certificate rollover."
   },
@@ -2967,10 +2967,10 @@
     ],
     "remediation": {
       "automatable": false,
-      "description": "Enable automatic root certificate updates via Group Policy or manually install required root certificates. Ensure the DigiCert Global Root G2 certificate is installed on all Exchange servers before March 15, 2026 to prevent certificate validation failures.",
+      "description": "Enable automatic root certificate updates via Group Policy or manually install required root certificates. Ensure the DigiCert Global Root G2 certificate (thumbprint: DF3C24F9BFD666761B268073FE06D1CC8D4F82A4) is installed on all Exchange servers to prevent certificate validation failures.",
       "scriptTemplate": "# Diagnose: Check automatic root certificate update policy and presence of DigiCert Global Root G2\n$val = (Get-ItemProperty 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\SystemCertificates\\AuthRoot' -Name DisableRootAutoUpdate -ErrorAction SilentlyContinue).DisableRootAutoUpdate\n\"DisableRootAutoUpdate: $(if ($null -eq $val) { 'not set (auto-update active)' } else { $val })\"\n$cert = Get-ChildItem Cert:\\LocalMachine\\Root | Where-Object { $_.Thumbprint -eq 'DF3C24F9BFD666761B268073FE06D1CC8D4F82A4' }\n\"DigiCert Global Root G2: $(if ($cert) { 'Present (expires ' + $cert.NotAfter.ToString('yyyy-MM-dd') + ')' } else { 'NOT FOUND - required for Exchange hybrid and modern auth' })\""
     },
-    "considerations": "Automatic root certificate updates require outbound HTTPS access to Windows Update. In isolated environments, certificates must be manually distributed. The DigiCert Global Root G2 certificate is required by Microsoft 365 and Azure services; its absence after March 15, 2026 will cause TLS trust chain failures."
+    "considerations": "Automatic root certificate updates require outbound HTTPS access to Windows Update. In isolated environments, certificates must be manually distributed. The DigiCert Global Root G2 certificate is required by Microsoft 365 and Azure services; its absence will cause TLS trust chain failures for Exchange hybrid and modern authentication."
   },
   {
     "id": "EDCA-DATA-005",
