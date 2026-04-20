@@ -6,6 +6,7 @@
 - **EDCA-SEC-041** (LAPS deployment): absent LAPS registry policy keys now result in **Fail** ("LAPS is not implemented") instead of **Unknown**.
 - **EDCA-SEC-042** (NetBIOS over TCP/IP): removed remediation instructions from Fail evidence (instructions are in the remediation section).
 - `Config/controls.json`: controls re-ordered by control ID (alphabetical category, then numeric within category).
+- **HTML report**: added **Compliance Trend** stacked bar chart to the Framework Scoreboard section. When `-Report` is used, EDCA loads the last 10 `analysis_*.json` files from the `Data/` folder and renders a colour-coded bar chart (Pass/Unknown/Fail/Skip) with date labels and a hover tooltip. The chart card spans three gauge widths and is rendered in pure Canvas (no external libraries).
 
 ## v0.5 Preview
 - README updated

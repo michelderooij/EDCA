@@ -160,7 +160,10 @@ function New-EDCAHtmlReport {
         [Parameter(Mandatory = $true)]
         [pscustomobject]$AnalysisData,
         [Parameter(Mandatory = $true)]
-        [string]$OutputFile
+        [string]$OutputFile,
+        [Parameter(Mandatory = $false)]
+        [AllowNull()]
+        [pscustomobject[]]$HistoryData = @()
     )
 
     Write-Verbose ('Generating HTML report for {0} findings and {1} server entries.' -f @($AnalysisData.Findings).Count, @($CollectionData.Servers).Count)
@@ -194,6 +197,29 @@ function New-EDCAHtmlReport {
                 $skipCount,
                 $displayLabel
             ))
+    }
+
+    # Build compliance trend chart data from history analysis files.
+    $trendCardHtml = ''
+    if ($null -ne $HistoryData -and @($HistoryData).Count -gt 0) {
+        $trendPoints = @(foreach ($entry in @($HistoryData)) {
+                $allScore = $entry.Scores | Where-Object { $_.Framework -eq 'All' } | Select-Object -First 1
+                if ($null -eq $allScore) { continue }
+                $tFail = [int]$allScore.FailedControls
+                $tWarn = [int]$allScore.UnknownControls
+                $tSkip = [int]$allScore.SkippedControls
+                $tTotal = [int]$allScore.TotalControls
+                $tPass = [math]::Max(0, $tTotal - $tFail - $tWarn - $tSkip)
+                $dateLabel = ''
+                try {
+                    $ts = [datetime]::Parse($entry.Metadata.AnalysisTimestamp)
+                    $dateLabel = $ts.ToString('d MMM')
+                }
+                catch { $dateLabel = '' }
+                '{{"d":"{0}","p":{1},"w":{2},"f":{3},"s":{4}}}' -f $dateLabel, $tPass, $tWarn, $tFail, $tSkip
+            })
+        $trendJson = ('[' + ($trendPoints -join ',') + ']') -replace '"', '&quot;'
+        $trendCardHtml = ('<div class="score-card trend-card" data-trend="{0}"><canvas class="trend-canvas" width="420" height="160"></canvas><p class="card-label">Compliance Trend</p></div>' -f $trendJson)
     }
 
     $findingGroups = @{}
@@ -460,6 +486,10 @@ function New-EDCAHtmlReport {
         .score-card.active { outline: 2px solid #3b82f6; box-shadow: 0 4px 14px rgba(59,130,246,.35); }
         .donut-canvas { display: block; }
         .card-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; margin: 6px 0 0; color: var(--id-color); text-align: center; }
+        /* Trend chart card — spans 3 gauge widths */
+        .trend-card { width: 452px; min-width: 452px; cursor: default; }
+        .trend-card:hover { transform: none; box-shadow: 0 4px 14px rgba(0,0,0,.08); }
+        .trend-canvas { display: block; }
         /* RAG icons */
         .rag-icon { font-size: 15px; flex-shrink: 0; }
         .rag-pass { color: #16a34a; }
@@ -574,6 +604,7 @@ function New-EDCAHtmlReport {
             <h2>Framework Scoreboard</h2>
             <div class="score-grid">
                 $($scoreCards.ToString())
+                $trendCardHtml
             </div>
         </section>
 
@@ -682,6 +713,104 @@ function New-EDCAHtmlReport {
                     c2.parentElement.addEventListener('mouseleave', function () { tip.style.display = 'none'; });
                 }(canvas, pass, warn, fail, skip, label));
             }
+        })();
+
+        /* ── Compliance Trend stacked bar chart ── */
+        (function () {
+            var trendCard = document.querySelector('.trend-card');
+            if (!trendCard) { return; }
+            var canvas = trendCard.querySelector('canvas.trend-canvas');
+            if (!canvas) { return; }
+            var raw = (trendCard.getAttribute('data-trend') || '[]').replace(/&quot;/g, '"');
+            var entries;
+            try { entries = JSON.parse(raw); } catch (e) { return; }
+            if (!entries || entries.length === 0) { return; }
+
+            var W = canvas.width, H = canvas.height;
+            var padL = 32, padR = 10, padT = 10, padB = 28;
+            var chartW = W - padL - padR;
+            var chartH = H - padT - padB;
+            var ctx = canvas.getContext('2d');
+
+            /* derive max total for Y axis */
+            var maxTotal = 0;
+            for (var i = 0; i < entries.length; i++) {
+                var t = (entries[i].p || 0) + (entries[i].w || 0) + (entries[i].f || 0) + (entries[i].s || 0);
+                if (t > maxTotal) { maxTotal = t; }
+            }
+            if (maxTotal === 0) { return; }
+            /* round up to nearest 10 for a clean axis */
+            var yMax = Math.ceil(maxTotal / 10) * 10 || 10;
+
+            var textColor = getComputedStyle(document.documentElement).getPropertyValue('--donut-text').trim() || '#64748b';
+            ctx.font = '10px Segoe UI, Arial, sans-serif';
+            ctx.fillStyle = textColor;
+            ctx.strokeStyle = 'rgba(148,163,184,.25)';
+
+            /* Y-axis grid lines + labels (0, 25%, 50%, 75%, 100% of yMax) */
+            var steps = 4;
+            for (var s = 0; s <= steps; s++) {
+                var yVal = Math.round(yMax * s / steps);
+                var yPx  = padT + chartH - Math.round((yVal / yMax) * chartH);
+                ctx.beginPath();
+                ctx.moveTo(padL, yPx);
+                ctx.lineTo(padL + chartW, yPx);
+                ctx.stroke();
+                ctx.textAlign = 'right';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(yVal, padL - 4, yPx);
+            }
+
+            /* bars */
+            var n = entries.length;
+            var barW = Math.min(Math.floor(chartW / n) - 4, 48);
+            var slotW = chartW / n;
+            var colors = { p: '#16a34a', w: '#d97706', f: '#dc2626', s: '#94a3b8' };
+            var order  = ['s', 'f', 'w', 'p']; /* bottom: skip, then fail, warn, pass on top */
+
+            /* hover tooltip */
+            var tip = document.createElement('div');
+            tip.style.cssText = 'display:none;position:fixed;background:#0f172a;color:#f8fafc;font-size:12px;padding:6px 10px;border-radius:8px;pointer-events:none;white-space:nowrap;z-index:9999;line-height:1.6;';
+            document.body.appendChild(tip);
+
+            for (var bi = 0; bi < n; bi++) {
+                var e   = entries[bi];
+                var xL  = padL + Math.round(bi * slotW + (slotW - barW) / 2);
+                var yBase = padT + chartH;
+                var stack = 0;
+                for (var oi = 0; oi < order.length; oi++) {
+                    var key = order[oi];
+                    var val = e[key] || 0;
+                    if (val <= 0) { continue; }
+                    var barH = Math.round((val / yMax) * chartH);
+                    ctx.fillStyle = colors[key];
+                    ctx.fillRect(xL, yBase - stack - barH, barW, barH);
+                    stack += barH;
+                }
+                /* x-axis date label */
+                ctx.fillStyle = textColor;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'top';
+                ctx.fillText(e.d || '', xL + barW / 2, padT + chartH + 4);
+            }
+
+            /* mouse hover interaction */
+            canvas.addEventListener('mousemove', function (ev) {
+                var rect = canvas.getBoundingClientRect();
+                var mx   = ev.clientX - rect.left;
+                var idx  = Math.floor((mx - padL) / slotW);
+                if (idx < 0 || idx >= n) { tip.style.display = 'none'; return; }
+                var e = entries[idx];
+                tip.innerHTML = '<strong>' + (e.d || '') + '</strong><br>' +
+                    '&#10004;&nbsp;Pass:&nbsp;' + (e.p || 0) + '<br>' +
+                    '&#9888;&nbsp;Unknown:&nbsp;' + (e.w || 0) + '<br>' +
+                    '&#10006;&nbsp;Fail:&nbsp;' + (e.f || 0) + '<br>' +
+                    '&#8856;&nbsp;Skip:&nbsp;' + (e.s || 0);
+                tip.style.display = 'block';
+                tip.style.left = (ev.clientX + 14) + 'px';
+                tip.style.top  = (ev.clientY - 36) + 'px';
+            });
+            canvas.addEventListener('mouseleave', function () { tip.style.display = 'none'; });
         })();
 
         /* ── Modal ── */

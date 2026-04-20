@@ -503,6 +503,23 @@ ConvertTo-EDCAJson -InputObject $analysis | Set-Content -Path $analysisOut -Enco
 Write-EDCALog -Message ('Analysis JSON exported: {0}' -f $analysisOut)
 Write-Verbose ('Analysis produced {0} finding(s).' -f @($analysis.Findings).Count)
 
+# Load up to 10 most-recent analysis files (including the one just written) for the trend chart.
+$historyData = @(
+    Get-ChildItem -Path $resolvedDataPath -Filter 'analysis_*.json' -ErrorAction SilentlyContinue |
+        Sort-Object -Property Name |
+        Select-Object -Last 10 |
+        ForEach-Object {
+            try {
+                $parsed = Get-Content -Path $_.FullName -Raw -ErrorAction Stop | ConvertFrom-Json
+                if (($parsed.PSObject.Properties.Name -contains 'Scores') -and
+                    ($parsed.PSObject.Properties.Name -contains 'Metadata')) {
+                    $parsed
+                }
+            }
+            catch { }
+        }
+)
+
 $outputAnalysis = $analysis
 if ($Framework -and $Framework.Count -gt 0) {
     $filteredFindings = @($analysis.Findings | Where-Object {
@@ -521,7 +538,7 @@ if ($Framework -and $Framework.Count -gt 0) {
 New-EDCADirectoryIfMissing -Path $resolvedOutputPath
 Write-Verbose 'Starting HTML report generation phase.'
 $reportOut = Join-Path -Path $resolvedOutputPath -ChildPath ('report_{0}.html' -f $analysisStamp)
-$reportPath = New-EDCAHtmlReport -CollectionData $collectionData -AnalysisData $outputAnalysis -OutputFile $reportOut
+$reportPath = New-EDCAHtmlReport -CollectionData $collectionData -AnalysisData $outputAnalysis -HistoryData $historyData -OutputFile $reportOut
 Write-EDCALog -Message ('HTML report generated: {0}' -f $reportPath)
 
 if ($RemediationScript) {
