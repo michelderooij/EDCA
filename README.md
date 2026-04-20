@@ -57,6 +57,9 @@ From the `EDCA` folder:
 # Collect + analysis + HTML (both phases run by default)
 .\EDCA.ps1 -Servers EXCH01,EXCH02
 
+# Collect + analysis + HTML for the local server only
+.\EDCA.ps1 -Local
+
 # Collect only (no report), limit parallel collection jobs
 .\EDCA.ps1 -Collect -Servers EXCH01,EXCH02 -ThrottleLimit 2
 

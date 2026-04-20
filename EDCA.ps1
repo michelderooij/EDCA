@@ -99,6 +99,10 @@ param(
 
     [Parameter(ParameterSetName = 'Default')]
     [Parameter(ParameterSetName = 'Collect')]
+    [switch]$Local,
+
+    [Parameter(ParameterSetName = 'Default')]
+    [Parameter(ParameterSetName = 'Collect')]
     [ValidateRange(1, 128)]
     [int]$ThrottleLimit = 4,
 
@@ -197,6 +201,10 @@ $collectionData = $null
 
 if ($doCollect) {
     Write-EDCALog -Message 'Starting collection mode.'
+    if ($Local) {
+        $Servers = @($env:COMPUTERNAME) + @($Servers)
+        Write-Verbose ('Local switch set; added {0} to target list.' -f $env:COMPUTERNAME)
+    }
     Write-Verbose ('Collect mode target count from parameters: {0}' -f @($Servers).Count)
     $collectionData = Invoke-EDCACollection -Servers $Servers -ThrottleLimit $ThrottleLimit -ToolVersion $EDCAVersion
 
@@ -506,18 +514,18 @@ Write-Verbose ('Analysis produced {0} finding(s).' -f @($analysis.Findings).Coun
 # Load up to 10 most-recent analysis files (including the one just written) for the trend chart.
 $historyData = @(
     Get-ChildItem -Path $resolvedDataPath -Filter 'analysis_*.json' -ErrorAction SilentlyContinue |
-        Sort-Object -Property Name |
-        Select-Object -Last 10 |
-        ForEach-Object {
-            try {
-                $parsed = Get-Content -Path $_.FullName -Raw -ErrorAction Stop | ConvertFrom-Json
-                if (($parsed.PSObject.Properties.Name -contains 'Scores') -and
-                    ($parsed.PSObject.Properties.Name -contains 'Metadata')) {
-                    $parsed
-                }
+    Sort-Object -Property Name |
+    Select-Object -Last 10 |
+    ForEach-Object {
+        try {
+            $parsed = Get-Content -Path $_.FullName -Raw -ErrorAction Stop | ConvertFrom-Json
+            if (($parsed.PSObject.Properties.Name -contains 'Scores') -and
+                ($parsed.PSObject.Properties.Name -contains 'Metadata')) {
+                $parsed
             }
-            catch { }
         }
+        catch { }
+    }
 )
 
 $outputAnalysis = $analysis
