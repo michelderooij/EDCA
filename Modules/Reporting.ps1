@@ -226,7 +226,7 @@ function New-EDCAHtmlReport {
                 '{' + $parts + '}'
             })
         $trendJson = ('[' + ($trendPoints -join ',') + ']') -replace '"', '&quot;'
-        $trendCardHtml = ('<div class="score-card trend-card" data-trend="{0}"><canvas class="trend-canvas" width="264" height="160"></canvas><p class="card-label">Total Compliance Trend</p></div>' -f $trendJson)
+        $trendCardHtml = ('<div class="score-card trend-card" data-trend="{0}"><canvas class="trend-canvas" width="288" height="160"></canvas><p class="card-label">Total Compliance Trend</p></div>' -f $trendJson)
     }
 
     $findingGroups = @{}
@@ -493,8 +493,8 @@ function New-EDCAHtmlReport {
         .score-card.active { outline: 2px solid #3b82f6; box-shadow: 0 4px 14px rgba(59,130,246,.35); }
         .donut-canvas { display: block; }
         .card-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; margin: 6px 0 0; color: var(--id-color); text-align: center; }
-        /* Trend chart card — spans 2 gauge widths */
-        .trend-card { width: 296px; min-width: 296px; cursor: default; }
+        /* Trend chart card — same width as 2 gauge cards (2×152px + 16px gap) */
+        .trend-card { width: 320px; min-width: 320px; cursor: default; }
         .trend-card:hover { transform: none; box-shadow: 0 4px 14px rgba(0,0,0,.08); }
         .trend-canvas { display: block; }
         /* RAG icons */
