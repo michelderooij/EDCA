@@ -183,7 +183,7 @@ function New-EDCAHtmlReport {
     }
 
     # Build framework filter dropdown options from scores actually present in this report.
-    $frameworkLabelMap = @{ 'ENISA' = 'ENISA/NIS2' }
+    $frameworkLabelMap = @{}
     $frameworkOptions = New-Object System.Text.StringBuilder
     foreach ($score in $AnalysisData.Scores) {
         if ($score.Framework -eq 'All') { continue }

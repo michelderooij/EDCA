@@ -56,7 +56,7 @@
 .PARAMETER Framework
     One or more framework names to include in the analysis. When specified, only controls tagged
     with at least one of the supplied frameworks are evaluated. Valid values are:
-    Best Practice, ANSSI, BSI, CIS, CISA, DISA, ENISA.
+    Best Practice, ANSSI, BSI, CIS, CISA, DISA, NIS2.
     When omitted, all controls are evaluated regardless of framework.
 
 .PARAMETER Update
@@ -79,7 +79,7 @@
     .\EDCA.ps1 -Report -DataPath .\CustomData
 
 .EXAMPLE
-    .\EDCA.ps1 -Servers EX01,EX02 -Framework ENISA
+    .\EDCA.ps1 -Servers EX01,EX02 -Framework NIS2
 
 .EXAMPLE
     .\EDCA.ps1 -Report -Framework 'Best Practice'
@@ -120,7 +120,7 @@ param(
 
     [switch]$Update,
 
-    [ValidateSet('Best Practice', 'ANSSI', 'BSI', 'CIS', 'CISA', 'DISA', 'ENISA')]
+    [ValidateSet('Best Practice', 'ANSSI', 'BSI', 'CIS', 'CISA', 'DISA', 'NIS2')]
     [string[]]$Framework
 )
 

@@ -5,7 +5,7 @@ PowerShell-based tool to collect Exchange on-premises deployment data, evaluate 
 ## Key Features
 
 - Supports Exchange 2016, Exchange 2019, and Exchange SE (Subscription Edition).
-- Evaluates controls against seven compliance frameworks: [Best Practice](#frameworks), [ANSSI](#frameworks) 🇫🇷, [BSI](#frameworks) 🇩🇪, [CIS](#frameworks) 🇺🇸, [CISA](#frameworks) 🇺🇸, [DISA](#frameworks) 🇺🇸, and [ENISA/NIS2](#frameworks) 🇪🇺.
+- Evaluates controls against seven compliance frameworks: [Best Practice](#frameworks), [ANSSI](#frameworks) 🇫🇷, [BSI](#frameworks) 🇩🇪, [CIS](#frameworks) 🇺🇸, [CISA](#frameworks) 🇺🇸, [DISA](#frameworks) 🇺🇸, and [NIS2](#frameworks) 🇪🇺.
 - Interactive HTML report with per-framework scores, colour-coded findings, search, and filters.
 - Collect data from all discovered Exchange servers, or a specific set via `-Servers`.
 - Separate collect (`-Collect`) and report (`-Report`) phases, or both in a single run.
@@ -100,11 +100,11 @@ EDCA evaluates controls against the following compliance frameworks. Each contro
 | **CIS** 🇺🇸 | [CIS Microsoft Exchange Server 2019 Benchmark](https://www.cisecurity.org/benchmark/microsoft_exchange_server)<br>[CIS Microsoft Windows Server 2019/2022 Benchmark](https://www.cisecurity.org/benchmark/microsoft_windows_server)<br>[CIS Controls v8](https://www.cisecurity.org/insights/white-papers/cis-controls-v8) | v1.0.0<br>v4.0.0 (2019) · v5.0.0 (2022)<br>v8 | [cisecurity.org](https://www.cisecurity.org/benchmark/microsoft_exchange_server) | Free, non-commercial use only |
 | **CISA** 🇺🇸 | [Microsoft Exchange Server Security Best Practices Guide](https://www.cisa.gov/sites/default/files/publications/CSI_MS_Exchange_Security_Best_Practices_Final.pdf)<br>[Advisory AA21-062A: Mitigate Exchange Server Vulnerabilities](https://www.cisa.gov/news-events/cybersecurity-advisories/aa21-062a)<br>[Binding Operational Directive 18-01](https://www.cisa.gov/binding-operational-directive-18-01)<br>[Known Exploited Vulnerabilities Catalog](https://www.cisa.gov/known-exploited-vulnerabilities-catalog) | 2021<br>March 2021<br>October 2017<br>Ongoing | [cisa.gov](https://www.cisa.gov/) | Public domain (US Government) |
 | **DISA** 🇺🇸 | [Microsoft Exchange 2019 Mailbox Server STIG](https://public.cyber.mil/stigs/downloads/)<br>[Microsoft Exchange 2016 Mailbox Server STIG](https://public.cyber.mil/stigs/downloads/) | 2025-05-14<br>2023-12-18 | [public.cyber.mil/stigs](https://public.cyber.mil/stigs/downloads/) | Public domain (US Government) |
-| **ENISA** 🇪🇺 | [NIS2 Directive (EU) 2022/2555](https://eur-lex.europa.eu/eli/dir/2022/2555/oj)<br>[NCSC-NL TLS Guidelines 2025-05](https://www.ncsc.nl/transport-layer-security/ICT-beveiligingsrichtlijnen-voor-TLS) | December 2022<br>April 2026 | [eur-lex.europa.eu](https://eur-lex.europa.eu/eli/dir/2022/2555/oj)<br>[ncsc.nl](https://www.ncsc.nl/) | Open (EU law)<br>Free (Dutch Government) |
+| **NIS2** 🇪🇺🇳🇱 | [NIS2 Directive (EU) 2022/2555](https://eur-lex.europa.eu/eli/dir/2022/2555/oj)<br>[NCSC-NL TLS Guidelines 2025-05](https://www.ncsc.nl/transport-layer-security/ICT-beveiligingsrichtlijnen-voor-TLS) | December 2022<br>April 2026 | [eur-lex.europa.eu](https://eur-lex.europa.eu/eli/dir/2022/2555/oj)<br>[ncsc.nl](https://www.ncsc.nl/) | Open (EU law)<br>Free (Dutch Government) |
 
 ## Screenshots
 
-**Report dashboard** — framework scores (Total, Best Practice, ANSSI, BSI, CIS, CISA, ENISA, DISA) with colour-coded donut charts, and findings grouped by category with RAG indicators, search, and filters:
+**Report dashboard** — framework scores (Total, Best Practice, ANSSI, BSI, CIS, CISA, NIS2, DISA) with colour-coded donut charts, and findings grouped by category with RAG indicators, search, and filters:
 
 ![EDCA report dashboard](Docs/EDCA_capture1.jpg)
 

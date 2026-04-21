@@ -10,7 +10,7 @@
     "severityWeight": 7,
     "frameworks": [
       "Best Practice",
-      "ENISA",
+      "NIS2",
       "DISA",
       "ANSSI",
       "BSI"
@@ -59,7 +59,7 @@
     "severityWeight": 8,
     "frameworks": [
       "Best Practice",
-      "ENISA",
+      "NIS2",
       "ANSSI"
     ],
     "references": [
@@ -97,7 +97,7 @@
     "severityWeight": 8,
     "frameworks": [
       "Best Practice",
-      "ENISA",
+      "NIS2",
       "ANSSI",
       "BSI"
     ],
@@ -174,7 +174,7 @@
     "severityWeight": 8,
     "frameworks": [
       "Best Practice",
-      "ENISA",
+      "NIS2",
       "CIS",
       "CISA",
       "DISA",
@@ -237,7 +237,7 @@
     "severityWeight": 8,
     "frameworks": [
       "Best Practice",
-      "ENISA",
+      "NIS2",
       "CIS",
       "CISA",
       "DISA",
@@ -296,7 +296,7 @@
     "severityWeight": 7,
     "frameworks": [
       "Best Practice",
-      "ENISA",
+      "NIS2",
       "ANSSI",
       "BSI"
     ],
@@ -352,7 +352,7 @@
     "severityWeight": 6,
     "frameworks": [
       "Best Practice",
-      "ENISA"
+      "NIS2"
     ],
     "references": [
       {
@@ -433,7 +433,7 @@
     "severityWeight": 7,
     "frameworks": [
       "Best Practice",
-      "ENISA",
+      "NIS2",
       "ANSSI",
       "BSI"
     ],
@@ -477,7 +477,7 @@
     "severityWeight": 8,
     "frameworks": [
       "Best Practice",
-      "ENISA",
+      "NIS2",
       "ANSSI",
       "BSI"
     ],
@@ -525,7 +525,7 @@
     "severityWeight": 8,
     "frameworks": [
       "Best Practice",
-      "ENISA",
+      "NIS2",
       "ANSSI",
       "BSI"
     ],
@@ -573,7 +573,7 @@
     "severityWeight": 8,
     "frameworks": [
       "Best Practice",
-      "ENISA",
+      "NIS2",
       "ANSSI",
       "BSI"
     ],
@@ -827,7 +827,7 @@
     "severityWeight": 9,
     "frameworks": [
       "Best Practice",
-      "ENISA",
+      "NIS2",
       "CISA",
       "BSI"
     ],
@@ -2237,7 +2237,7 @@
     "severityWeight": 6,
     "frameworks": [
       "Best Practice",
-      "ENISA",
+      "NIS2",
       "CIS",
       "DISA",
       "ANSSI",
@@ -3361,7 +3361,7 @@
     "severityWeight": 8,
     "frameworks": [
       "Best Practice",
-      "ENISA"
+      "NIS2"
     ],
     "references": [
       {
@@ -3423,7 +3423,7 @@
     "severityWeight": 6,
     "frameworks": [
       "Best Practice",
-      "ENISA"
+      "NIS2"
     ],
     "references": [
       {
@@ -4164,7 +4164,7 @@
     "severityWeight": 10,
     "frameworks": [
       "Best Practice",
-      "ENISA",
+      "NIS2",
       "BSI",
       "CIS",
       "CISA"
@@ -4506,7 +4506,7 @@
     "severityWeight": 4,
     "frameworks": [
       "Best Practice",
-      "ENISA",
+      "NIS2",
       "DISA",
       "ANSSI",
       "BSI"
@@ -4639,7 +4639,7 @@
     "frameworks": [
       "Best Practice",
       "CIS",
-      "ENISA",
+      "NIS2",
       "ANSSI",
       "BSI"
     ],
@@ -5460,7 +5460,7 @@
     "severityWeight": 8,
     "frameworks": [
       "Best Practice",
-      "ENISA"
+      "NIS2"
     ],
     "references": [
       {
@@ -5767,7 +5767,8 @@
     "frameworks": [
       "Best Practice",
       "BSI",
-      "CIS"
+      "CIS",
+      "NIS2"
     ],
     "references": [
       {
@@ -5883,7 +5884,8 @@
       "Best Practice",
       "BSI",
       "CIS",
-      "DISA"
+      "DISA",
+      "NIS2"
     ],
     "references": [
       {
@@ -6120,7 +6122,8 @@
     "severityWeight": 6,
     "frameworks": [
       "DISA",
-      "BSI"
+      "BSI",
+      "NIS2"
     ],
     "references": [
       {
@@ -6191,7 +6194,7 @@
     "severityWeight": 8,
     "frameworks": [
       "Best Practice",
-      "ENISA",
+      "NIS2",
       "CIS",
       "CISA"
     ],
@@ -6234,7 +6237,7 @@
     "severityWeight": 7,
     "frameworks": [
       "Best Practice",
-      "ENISA",
+      "NIS2",
       "CISA"
     ],
     "references": [
@@ -6272,7 +6275,7 @@
     "severityWeight": 7,
     "frameworks": [
       "Best Practice",
-      "ENISA",
+      "NIS2",
       "CISA"
     ],
     "references": [
@@ -6310,7 +6313,7 @@
     "severityWeight": 8,
     "frameworks": [
       "Best Practice",
-      "ENISA",
+      "NIS2",
       "CIS",
       "CISA"
     ],
@@ -6651,7 +6654,7 @@
       "DISA",
       "ANSSI",
       "BSI",
-      "ENISA"
+      "NIS2"
     ],
     "references": [
       {

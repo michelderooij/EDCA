@@ -1,6 +1,9 @@
 # Changelog
 
 ## v0.7 Preview
+- **ENISA framework renamed to NIS2**: the `ENISA` framework tag has been renamed to `NIS2` across all controls, code, and documentation. The framework was already exclusively backed by the NIS2 Directive (EU) 2022/2555 and the NCSC-NL TLS Guidelines 2025-05 — the ENISA label was a misnomer. Use `-Framework NIS2` where you previously used `-Framework ENISA`.
+- **NIS2 framework expanded**: 3 additional Transport Security controls now carry the `NIS2` tag — `EDCA-TLS-011` (external send connector STARTTLS), `EDCA-TLS-014` (domain security / mutual TLS), and `EDCA-TLS-021` (internal receive connectors require encryption). Total NIS2-tagged controls: 27.
+- **Edge Transport control IDs corrected**: the 7 Edge-specific controls were previously labelled `EDCA-EDGE-001` through `EDCA-EDGE-007`. They have been renamed to `EDCA-TLS-030` through `EDCA-TLS-036` to match their category (Transport Security). Duplicate entries introduced during a manual edit were also removed.
 - **Edge Transport server support**: EDCA now can collect and assesses Edge Transport servers in addition to Mailbox servers.
   - **Collection** (`Collection.ps1`): Edge servers are detected by their `ServerRole` property. Collection runs in-process locally (no WinRM session) when the target is the local machine, allowing EDCA to be invoked directly on the Edge server. An Edge-specific endpoint block collects anti-spam configuration, Edge subscriptions, send connectors, and certificates.
   - **Analysis** (`Analysis.ps1`): Role-aware skip logic skips controls not applicable to the server role being evaluated (e.g. IIS/OWA/DAG controls are skipped on Edge servers; Edge-specific controls are skipped on Mailbox servers). All 173 existing controls now carry a `roles` field in `Config/controls.json`.
