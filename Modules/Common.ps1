@@ -81,6 +81,7 @@ function Test-EDCAServerRemoteConnectivity {
         return [pscustomobject]@{
             Server                = $Server
             IsLocal               = $true
+            TcpPort80Reachable    = $true
             CanConnect            = $true
             CanReadRemoteRegistry = $true
             Details               = 'Local execution target.'
@@ -89,15 +90,51 @@ function Test-EDCAServerRemoteConnectivity {
 
     $details = @()
     $canConnect = $true
+    $tcpPort80Reachable = $false
     $canReadRemoteRegistry = $false
 
+    # Fast TCP port 80 reachability check — avoids waiting for WinRM timeouts when the
+    # server is simply unreachable. A 2-second window is enough for LAN/WAN targets.
     try {
-        Write-Verbose ('Connectivity precheck for {0}: probing WinRM endpoint.' -f $Server)
-        Test-WSMan -ComputerName $Server -ErrorAction Stop | Out-Null
+        Write-Verbose ('Connectivity precheck for {0}: TCP port 80 reachability check.' -f $Server)
+        $tcpClient = [System.Net.Sockets.TcpClient]::new()
+        try {
+            $connectTask = $tcpClient.ConnectAsync($Server, 80)
+            if (-not $connectTask.Wait(2000)) {
+                $canConnect = $false
+                $details += 'TCP port 80 reachability check timed out after 2 seconds.'
+            }
+            elseif ($connectTask.IsFaulted) {
+                $canConnect = $false
+                $innerMsg = if ($null -ne $connectTask.Exception -and $null -ne $connectTask.Exception.InnerException) {
+                    $connectTask.Exception.InnerException.Message
+                }
+                else { [string]$connectTask.Exception }
+                $details += ('TCP port 80 reachability check failed: {0}' -f $innerMsg)
+            }
+            else {
+                $tcpPort80Reachable = $true
+                $details += 'TCP port 80 reachability check passed.'
+            }
+        }
+        finally {
+            $tcpClient.Dispose()
+        }
     }
     catch {
         $canConnect = $false
-        $details += ('WinRM probe failed: {0}' -f $_.Exception.Message)
+        $details += ('TCP port 80 reachability check error: {0}' -f $_.Exception.Message)
+    }
+
+    if ($canConnect) {
+        try {
+            Write-Verbose ('Connectivity precheck for {0}: probing WinRM endpoint.' -f $Server)
+            Test-WSMan -ComputerName $Server -ErrorAction Stop | Out-Null
+        }
+        catch {
+            $canConnect = $false
+            $details += ('WinRM probe failed: {0}' -f $_.Exception.Message)
+        }
     }
 
     if ($canConnect) {
@@ -127,6 +164,7 @@ function Test-EDCAServerRemoteConnectivity {
     return [pscustomobject]@{
         Server                = $Server
         IsLocal               = $false
+        TcpPort80Reachable    = $tcpPort80Reachable
         CanConnect            = $canConnect
         CanReadRemoteRegistry = $canReadRemoteRegistry
         Details               = ($details -join ' ')

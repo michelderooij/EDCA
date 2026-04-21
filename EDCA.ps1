@@ -199,6 +199,7 @@ if ($Update) {
 
 $collectionData = $null
 $rawOrgId = $null
+$selectedOrgId = $null
 
 if ($doCollect) {
     Write-EDCALog -Message 'Starting collection mode.'
