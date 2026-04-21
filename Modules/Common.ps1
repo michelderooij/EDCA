@@ -93,16 +93,16 @@ function Test-EDCAServerRemoteConnectivity {
     $tcpPort80Reachable = $false
     $canReadRemoteRegistry = $false
 
-    # Fast TCP port 80 reachability check — avoids waiting for WinRM timeouts when the
-    # server is simply unreachable. A 2-second window is enough for LAN/WAN targets.
+    # Fast TCP port 80 reachability check — avoids waiting for timeouts when the
+    # server is simply unreachable. A 5-second window should be enough for LAN/WAN targets.
     try {
         Write-Verbose ('Connectivity precheck for {0}: TCP port 80 reachability check.' -f $Server)
         $tcpClient = [System.Net.Sockets.TcpClient]::new()
         try {
             $connectTask = $tcpClient.ConnectAsync($Server, 80)
-            if (-not $connectTask.Wait(2000)) {
+            if (-not $connectTask.Wait(5000)) {
                 $canConnect = $false
-                $details += 'TCP port 80 reachability check timed out after 2 seconds.'
+                $details += 'TCP port 80 reachability check timed out after 5 seconds.'
             }
             elseif ($connectTask.IsFaulted) {
                 $canConnect = $false
