@@ -2643,7 +2643,20 @@ function Test-EDCAControl {
         'EDCA-TLS-033',
         'EDCA-TLS-034',
         'EDCA-TLS-035',
-        'EDCA-TLS-036'
+        'EDCA-TLS-036',
+        'EDCA-DATA-019',
+        'EDCA-TLS-037',
+        'EDCA-TLS-038',
+        'EDCA-TLS-039',
+        'EDCA-TLS-040',
+        'EDCA-TLS-041',
+        'EDCA-TLS-042',
+        'EDCA-TLS-043',
+        'EDCA-TLS-044',
+        'EDCA-TLS-045',
+        'EDCA-TLS-046',
+        'EDCA-TLS-047',
+        'EDCA-TLS-048'
     )
 
     $exchangeBuilds = $null
@@ -7267,6 +7280,386 @@ function Test-EDCAControl {
                         else {
                             $status = 'Fail'
                             $evidence = 'No certificate has the SMTP service assigned. The Edge server will not present a certificate for STARTTLS. Assign with: Enable-ExchangeCertificate -Thumbprint <thumb> -Services SMTP'
+                        }
+                    }
+                }
+            }
+            'EDCA-DATA-019' {
+                $val64 = $null
+                $val32 = $null
+                if (($server.PSObject.Properties.Name -contains 'OS') -and $null -ne $server.OS) {
+                    if ($server.OS.PSObject.Properties.Name -contains 'SchUseStrongCrypto64') { $val64 = $server.OS.SchUseStrongCrypto64 }
+                    if ($server.OS.PSObject.Properties.Name -contains 'SchUseStrongCrypto32') { $val32 = $server.OS.SchUseStrongCrypto32 }
+                }
+                $ok64 = ($null -ne $val64) -and ([int]$val64 -eq 1)
+                $ok32 = ($null -ne $val32) -and ([int]$val32 -eq 1)
+                if ($null -eq $val64 -and $null -eq $val32) {
+                    $status = 'Unknown'
+                    $evidence = 'SchUseStrongCrypto registry data unavailable.'
+                }
+                elseif ($ok64 -and $ok32) {
+                    $status = 'Pass'
+                    $evidence = 'SchUseStrongCrypto is set to 1 in both the 64-bit and 32-bit (WoW6432Node) .NET Framework v4.0.30319 registry paths.'
+                }
+                else {
+                    $missing = @()
+                    if (-not $ok64) { $missing += 'HKLM:\SOFTWARE\Microsoft\.NetFramework\v4.0.30319 (64-bit)' }
+                    if (-not $ok32) { $missing += 'HKLM:\SOFTWARE\Wow6432Node\Microsoft\.NetFramework\v4.0.30319 (32-bit)' }
+                    $status = 'Fail'
+                    $evidence = Format-EDCAEvidenceWithElements -Summary 'SchUseStrongCrypto is not set to 1 in the following paths:' -Elements $missing
+                }
+            }
+            'EDCA-TLS-037' {
+                $edgeData = $null
+                if (($server.Exchange.PSObject.Properties.Name -contains 'EdgeData') -and $null -ne $server.Exchange.EdgeData) {
+                    $edgeData = $server.Exchange.EdgeData
+                }
+                if ($null -eq $edgeData -or $null -eq $edgeData.ReceiveConnectors) {
+                    $status = 'Unknown'
+                    $evidence = 'Receive connector data unavailable.'
+                }
+                else {
+                    $connectors = @($edgeData.ReceiveConnectors)
+                    if ($connectors.Count -eq 0) {
+                        $status = 'Unknown'
+                        $evidence = 'No Receive connectors found on this Edge server.'
+                    }
+                    else {
+                        $notEnabled = @($connectors | Where-Object {
+                                ($_.PSObject.Properties.Name -contains 'DomainSecureEnabled') -and
+                                [bool]$_.DomainSecureEnabled -eq $false
+                            })
+                        if ($notEnabled.Count -eq 0) {
+                            $status = 'Pass'
+                            $evidence = ('All {0} Receive connector(s) have DomainSecureEnabled set to True.' -f $connectors.Count)
+                        }
+                        else {
+                            $status = 'Fail'
+                            $summary = ('{0} of {1} Receive connector(s) do not have DomainSecureEnabled:' -f $notEnabled.Count, $connectors.Count)
+                            $evidence = Format-EDCAEvidenceWithElements -Summary $summary -Elements @($notEnabled | ForEach-Object { [string]$_.Identity })
+                        }
+                    }
+                }
+            }
+            'EDCA-TLS-038' {
+                $edgeData = $null
+                if (($server.Exchange.PSObject.Properties.Name -contains 'EdgeData') -and $null -ne $server.Exchange.EdgeData) {
+                    $edgeData = $server.Exchange.EdgeData
+                }
+                if ($null -eq $edgeData -or $null -eq $edgeData.ReceiveConnectors) {
+                    $status = 'Unknown'
+                    $evidence = 'Receive connector data unavailable.'
+                }
+                else {
+                    $internetRc = @($edgeData.ReceiveConnectors | Where-Object {
+                            ($_.PSObject.Properties.Name -contains 'Bindings') -and
+                            ([string]$_.Bindings -match '0\.0\.0\.0:25' -or [string]$_.Bindings -match '\[::\]:25')
+                        })
+                    if ($internetRc.Count -eq 0) {
+                        $status = 'Unknown'
+                        $evidence = 'No internet-facing Receive connectors (port 25 on all interfaces) found; cannot evaluate TLS auth requirement.'
+                    }
+                    else {
+                        $noTls = @($internetRc | Where-Object {
+                                ($_.PSObject.Properties.Name -contains 'AuthMechanism') -and
+                                [string]$_.AuthMechanism -notmatch 'Tls'
+                            })
+                        if ($noTls.Count -eq 0) {
+                            $status = 'Pass'
+                            $evidence = ('All {0} internet-facing Receive connector(s) include Tls in AuthMechanism.' -f $internetRc.Count)
+                        }
+                        else {
+                            $status = 'Fail'
+                            $summary = ('{0} internet-facing Receive connector(s) do not include Tls in AuthMechanism:' -f $noTls.Count)
+                            $evidence = Format-EDCAEvidenceWithElements -Summary $summary -Elements @($noTls | ForEach-Object { '{0} (AuthMechanism: {1})' -f [string]$_.Identity, [string]$_.AuthMechanism })
+                        }
+                    }
+                }
+            }
+            'EDCA-TLS-039' {
+                $edgeData = $null
+                if (($server.Exchange.PSObject.Properties.Name -contains 'EdgeData') -and $null -ne $server.Exchange.EdgeData) {
+                    $edgeData = $server.Exchange.EdgeData
+                }
+                if ($null -eq $edgeData -or $null -eq $edgeData.ReceiveConnectors) {
+                    $status = 'Unknown'
+                    $evidence = 'Receive connector data unavailable.'
+                }
+                else {
+                    $internalRc = @($edgeData.ReceiveConnectors | Where-Object {
+                            ($_.PSObject.Properties.Name -contains 'Bindings') -and
+                            [string]$_.Bindings -notmatch '0\.0\.0\.0:25' -and
+                            [string]$_.Bindings -notmatch '\[::\]:25'
+                        })
+                    if ($internalRc.Count -eq 0) {
+                        $status = 'Unknown'
+                        $evidence = 'No internal Receive connectors identified; cannot evaluate TLS requirement.'
+                    }
+                    else {
+                        $noTls = @($internalRc | Where-Object {
+                                ($_.PSObject.Properties.Name -contains 'RequireTLS') -and
+                                [bool]$_.RequireTLS -eq $false
+                            })
+                        if ($noTls.Count -eq 0) {
+                            $status = 'Pass'
+                            $evidence = ('All {0} internal Receive connector(s) require TLS.' -f $internalRc.Count)
+                        }
+                        else {
+                            $status = 'Fail'
+                            $summary = ('{0} internal Receive connector(s) do not require TLS:' -f $noTls.Count)
+                            $evidence = Format-EDCAEvidenceWithElements -Summary $summary -Elements @($noTls | ForEach-Object { '{0} (RequireTLS: {1})' -f [string]$_.Identity, [string]$_.RequireTLS })
+                        }
+                    }
+                }
+            }
+            'EDCA-TLS-040' {
+                $edgeData = $null
+                if (($server.Exchange.PSObject.Properties.Name -contains 'EdgeData') -and $null -ne $server.Exchange.EdgeData) {
+                    $edgeData = $server.Exchange.EdgeData
+                }
+                if ($null -eq $edgeData -or $null -eq $edgeData.ReceiveConnectors) {
+                    $status = 'Unknown'
+                    $evidence = 'Receive connector data unavailable.'
+                }
+                else {
+                    $internalRc = @($edgeData.ReceiveConnectors | Where-Object {
+                            ($_.PSObject.Properties.Name -contains 'Bindings') -and
+                            [string]$_.Bindings -notmatch '0\.0\.0\.0:25' -and
+                            [string]$_.Bindings -notmatch '\[::\]:25'
+                        })
+                    if ($internalRc.Count -eq 0) {
+                        $status = 'Unknown'
+                        $evidence = 'No internal Receive connectors identified; cannot evaluate anonymous connection policy.'
+                    }
+                    else {
+                        $allowAnon = @($internalRc | Where-Object {
+                                ($_.PSObject.Properties.Name -contains 'PermissionGroups') -and
+                                [string]$_.PermissionGroups -match 'AnonymousUsers'
+                            })
+                        if ($allowAnon.Count -eq 0) {
+                            $status = 'Pass'
+                            $evidence = ('No internal Receive connector(s) allow anonymous connections.')
+                        }
+                        else {
+                            $status = 'Fail'
+                            $summary = ('{0} internal Receive connector(s) allow anonymous connections:' -f $allowAnon.Count)
+                            $evidence = Format-EDCAEvidenceWithElements -Summary $summary -Elements @($allowAnon | ForEach-Object { '{0} (PermissionGroups: {1})' -f [string]$_.Identity, [string]$_.PermissionGroups })
+                        }
+                    }
+                }
+            }
+            'EDCA-TLS-041' {
+                $edgeData = $null
+                if (($server.Exchange.PSObject.Properties.Name -contains 'EdgeData') -and $null -ne $server.Exchange.EdgeData) {
+                    $edgeData = $server.Exchange.EdgeData
+                }
+                if ($null -eq $edgeData -or $null -eq $edgeData.ReceiveConnectors) {
+                    $status = 'Unknown'
+                    $evidence = 'Receive connector data unavailable.'
+                }
+                else {
+                    $connectors = @($edgeData.ReceiveConnectors)
+                    $badBanner = @($connectors | Where-Object {
+                            ($_.PSObject.Properties.Name -contains 'Banner') -and
+                            -not [string]::IsNullOrWhiteSpace([string]$_.Banner) -and
+                            [string]$_.Banner -notmatch '^220 SMTP Server Ready'
+                        })
+                    if ($badBanner.Count -eq 0) {
+                        $status = 'Pass'
+                        $evidence = 'All Receive connectors present a generic SMTP banner that does not reveal server details.'
+                    }
+                    else {
+                        $status = 'Fail'
+                        $summary = ('{0} Receive connector(s) have a banner that may reveal server details:' -f $badBanner.Count)
+                        $evidence = Format-EDCAEvidenceWithElements -Summary $summary -Elements @($badBanner | ForEach-Object { '{0} (Banner: {1})' -f [string]$_.Identity, [string]$_.Banner })
+                    }
+                }
+            }
+            'EDCA-TLS-042' {
+                $edgeData = $null
+                if (($server.Exchange.PSObject.Properties.Name -contains 'EdgeData') -and $null -ne $server.Exchange.EdgeData) {
+                    $edgeData = $server.Exchange.EdgeData
+                }
+                if ($null -eq $edgeData) {
+                    $status = 'Unknown'
+                    $evidence = 'Send connector data unavailable.'
+                }
+                else {
+                    $connectors = @($edgeData.SendConnectors)
+                    if ($connectors.Count -eq 0) {
+                        $status = 'Unknown'
+                        $evidence = 'No send connectors found on this Edge server.'
+                    }
+                    else {
+                        $noSmartHost = @($connectors | Where-Object {
+                                ($_.PSObject.Properties.Name -contains 'DNSRoutingEnabled') -and
+                                [bool]$_.DNSRoutingEnabled -eq $true -and
+                                ($_.PSObject.Properties.Name -contains 'Enabled') -and
+                                [bool]$_.Enabled
+                            })
+                        if ($noSmartHost.Count -eq 0) {
+                            $status = 'Pass'
+                            $evidence = ('All {0} enabled send connector(s) route via a Smart Host (DNSRoutingEnabled is False).' -f $connectors.Count)
+                        }
+                        else {
+                            $status = 'Fail'
+                            $summary = ('{0} enabled send connector(s) use direct DNS routing instead of a Smart Host:' -f $noSmartHost.Count)
+                            $evidence = Format-EDCAEvidenceWithElements -Summary $summary -Elements @($noSmartHost | ForEach-Object { [string]$_.Identity })
+                        }
+                    }
+                }
+            }
+            'EDCA-TLS-043' {
+                $edgeData = $null
+                if (($server.Exchange.PSObject.Properties.Name -contains 'EdgeData') -and $null -ne $server.Exchange.EdgeData) {
+                    $edgeData = $server.Exchange.EdgeData
+                }
+                if ($null -eq $edgeData) {
+                    $status = 'Unknown'
+                    $evidence = 'Send connector data unavailable.'
+                }
+                else {
+                    $connectors = @($edgeData.SendConnectors)
+                    if ($connectors.Count -eq 0) {
+                        $status = 'Unknown'
+                        $evidence = 'No send connectors found on this Edge server.'
+                    }
+                    else {
+                        $notMtls = @($connectors | Where-Object {
+                                ($_.PSObject.Properties.Name -contains 'Enabled') -and [bool]$_.Enabled -and
+                                (
+                                    -not ($_.PSObject.Properties.Name -contains 'DomainSecureEnabled') -or
+                                    [bool]$_.DomainSecureEnabled -eq $false
+                                )
+                            })
+                        if ($notMtls.Count -eq 0) {
+                            $status = 'Pass'
+                            $evidence = ('All {0} enabled send connector(s) have domain security (mutual TLS) enabled.' -f $connectors.Count)
+                        }
+                        else {
+                            $status = 'Fail'
+                            $summary = ('{0} enabled send connector(s) do not have DomainSecureEnabled:' -f $notMtls.Count)
+                            $evidence = Format-EDCAEvidenceWithElements -Summary $summary -Elements @($notMtls | ForEach-Object { [string]$_.Identity })
+                        }
+                    }
+                }
+            }
+            'EDCA-TLS-044' {
+                $edgeData = $null
+                if (($server.Exchange.PSObject.Properties.Name -contains 'EdgeData') -and $null -ne $server.Exchange.EdgeData) {
+                    $edgeData = $server.Exchange.EdgeData
+                }
+                if ($null -eq $edgeData -or $null -eq $edgeData.SenderFilterConfig) {
+                    $status = 'Unknown'
+                    $evidence = 'Sender filter configuration data unavailable.'
+                }
+                else {
+                    $sfc = $edgeData.SenderFilterConfig
+                    $enabled = ($sfc.PSObject.Properties.Name -contains 'Enabled') -and [bool]$sfc.Enabled
+                    $hasBlocked = ($sfc.PSObject.Properties.Name -contains 'BlockedDomains') -and $null -ne $sfc.BlockedDomains -and @($sfc.BlockedDomains).Count -gt 0
+                    if ($enabled -and $hasBlocked) {
+                        $status = 'Pass'
+                        $evidence = ('Sender filter is enabled with {0} blocked domain(s) configured.' -f @($sfc.BlockedDomains).Count)
+                    }
+                    elseif (-not $enabled) {
+                        $status = 'Fail'
+                        $evidence = 'Sender filter is disabled. Enable it with: Set-SenderFilterConfig -Enabled $true'
+                    }
+                    else {
+                        $status = 'Fail'
+                        $evidence = 'Sender filter is enabled but no blocked domains are configured. Add unaccepted sending domains to block spoofed internal-domain senders.'
+                    }
+                }
+            }
+            'EDCA-TLS-045' {
+                $edgeData = $null
+                if (($server.Exchange.PSObject.Properties.Name -contains 'EdgeData') -and $null -ne $server.Exchange.EdgeData) {
+                    $edgeData = $server.Exchange.EdgeData
+                }
+                if ($null -eq $edgeData -or $null -eq $edgeData.SenderReputationConfig) {
+                    $status = 'Unknown'
+                    $evidence = 'Sender Reputation configuration data unavailable.'
+                }
+                elseif (($edgeData.SenderReputationConfig.PSObject.Properties.Name -contains 'Enabled') -and [bool]$edgeData.SenderReputationConfig.Enabled) {
+                    $status = 'Pass'
+                    $evidence = 'Sender Reputation filter is enabled.'
+                }
+                else {
+                    $status = 'Fail'
+                    $evidence = 'Sender Reputation filter is disabled. Enable it with: Set-SenderReputationConfig -Enabled $true'
+                }
+            }
+            'EDCA-TLS-046' {
+                $edgeData = $null
+                if (($server.Exchange.PSObject.Properties.Name -contains 'EdgeData') -and $null -ne $server.Exchange.EdgeData) {
+                    $edgeData = $server.Exchange.EdgeData
+                }
+                if ($null -eq $edgeData -or $null -eq $edgeData.ContentFilterConfig) {
+                    $status = 'Unknown'
+                    $evidence = 'Content filter configuration data unavailable.'
+                }
+                elseif (($edgeData.ContentFilterConfig.PSObject.Properties.Name -contains 'Enabled') -and [bool]$edgeData.ContentFilterConfig.Enabled) {
+                    $status = 'Pass'
+                    $evidence = 'Content filter (spam confidence level evaluation) is enabled.'
+                }
+                else {
+                    $status = 'Fail'
+                    $evidence = 'Content filter is disabled. Enable it with: Set-ContentFilterConfig -Enabled $true'
+                }
+            }
+            'EDCA-TLS-047' {
+                $edgeData = $null
+                if (($server.Exchange.PSObject.Properties.Name -contains 'EdgeData') -and $null -ne $server.Exchange.EdgeData) {
+                    $edgeData = $server.Exchange.EdgeData
+                }
+                if ($null -eq $edgeData -or $null -eq $edgeData.SenderIdConfig) {
+                    $status = 'Unknown'
+                    $evidence = 'Sender ID configuration data unavailable.'
+                }
+                else {
+                    $sidCfg = $edgeData.SenderIdConfig
+                    $enabled = ($sidCfg.PSObject.Properties.Name -contains 'Enabled') -and [bool]$sidCfg.Enabled
+                    $action = if ($sidCfg.PSObject.Properties.Name -contains 'SpoofedDomainAction') { [string]$sidCfg.SpoofedDomainAction } else { 'Unknown' }
+                    if ($enabled) {
+                        $status = 'Pass'
+                        $evidence = ('Sender ID filter is enabled. SpoofedDomainAction: {0}.' -f $action)
+                    }
+                    else {
+                        $status = 'Fail'
+                        $evidence = 'Sender ID filter is disabled. Enable it with: Set-SenderIdConfig -Enabled $true -SpoofedDomainAction Reject'
+                    }
+                }
+            }
+            'EDCA-TLS-048' {
+                $edgeData = $null
+                if (($server.Exchange.PSObject.Properties.Name -contains 'EdgeData') -and $null -ne $server.Exchange.EdgeData) {
+                    $edgeData = $server.Exchange.EdgeData
+                }
+                if ($null -eq $edgeData -or $null -eq $edgeData.ReceiveConnectors) {
+                    $status = 'Unknown'
+                    $evidence = 'Receive connector data unavailable.'
+                }
+                else {
+                    $connectors = @($edgeData.ReceiveConnectors)
+                    if ($connectors.Count -eq 0) {
+                        $status = 'Unknown'
+                        $evidence = 'No Receive connectors found on this Edge server.'
+                    }
+                    else {
+                        $minInterval = [TimeSpan]::FromSeconds(5)
+                        $badTarpit = @($connectors | Where-Object {
+                                ($_.PSObject.Properties.Name -contains 'TarpitInterval') -and
+                                $null -ne $_.TarpitInterval -and
+                                [TimeSpan]$_.TarpitInterval -lt $minInterval
+                            })
+                        if ($badTarpit.Count -eq 0) {
+                            $status = 'Pass'
+                            $evidence = ('All {0} Receive connector(s) have a tarpitting interval of at least 5 seconds.' -f $connectors.Count)
+                        }
+                        else {
+                            $status = 'Fail'
+                            $summary = ('{0} Receive connector(s) have a tarpitting interval below 5 seconds:' -f $badTarpit.Count)
+                            $evidence = Format-EDCAEvidenceWithElements -Summary $summary -Elements @($badTarpit | ForEach-Object { '{0} (TarpitInterval: {1})' -f [string]$_.Identity, [string]$_.TarpitInterval })
                         }
                     }
                 }

@@ -25,6 +25,10 @@
         "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259649"
       },
       {
+        "name": "DISA STIG EX19-ED-000016: Exchange servers must use approved DOD certificates (V-259578)",
+        "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_edge_server/2024-12-06/finding/V-259578"
+      },
+      {
         "name": "ENISA / NIS2 Directive (EU) 2022/2555 - Article 21(2)(h): cryptography and encryption policies - Section 9, 6.7, 6.3, 6.6",
         "url": "https://eur-lex.europa.eu/eli/dir/2022/2555/oj"
       },
@@ -1043,6 +1047,10 @@
         "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259665"
       },
       {
+        "name": "DISA STIG EX19-ED-000056: Exchange Send Fatal Errors to Microsoft must be disabled (V-259591)",
+        "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_edge_server/2024-12-06/finding/V-259591"
+      },
+      {
         "name": "Set-ExchangeDiagnosticInfo cmdlet",
         "url": "https://learn.microsoft.com/powershell/module/exchange/set-exchangediagnosticinfo"
       }
@@ -1142,6 +1150,10 @@
       {
         "name": "DISA STIG EX19-MB-000197: Exchange software must be monitored for unauthorized changes (V-259701)",
         "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259701"
+      },
+      {
+        "name": "DISA STIG EX19-ED-000197: The Exchange software baseline copy must exist (V-259633)",
+        "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_edge_server/2024-12-06/finding/V-259633"
       }
     ],
     "remediation": {
@@ -1173,6 +1185,10 @@
       {
         "name": "DISA STIG EX19-MB-000198: Exchange services must be documented and unnecessary services must be removed or disabled (V-259702)",
         "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259702"
+      },
+      {
+        "name": "DISA STIG EX19-ED-000198: Exchange services must be documented and unnecessary services must be removed or disabled (V-259635)",
+        "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_edge_server/2024-12-06/finding/V-259635"
       },
       {
         "name": "Exchange services reference",
@@ -2398,6 +2414,10 @@
         "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259652"
       },
       {
+        "name": "DISA STIG EX19-ED-000031: Exchange connectivity logging must be enabled (V-259582)",
+        "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_edge_server/2024-12-06/finding/V-259582"
+      },
+      {
         "name": "ANSSI - Sécuriser la journalisation dans un environnement Microsoft Active Directory (2022)",
         "url": "https://messervices.cyber.gouv.fr/guides/securiser-la-journalisation-dans-un-environnement-microsoft-active-directory"
       }
@@ -2438,6 +2458,10 @@
       {
         "name": "DISA STIG EX19-MB-000041: Exchange message tracking logging must be enabled (V-259657)",
         "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259657"
+      },
+      {
+        "name": "DISA STIG EX19-ED-000041: Exchange message tracking logging must be enabled (V-259583)",
+        "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_edge_server/2024-12-06/finding/V-259583"
       },
       {
         "name": "ANSSI - Sécuriser la journalisation dans un environnement Microsoft Active Directory (2022)",
@@ -2705,6 +2729,10 @@
       {
         "name": "DISA STIG EX19-MB-000032: Exchange diagnostic event-log must be configured to the minimum level (V-259653)",
         "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259653"
+      },
+      {
+        "name": "DISA STIG EX19-ED-000032: Exchange email diagnostic log level must be set to the lowest level (V-259581)",
+        "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_edge_server/2024-12-06/finding/V-259581"
       },
       {
         "name": "DISA STIG EX16-MB-000050: Exchange diagnostic event-log must be configured to the minimum level (V-228358)",
@@ -6466,13 +6494,12 @@
     "severity": "High",
     "severityWeight": 8,
     "frameworks": [
-      "Best Practice",
-      "DISA"
+      "Best Practice"
     ],
     "references": [
       {
         "name": "Microsoft — Edge Subscriptions",
-        "url": "https://learn.microsoft.com/exchange/architecture/transport/edge-subscriptions"
+        "url": "https://learn.microsoft.com/exchange/architecture/edge-transport-servers/edge-subscriptions"
       }
     ],
     "remediation": {
@@ -6501,12 +6528,20 @@
     ],
     "references": [
       {
-        "name": "Microsoft — Anti-spam protection in EOP",
-        "url": "https://learn.microsoft.com/defender-office-365/anti-spam-protection-about"
+        "name": "Microsoft — Antispam protection in Exchange Server",
+        "url": "https://learn.microsoft.com/exchange/antispam-and-antimalware/antispam-protection/antispam-protection"
       },
       {
-        "name": "DISA STIG — Exchange anti-spam filtering",
-        "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259706"
+        "name": "DISA STIG EX19-ED-000102: The Exchange content filter must be enabled (V-259626)",
+        "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_edge_server/2024-12-06/finding/V-259626"
+      },
+      {
+        "name": "DISA STIG EX19-ED-000104: The Exchange Recipient Filter must be enabled (V-259627)",
+        "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_edge_server/2024-12-06/finding/V-259627"
+      },
+      {
+        "name": "DISA STIG EX19-ED-000106: The Exchange Sender Filter must be enabled (V-259628)",
+        "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_edge_server/2024-12-06/finding/V-259628"
       }
     ],
     "remediation": {
@@ -6536,6 +6571,10 @@
       {
         "name": "Microsoft — Recipient filtering on Edge Transport servers",
         "url": "https://learn.microsoft.com/exchange/antispam-and-antimalware/antispam-protection/recipient-filtering"
+      },
+      {
+        "name": "DISA STIG EX19-ED-000098: The Exchange Recipient Filter must block unaccepted domains (V-259620)",
+        "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_edge_server/2024-12-06/finding/V-259620"
       }
     ],
     "remediation": {
@@ -6558,12 +6597,21 @@
     "severity": "Medium",
     "severityWeight": 5,
     "frameworks": [
-      "Best Practice"
+      "Best Practice",
+      "DISA"
     ],
     "references": [
       {
         "name": "Microsoft — Sender filtering on Edge Transport servers",
         "url": "https://learn.microsoft.com/exchange/antispam-and-antimalware/antispam-protection/sender-filtering"
+      },
+      {
+        "name": "DISA STIG EX19-ED-000085: The Exchange Sender Filter must block messages that have a blank From address (V-259609)",
+        "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_edge_server/2024-12-06/finding/V-259609"
+      },
+      {
+        "name": "DISA STIG EX19-ED-000087: The Exchange Sender Filter must be enabled (V-259610)",
+        "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_edge_server/2024-12-06/finding/V-259610"
       }
     ],
     "remediation": {
@@ -6599,6 +6647,10 @@
       {
         "name": "BSI APP.5.2.A11 — Absicherung der Kommunikation zwischen Exchange-Systemen",
         "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/06_APP_Anwendungen/APP_5_2_Microsoft_Exchange_und_Outlook_Edition_2023.pdf?__blob=publicationFile"
+      },
+      {
+        "name": "DISA STIG EX19-ED-000073: The Exchange Send connector must use an approved email domain (V-259642)",
+        "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_edge_server/2024-12-06/finding/V-259642"
       }
     ],
     "remediation": {
@@ -6621,8 +6673,7 @@
     "severity": "Medium",
     "severityWeight": 5,
     "frameworks": [
-      "Best Practice",
-      "DISA"
+      "Best Practice"
     ],
     "references": [
       {
@@ -6651,7 +6702,6 @@
     "severityWeight": 8,
     "frameworks": [
       "Best Practice",
-      "DISA",
       "ANSSI",
       "BSI",
       "NIS2"
@@ -6672,6 +6722,440 @@
       "scriptTemplate": "Get-ExchangeCertificate | Where-Object { $_.Services -match 'SMTP' } | Select-Object Thumbprint, Subject, NotAfter, Services"
     },
     "considerations": "The self-signed certificate installed by Exchange Setup is assigned to the SMTP service by default and is sufficient for opportunistic TLS between Edge and Mailbox servers. Replace it with a CA-signed certificate for inbound connections from external senders that enforce domain security.",
+    "roles": [
+      "Edge"
+    ]
+  },
+  {
+    "id": "EDCA-DATA-019",
+    "title": "SchUseStrongCrypto is enabled for .NET Framework",
+    "description": ".NET Framework 4.x on each Exchange server MUST have SchUseStrongCrypto set to 1 in both the 64-bit and 32-bit (WoW6432Node) registry hives. Without this setting, .NET client code defaults to weak ciphers and older TLS versions for outbound connections, undermining TLS security enforced at the SCHANNEL layer.",
+    "verify": true,
+    "subject": "Server",
+    "category": "Data Security",
+    "severity": "Medium",
+    "severityWeight": 7,
+    "frameworks": [
+      "Best Practice",
+      "DISA"
+    ],
+    "references": [
+      {
+        "name": "Microsoft — Transport Layer Security (TLS) best practices with .NET Framework",
+        "url": "https://learn.microsoft.com/dotnet/framework/network-programming/tls"
+      },
+      {
+        "name": "DISA STIG EX19-MB-000207: Exchange must have the SchUseStrongCrypto registry value set (V-259577)",
+        "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_edge_server/2024-12-06/finding/V-259577"
+      }
+    ],
+    "remediation": {
+      "automatable": true,
+      "description": "Set SchUseStrongCrypto to 1 in both the 64-bit and WoW6432Node .NET Framework v4.0.30319 registry paths.",
+      "scriptTemplate": "foreach ($path in @(\n    'HKLM:\\SOFTWARE\\Microsoft\\.NetFramework\\v4.0.30319',\n    'HKLM:\\SOFTWARE\\Wow6432Node\\Microsoft\\.NetFramework\\v4.0.30319'\n)) {\n    New-Item -Path $path -Force | Out-Null\n    Set-ItemProperty -Path $path -Name SchUseStrongCrypto -Type DWord -Value 1\n}"
+    },
+    "considerations": "SchUseStrongCrypto affects all .NET applications on the server, not just Exchange. Setting it to 1 restricts .NET code to TLS 1.2+ and strong cipher suites for outbound connections. This may break connectivity with legacy services that do not support TLS 1.2. Test dependent integrations before enforcing.",
+    "roles": [
+      "Mailbox",
+      "Edge"
+    ]
+  },
+  {
+    "id": "EDCA-TLS-037",
+    "title": "Edge Receive connectors have domain secure enabled",
+    "description": "Receive connectors on the Edge Transport server that receive mail from external partner domains MUST have DomainSecureEnabled set to True. Domain security uses mutual TLS (MTLS) to authenticate partner mail servers and protect mail in transit. Without it, the Edge server cannot negotiate MTLS with partner domains.",
+    "verify": true,
+    "subject": "Server",
+    "category": "Transport Security",
+    "severity": "Medium",
+    "severityWeight": 6,
+    "frameworks": [
+      "Best Practice",
+      "DISA"
+    ],
+    "references": [
+      {
+        "name": "Microsoft — Domain security in Exchange Server",
+        "url": "https://learn.microsoft.com/exchange/mail-flow/connectors/domain-security"
+      },
+      {
+        "name": "DISA STIG EX19-ED-000034: The Exchange Receive Connector must use Domain Security (Mutual Auth TLS) (V-259580)",
+        "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_edge_server/2024-12-06/finding/V-259580"
+      }
+    ],
+    "remediation": {
+      "automatable": true,
+      "description": "Enable domain security on Receive connectors: Set-ReceiveConnector -Identity <name> -DomainSecureEnabled $true.",
+      "scriptTemplate": "Get-ReceiveConnector | Select-Object Identity, DomainSecureEnabled\n# To enable:\n# Set-ReceiveConnector -Identity '<name>' -DomainSecureEnabled $true"
+    },
+    "considerations": "DomainSecureEnabled on a Receive connector is a prerequisite for MTLS with external partners. It must be paired with matching Send connector configuration and DNS TXT records for the partner domain. Enabling it alone does not force MTLS; it makes MTLS possible when both sides present valid certificates.",
+    "roles": [
+      "Edge"
+    ]
+  },
+  {
+    "id": "EDCA-TLS-038",
+    "title": "Edge internet-facing Receive connectors offer TLS before basic authentication",
+    "description": "Internet-facing Receive connectors on the Edge Transport server MUST have TLS in the AuthMechanism list. Offering basic authentication before TLS exposes credentials in cleartext during the SMTP handshake. TLS must be offered to encrypt the session before any authentication challenge.",
+    "verify": true,
+    "subject": "Server",
+    "category": "Transport Security",
+    "severity": "High",
+    "severityWeight": 8,
+    "frameworks": [
+      "Best Practice",
+      "DISA"
+    ],
+    "references": [
+      {
+        "name": "Microsoft — Receive connectors",
+        "url": "https://learn.microsoft.com/exchange/mail-flow/connectors/receive-connectors"
+      },
+      {
+        "name": "DISA STIG EX19-ED-000059: Exchange Internet-facing Receive connectors must offer TLS before using basic authentication (V-259595)",
+        "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_edge_server/2024-12-06/finding/V-259595"
+      }
+    ],
+    "remediation": {
+      "automatable": false,
+      "description": "Ensure Tls is in the AuthMechanism of internet-facing Receive connectors. Set-ReceiveConnector -Identity <name> -AuthMechanism Tls.",
+      "scriptTemplate": "Get-ReceiveConnector | Select-Object Identity, AuthMechanism, Bindings"
+    },
+    "considerations": "Internet-facing Receive connectors on an Edge server typically accept connections from external SMTP servers. Modifying AuthMechanism may affect relay partner configurations. Verify with mail flow tests after changes.",
+    "roles": [
+      "Edge"
+    ]
+  },
+  {
+    "id": "EDCA-TLS-039",
+    "title": "Edge internal Receive connectors require TLS encryption",
+    "description": "Internal Receive connectors on the Edge Transport server (those accepting connections from internal Hub/Mailbox servers) MUST require TLS. Without mandatory TLS, internal mail can traverse the network segment between Mailbox and Edge servers in cleartext, exposing message content to interception.",
+    "verify": true,
+    "subject": "Server",
+    "category": "Transport Security",
+    "severity": "High",
+    "severityWeight": 9,
+    "frameworks": [
+      "Best Practice",
+      "DISA"
+    ],
+    "references": [
+      {
+        "name": "Microsoft — Receive connectors",
+        "url": "https://learn.microsoft.com/exchange/mail-flow/connectors/receive-connectors"
+      },
+      {
+        "name": "DISA STIG EX19-ED-000131: The Exchange internal Receive connectors must require encryption (V-259641)",
+        "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_edge_server/2024-12-06/finding/V-259641"
+      }
+    ],
+    "remediation": {
+      "automatable": false,
+      "description": "Ensure AuthMechanism on internal Receive connectors includes Tls. Set-ReceiveConnector -Identity <name> -AuthMechanism Tls -RequireTLS $true.",
+      "scriptTemplate": "Get-ReceiveConnector | Select-Object Identity, AuthMechanism, RequireTLS, Bindings"
+    },
+    "considerations": "The internal Receive connector on an Edge server is used by Mailbox servers to relay outbound mail to the Edge for internet delivery. Requiring TLS on this connector means Mailbox servers must present a valid certificate. The default Exchange transport certificate satisfies this requirement.",
+    "roles": [
+      "Edge"
+    ]
+  },
+  {
+    "id": "EDCA-TLS-040",
+    "title": "Edge internal Receive connectors disallow anonymous connections",
+    "description": "Internal Receive connectors on the Edge Transport server MUST NOT permit anonymous connections. Allowing anonymous connections on internal connectors enables unauthenticated relay, which can be abused to send spam or bypass anti-spam controls.",
+    "verify": true,
+    "subject": "Server",
+    "category": "Transport Security",
+    "severity": "High",
+    "severityWeight": 8,
+    "frameworks": [
+      "Best Practice",
+      "DISA"
+    ],
+    "references": [
+      {
+        "name": "Microsoft — Receive connectors",
+        "url": "https://learn.microsoft.com/exchange/mail-flow/connectors/receive-connectors"
+      },
+      {
+        "name": "DISA STIG EX19-ED-000100: The Exchange Internal Receive connector must not allow anonymous connections (V-259622)",
+        "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_edge_server/2024-12-06/finding/V-259622"
+      }
+    ],
+    "remediation": {
+      "automatable": false,
+      "description": "Remove AnonymousUsers from the PermissionGroups on internal Receive connectors.",
+      "scriptTemplate": "Get-ReceiveConnector | Select-Object Identity, PermissionGroups, Bindings"
+    },
+    "considerations": "Internal Receive connectors used by Exchange Mailbox servers should use ExchangeServers or ExchangeLegacyServers permission groups, not AnonymousUsers. Removing anonymous access from a connector that is currently used for anonymous relay will immediately block that mail flow. Audit relay sources before making changes.",
+    "roles": [
+      "Edge"
+    ]
+  },
+  {
+    "id": "EDCA-TLS-041",
+    "title": "SMTP banner must not reveal server version details",
+    "description": "Edge Transport Receive connectors MUST present a generic SMTP banner that does not disclose server identity or version information. The default Exchange banner includes the server hostname, enabling attackers to fingerprint the software version and target known vulnerabilities.",
+    "verify": true,
+    "subject": "Server",
+    "category": "Transport Security",
+    "severity": "Medium",
+    "severityWeight": 6,
+    "frameworks": [
+      "Best Practice",
+      "DISA"
+    ],
+    "references": [
+      {
+        "name": "Microsoft — Set-ReceiveConnector cmdlet (Banner parameter)",
+        "url": "https://learn.microsoft.com/powershell/module/exchange/set-receiveconnector"
+      },
+      {
+        "name": "DISA STIG EX19-ED-000119: The Exchange SMTP automated banner response must not reveal server details (V-259638)",
+        "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_edge_server/2024-12-06/finding/V-259638"
+      }
+    ],
+    "remediation": {
+      "automatable": true,
+      "description": "Set the Banner property on all Receive connectors to '220 SMTP Server Ready' to suppress server identity disclosure.",
+      "scriptTemplate": "Get-ReceiveConnector | Select-Object Identity, Banner\n# To remediate:\n# Get-ReceiveConnector | Set-ReceiveConnector -Banner '220 SMTP Server Ready'"
+    },
+    "considerations": "Changing the SMTP banner is low-risk and has no impact on mail delivery. The '220' status code is required by RFC 5321; the greeting text after it is arbitrary. Ensure the banner starts with '220 ' to remain RFC-compliant.",
+    "roles": [
+      "Edge"
+    ]
+  },
+  {
+    "id": "EDCA-TLS-042",
+    "title": "Edge internet-facing Send connectors route via a Smart Host",
+    "description": "Internet-facing Send connectors on the Edge Transport server MUST route mail through an approved Smart Host rather than resolving recipients directly via DNS MX. Direct DNS-based delivery bypasses gateway filtering, egress controls, and data-loss-prevention inspection.",
+    "verify": true,
+    "subject": "Server",
+    "category": "Transport Security",
+    "severity": "Medium",
+    "severityWeight": 6,
+    "frameworks": [
+      "Best Practice",
+      "DISA"
+    ],
+    "references": [
+      {
+        "name": "Microsoft — Send connectors",
+        "url": "https://learn.microsoft.com/exchange/mail-flow/connectors/send-connectors"
+      },
+      {
+        "name": "DISA STIG EX19-ED-000057: The Exchange Outbound Connection must use a Smart Host (V-259593)",
+        "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_edge_server/2024-12-06/finding/V-259593"
+      }
+    ],
+    "remediation": {
+      "automatable": false,
+      "description": "Configure Send connectors to route via an approved Smart Host: Set-SendConnector -Identity <name> -SmartHosts <FQDN-or-IP> -SmartHostAuthMechanism None.",
+      "scriptTemplate": "Get-SendConnector | Select-Object Identity, SmartHosts, DNSRoutingEnabled, SmartHostAuthMechanism"
+    },
+    "considerations": "Using a Smart Host adds a single point of egress that can be monitored, filtered, and rate-limited. Ensure the Smart Host is highly available; a misconfigured or unavailable Smart Host will halt all outbound mail flow from the Edge server.",
+    "roles": [
+      "Edge"
+    ]
+  },
+  {
+    "id": "EDCA-TLS-043",
+    "title": "Edge internal Send connectors use mutual-TLS domain security",
+    "description": "Internal Send connectors on the Edge Transport server (those delivering mail back to Mailbox servers) MUST use mutual TLS (domain security). Without MTLS on the internal path, mail forwarded from Edge back to internal Mailbox servers is not authenticated, allowing man-in-the-middle interception.",
+    "verify": true,
+    "subject": "Server",
+    "category": "Transport Security",
+    "severity": "High",
+    "severityWeight": 8,
+    "frameworks": [
+      "Best Practice",
+      "DISA"
+    ],
+    "references": [
+      {
+        "name": "Microsoft — Domain security in Exchange Server",
+        "url": "https://learn.microsoft.com/exchange/mail-flow/connectors/domain-security"
+      },
+      {
+        "name": "DISA STIG EX19-ED-000058: The Exchange Send connector must use Domain Security (Mutual Auth TLS) (V-259594)",
+        "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_edge_server/2024-12-06/finding/V-259594"
+      }
+    ],
+    "remediation": {
+      "automatable": false,
+      "description": "Set TlsAuthLevel to DomainValidation and DomainSecureEnabled to $true on internal Send connectors.",
+      "scriptTemplate": "Get-SendConnector | Select-Object Identity, TlsAuthLevel, DomainSecureEnabled, SmartHosts"
+    },
+    "considerations": "MTLS on the Edge-to-Mailbox Send connector requires that both sides present valid certificates and that the sending domain is listed in the receiving connector's TlsDomain. Ensure the Edge subscription is active and certificates are valid before enabling.",
+    "roles": [
+      "Edge"
+    ]
+  },
+  {
+    "id": "EDCA-TLS-044",
+    "title": "Edge Sender Filter blocks messages from unaccepted domains",
+    "description": "The Edge Transport server Sender Filter MUST be configured to block senders from domains that are not in the organisation's accepted domain list. Permitting mail from unaccepted sender domains allows spoofed messages that impersonate internal addresses to reach recipients.",
+    "verify": true,
+    "subject": "Server",
+    "category": "Transport Security",
+    "severity": "Medium",
+    "severityWeight": 6,
+    "frameworks": [
+      "Best Practice",
+      "DISA"
+    ],
+    "references": [
+      {
+        "name": "Microsoft — Sender filtering on Edge Transport servers",
+        "url": "https://learn.microsoft.com/exchange/antispam-and-antimalware/antispam-protection/sender-filtering"
+      },
+      {
+        "name": "DISA STIG EX19-ED-000089: The Exchange Sender Filter must block senders from unaccepted domains (V-259612)",
+        "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_edge_server/2024-12-06/finding/V-259612"
+      }
+    ],
+    "remediation": {
+      "automatable": true,
+      "description": "Enable blocking of unaccepted domain senders: Set-SenderFilterConfig -BlockedSendersAndDomains @{Add='<domain>'} and ensure the filter is enabled.",
+      "scriptTemplate": "Get-SenderFilterConfig | Select-Object Enabled, BlankSenderBlockingEnabled, BlockedSendersAndDomains"
+    },
+    "considerations": "Blocking unaccepted domains in the sender filter prevents spoofed internal-domain mail from external sources. This is most effective when combined with SPF, DKIM, and DMARC enforcement. Ensure legitimate partner relays are whitelisted before enabling domain-based blocking.",
+    "roles": [
+      "Edge"
+    ]
+  },
+  {
+    "id": "EDCA-TLS-045",
+    "title": "Edge Sender Reputation filter is enabled",
+    "description": "The Edge Transport server MUST have the Sender Reputation filter enabled. Sender Reputation analyses connection behaviour to calculate a Sender Reputation Level (SRL) and block senders that exceed the threshold. Disabled Sender Reputation allows high-volume spam and relay sources to remain undetected.",
+    "verify": true,
+    "subject": "Server",
+    "category": "Transport Security",
+    "severity": "Medium",
+    "severityWeight": 6,
+    "frameworks": [
+      "Best Practice",
+      "DISA"
+    ],
+    "references": [
+      {
+        "name": "Microsoft — Sender reputation procedures",
+        "url": "https://learn.microsoft.com/exchange/antispam-and-antimalware/antispam-protection/sender-reputation"
+      },
+      {
+        "name": "DISA STIG EX19-ED-000091: The Exchange Sender Reputation filter must identify the spam reputation of the sender (V-259614)",
+        "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_edge_server/2024-12-06/finding/V-259614"
+      },
+      {
+        "name": "DISA STIG EX19-ED-000093: The Exchange Sender Reputation filter must be enabled (V-259615)",
+        "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_edge_server/2024-12-06/finding/V-259615"
+      }
+    ],
+    "remediation": {
+      "automatable": true,
+      "description": "Enable Sender Reputation: Set-SenderReputationConfig -Enabled $true.",
+      "scriptTemplate": "Get-SenderReputationConfig | Select-Object Enabled, SenderBlockingEnabled, SenderBlockingPeriod\n# To enable:\n# Set-SenderReputationConfig -Enabled $true"
+    },
+    "considerations": "Sender Reputation requires the Protocol Analysis agent to be enabled. The SRL threshold and blocking period are configurable. In high-volume environments, tune the threshold to balance false-positive risk against spam blocking effectiveness.",
+    "roles": [
+      "Edge"
+    ]
+  },
+  {
+    "id": "EDCA-TLS-046",
+    "title": "Edge content filter is enabled",
+    "description": "The Edge Transport server MUST have the content filter (spam confidence level evaluation) enabled. The content filter assigns a Spam Confidence Level (SCL) to each message; messages that exceed the SCL threshold are blocked, quarantined, or tagged. Disabling the content filter allows spam and phishing messages to pass without SCL classification.",
+    "verify": true,
+    "subject": "Server",
+    "category": "Transport Security",
+    "severity": "Medium",
+    "severityWeight": 6,
+    "frameworks": [
+      "Best Practice",
+      "DISA"
+    ],
+    "references": [
+      {
+        "name": "Microsoft — Content filtering on Edge Transport servers",
+        "url": "https://learn.microsoft.com/exchange/antispam-and-antimalware/antispam-protection/content-filtering"
+      },
+      {
+        "name": "DISA STIG EX19-ED-000102: The Exchange content filter must be enabled (V-259617)",
+        "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_edge_server/2024-12-06/finding/V-259617"
+      }
+    ],
+    "remediation": {
+      "automatable": true,
+      "description": "Enable the content filter: Set-ContentFilterConfig -Enabled $true.",
+      "scriptTemplate": "Get-ContentFilterConfig | Select-Object Enabled, SCLDeleteEnabled, SCLDeleteThreshold, SCLQuarantineEnabled, SCLRejectEnabled\n# To enable:\n# Set-ContentFilterConfig -Enabled $true"
+    },
+    "considerations": "The content filter uses Intelligent Message Filter (IMF) heuristics. After enabling, monitor SCL thresholds to ensure legitimate mail is not incorrectly classified. False positives can be reduced by adding trusted senders to the safe sender list.",
+    "roles": [
+      "Edge"
+    ]
+  },
+  {
+    "id": "EDCA-TLS-047",
+    "title": "Edge Sender ID filter rejects malformed From addresses",
+    "description": "The Edge Transport server MUST have the Sender ID filter enabled and configured to reject messages with malformed From headers. Sender ID validates the Purported Responsible Address (PRA) in the message header against the sending domain's SPF record. Without it, spoofed header-From addresses are not challenged.",
+    "verify": true,
+    "subject": "Server",
+    "category": "Transport Security",
+    "severity": "Medium",
+    "severityWeight": 6,
+    "frameworks": [
+      "Best Practice",
+      "DISA"
+    ],
+    "references": [
+      {
+        "name": "Microsoft — Sender ID on Edge Transport servers",
+        "url": "https://learn.microsoft.com/exchange/antispam-and-antimalware/antispam-protection/sender-id"
+      },
+      {
+        "name": "DISA STIG EX19-ED-000096: The Exchange Sender ID filter must identify the sender (V-259619)",
+        "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_edge_server/2024-12-06/finding/V-259619"
+      }
+    ],
+    "remediation": {
+      "automatable": true,
+      "description": "Enable Sender ID and configure it to reject spoofed messages: Set-SenderIdConfig -Enabled $true -SpoofedDomainAction Reject.",
+      "scriptTemplate": "Get-SenderIdConfig | Select-Object Enabled, SpoofedDomainAction\n# To enable:\n# Set-SenderIdConfig -Enabled $true -SpoofedDomainAction Reject"
+    },
+    "considerations": "Sender ID is a predecessor to modern SPF/DMARC enforcement. Some sending organisations do not publish SPF records, and Sender ID validation against those domains will return None (not a failure). Configure the SpoofedDomainAction to match your policy: StampStatus (tag only), Reject (block), or Delete.",
+    "roles": [
+      "Edge"
+    ]
+  },
+  {
+    "id": "EDCA-TLS-048",
+    "title": "Edge Receive connector tarpitting interval is configured",
+    "description": "Receive connectors on the Edge Transport server MUST have a tarpitting interval of at least 5 seconds (00:00:05). Tarpitting introduces an artificial delay in SMTP responses to commands issued by senders who fail recipient validation, slowing down directory harvest attacks and reducing the throughput of malicious senders.",
+    "verify": true,
+    "subject": "Server",
+    "category": "Transport Security",
+    "severity": "Medium",
+    "severityWeight": 5,
+    "frameworks": [
+      "Best Practice",
+      "DISA"
+    ],
+    "references": [
+      {
+        "name": "Microsoft — Receive connectors",
+        "url": "https://learn.microsoft.com/exchange/mail-flow/connectors/receive-connectors"
+      },
+      {
+        "name": "DISA STIG EX19-ED-000099: The Exchange Receive connector must use tarpitting (V-259621)",
+        "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_edge_server/2024-12-06/finding/V-259621"
+      }
+    ],
+    "remediation": {
+      "automatable": true,
+      "description": "Set TarpitInterval to at least 00:00:05 on all Edge Receive connectors: Set-ReceiveConnector -Identity <name> -TarpitInterval '00:00:05'.",
+      "scriptTemplate": "Get-ReceiveConnector | Select-Object Identity, TarpitInterval\n# To set minimum tarpitting:\n# Get-ReceiveConnector | Set-ReceiveConnector -TarpitInterval '00:00:05'"
+    },
+    "considerations": "The default tarpitting interval in Exchange is 5 seconds (00:00:05), which meets this control. Verify that no connector has been set to 00:00:00. Increasing the interval beyond 5 seconds may cause timeouts with legitimate mail servers that have strict timeout thresholds.",
     "roles": [
       "Edge"
     ]

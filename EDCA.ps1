@@ -198,6 +198,7 @@ if ($Update) {
 }
 
 $collectionData = $null
+$rawOrgId = $null
 
 if ($doCollect) {
     Write-EDCALog -Message 'Starting collection mode.'
@@ -505,6 +506,17 @@ if ($doReport -and -not $doCollect) {
 Write-Verbose 'Starting analysis phase.'
 $analysis = Invoke-EDCAAnalysis -CollectionData $collectionData -Controls $controls
 
+# Determine the effective organisation ID for this run (collect path uses $rawOrgId,
+# report-only path uses $selectedOrgId; both may be $null for older/anonymous data).
+$effectiveOrgId = if (-not [string]::IsNullOrWhiteSpace($selectedOrgId)) { $selectedOrgId }
+elseif (-not [string]::IsNullOrWhiteSpace($rawOrgId)) { $rawOrgId }
+else { $null }
+
+# Stamp the organisation ID into the analysis Metadata so trend filtering works on future runs.
+if ($null -ne $effectiveOrgId) {
+    $analysis.Metadata | Add-Member -MemberType NoteProperty -Name OrganizationId -Value $effectiveOrgId -Force
+}
+
 $analysisStamp = Get-Date -Format 'yyyyMMdd_HHmmss'
 $analysisOut = Join-Path -Path $resolvedDataPath -ChildPath ('analysis_{0}.json' -f $analysisStamp)
 ConvertTo-EDCAJson -InputObject $analysis | Set-Content -Path $analysisOut -Encoding UTF8
@@ -512,20 +524,31 @@ Write-EDCALog -Message ('Analysis JSON exported: {0}' -f $analysisOut)
 Write-Verbose ('Analysis produced {0} finding(s).' -f @($analysis.Findings).Count)
 
 # Load up to 10 most-recent analysis files (including the one just written) for the trend chart.
+# Filter to the same organisation as the current run so mixed-organisation data folders do not
+# pollute the trend chart. Files that pre-date the OrganizationId stamp are included when no
+# effective org ID is known, or skipped only when a different org ID is explicitly recorded.
 $historyData = @(
     Get-ChildItem -Path $resolvedDataPath -Filter 'analysis_*.json' -ErrorAction SilentlyContinue |
     Sort-Object -Property Name |
-    Select-Object -Last 10 |
     ForEach-Object {
         try {
             $parsed = Get-Content -Path $_.FullName -Raw -ErrorAction Stop | ConvertFrom-Json
             if (($parsed.PSObject.Properties.Name -contains 'Scores') -and
                 ($parsed.PSObject.Properties.Name -contains 'Metadata')) {
-                $parsed
+                # Filter by OrganizationId when the file declares one and we know the current org.
+                $fileOrgId = if ($parsed.Metadata.PSObject.Properties.Name -contains 'OrganizationId') {
+                    [string]$parsed.Metadata.OrganizationId
+                }
+                else { $null }
+                $orgMatch = ($null -eq $effectiveOrgId) -or
+                ($null -eq $fileOrgId) -or
+                ($fileOrgId -eq $effectiveOrgId)
+                if ($orgMatch) { $parsed }
             }
         }
         catch { }
-    }
+    } |
+    Select-Object -Last 10
 )
 
 $outputAnalysis = $analysis

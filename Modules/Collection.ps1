@@ -34,7 +34,7 @@ function Get-EDCARemoteTlsState {
         $tls13CipherSuiteAvailable = $null
         if ($null -eq $result.Tls13 -and (Get-Command -Name Get-TlsCipherSuite -ErrorAction SilentlyContinue)) {
             try {
-                $tls13Suites = @(Get-TlsCipherSuite -ErrorAction SilentlyContinue | Where-Object { [string]$_.Protocol -eq 'TLS 1.3' })
+                $tls13Suites = @(Get-TlsCipherSuite -ErrorAction SilentlyContinue | Where-Object { ($_.PSObject.Properties.Name -contains 'Protocol') -and [string]$_.Protocol -eq 'TLS 1.3' })
                 $tls13CipherSuiteAvailable = ($tls13Suites.Count -gt 0)
             }
             catch {
@@ -2566,6 +2566,44 @@ function Get-EDCAServerInventory {
         catch {
         }
 
+        $schUseStrongCrypto64 = $null
+        $schUseStrongCrypto32 = $null
+        try {
+            $reg64 = Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\.NetFramework\v4.0.30319' -Name SchUseStrongCrypto -ErrorAction SilentlyContinue
+            if ($null -ne $reg64 -and $reg64.PSObject.Properties.Name -contains 'SchUseStrongCrypto') {
+                $schUseStrongCrypto64 = [int]$reg64.SchUseStrongCrypto
+            }
+        }
+        catch {
+        }
+        try {
+            $reg32 = Get-ItemProperty -Path 'HKLM:\SOFTWARE\Wow6432Node\Microsoft\.NetFramework\v4.0.30319' -Name SchUseStrongCrypto -ErrorAction SilentlyContinue
+            if ($null -ne $reg32 -and $reg32.PSObject.Properties.Name -contains 'SchUseStrongCrypto') {
+                $schUseStrongCrypto32 = [int]$reg32.SchUseStrongCrypto
+            }
+        }
+        catch {
+        }
+
+        $schUseStrongCrypto64 = $null
+        $schUseStrongCrypto32 = $null
+        try {
+            $reg64 = Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\.NetFramework\v4.0.30319' -Name SchUseStrongCrypto -ErrorAction SilentlyContinue
+            if ($null -ne $reg64 -and $reg64.PSObject.Properties.Name -contains 'SchUseStrongCrypto') {
+                $schUseStrongCrypto64 = [int]$reg64.SchUseStrongCrypto
+            }
+        }
+        catch {
+        }
+        try {
+            $reg32 = Get-ItemProperty -Path 'HKLM:\SOFTWARE\Wow6432Node\Microsoft\.NetFramework\v4.0.30319' -Name SchUseStrongCrypto -ErrorAction SilentlyContinue
+            if ($null -ne $reg32 -and $reg32.PSObject.Properties.Name -contains 'SchUseStrongCrypto') {
+                $schUseStrongCrypto32 = [int]$reg32.SchUseStrongCrypto
+            }
+        }
+        catch {
+        }
+
         $tcpKeepAliveTime = $null
         try {
             $tcpParameters = Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters' -ErrorAction SilentlyContinue
@@ -2744,7 +2782,7 @@ function Get-EDCAServerInventory {
             try {
                 $allSuites = @(Get-TlsCipherSuite -ErrorAction SilentlyContinue)
                 # Treat suites without a Protocol property, or those not labelled TLS 1.3, as TLS 1.2.
-                $tls12Suites = @($allSuites | Where-Object { [string]$_.Protocol -ne 'TLS 1.3' })
+                $tls12Suites = @($allSuites | Where-Object { -not ($_.PSObject.Properties.Name -contains 'Protocol') -or [string]$_.Protocol -ne 'TLS 1.3' })
                 $nonPfsSuites = @($tls12Suites | Where-Object { $_.Name -notmatch 'ECDHE|DHE' } | Select-Object -ExpandProperty Name)
                 # Find DHE (non-ECDHE) suites that appear before the first ECDHE suite.
                 $firstEcdheIndex = -1
@@ -3165,6 +3203,8 @@ function Get-EDCAServerInventory {
             }
             KerberosEncryptionTypes   = $kerberosEncryptionTypes
             NetFrameworkRelease       = $netFrameworkRelease
+            SchUseStrongCrypto64      = $schUseStrongCrypto64
+            SchUseStrongCrypto32      = $schUseStrongCrypto32
             VmwareIntrospection       = $vmwareIntrospection
         }
 
@@ -3187,7 +3227,7 @@ function Get-EDCAServerInventory {
         $tls13CipherSuiteAvailable = $null
         if ($null -eq $tlsRaw.Tls13 -and (Get-Command -Name Get-TlsCipherSuite -ErrorAction SilentlyContinue)) {
             try {
-                $tls13Suites = @(Get-TlsCipherSuite -ErrorAction SilentlyContinue | Where-Object { [string]$_.Protocol -eq 'TLS 1.3' })
+                $tls13Suites = @(Get-TlsCipherSuite -ErrorAction SilentlyContinue | Where-Object { ($_.PSObject.Properties.Name -contains 'Protocol') -and [string]$_.Protocol -eq 'TLS 1.3' })
                 $tls13CipherSuiteAvailable = ($tls13Suites.Count -gt 0)
             }
             catch {
@@ -4368,7 +4408,7 @@ function Get-EDCAServerInventory {
 
     $invokeTarget = $Server
     $isLocalTarget = $Server.Equals($env:COMPUTERNAME, [System.StringComparison]::OrdinalIgnoreCase) -or
-        $Server -in @('.', 'localhost')
+    $Server -in @('.', 'localhost')
 
     if ($isLocalTarget) {
         Write-Verbose ('Executing unified collection script block locally (no WinRM).')
@@ -4385,9 +4425,9 @@ function Get-EDCAServerInventory {
     }
 
     $isEdge = ($inventory.PSObject.Properties.Name -contains 'Exchange') -and
-        $null -ne $inventory.Exchange -and
-        ($inventory.Exchange.PSObject.Properties.Name -contains 'IsEdge') -and
-        [bool]$inventory.Exchange.IsEdge
+    $null -ne $inventory.Exchange -and
+    ($inventory.Exchange.PSObject.Properties.Name -contains 'IsEdge') -and
+    [bool]$inventory.Exchange.IsEdge
 
     if ($isEdge -and -not $isLocalTarget) {
         $inventory.Exchange.CollectionWarnings = @($inventory.Exchange.CollectionWarnings) + @('Edge Transport server detected: Exchange cmdlet collection requires running EDCA on the Edge server itself (use -Local or target the Edge server by name).')
@@ -5314,6 +5354,9 @@ function Get-EDCAServerInventory {
                         IsExpired  = [bool]$cert.IsExpired
                         Services   = $svc
                     }
+            ReceiveConnectors      = @()
+            SenderReputationConfig = $null
+            SenderIdConfig         = $null
                 }
                 $inventory | Add-Member -MemberType NoteProperty -Name Certificates -Value $updatedCerts -Force
             }
@@ -5335,6 +5378,9 @@ function Get-EDCAServerInventory {
             SenderFilterConfig     = $null
             ConnectionFilterConfig = $null
             SendConnectors         = @()
+            ReceiveConnectors      = @()
+            SenderReputationConfig = $null
+            SenderIdConfig         = $null
         }
 
         try {
@@ -5443,11 +5489,38 @@ function Get-EDCAServerInventory {
 
             try {
                 $edgeData.SendConnectors = @(Invoke-EDCAExchangeEndpointCommand -Server $invokeTarget -Authentication Negotiate -ScriptBlock {
-                        Get-SendConnector -ErrorAction Stop | Select-Object -Property Identity, RequireTls, TlsAuthLevel, TlsDomain, Enabled, ProtocolLoggingLevel, SmartHosts, MaxMessageSize
+                        Get-SendConnector -ErrorAction Stop | Select-Object -Property Identity, RequireTls, TlsAuthLevel, TlsDomain, DomainSecureEnabled, Enabled, ProtocolLoggingLevel, SmartHosts, DNSRoutingEnabled, SmartHostAuthMechanism, MaxMessageSize
                     })
             }
             catch {
                 $edgeEndpointWarnings += ('Get-SendConnector (Edge/Negotiate) failed: ' + $_.Exception.Message)
+            }
+
+            try {
+                $edgeData.ReceiveConnectors = @(Invoke-EDCAExchangeEndpointCommand -Server $invokeTarget -Authentication Negotiate -ScriptBlock {
+                        Get-ReceiveConnector -ErrorAction Stop | Select-Object -Property Identity, AuthMechanism, PermissionGroups, RequireTLS, DomainSecureEnabled, TarpitInterval, Banner, Bindings, Enabled
+                    })
+            }
+            catch {
+                $edgeEndpointWarnings += ('Get-ReceiveConnector (Edge/Negotiate) failed: ' + $_.Exception.Message)
+            }
+
+            try {
+                $edgeData.SenderReputationConfig = Invoke-EDCAExchangeEndpointCommand -Server $invokeTarget -Authentication Negotiate -ScriptBlock {
+                    Get-SenderReputationConfig -ErrorAction Stop | Select-Object -Property Enabled, SenderBlockingEnabled, SenderBlockingPeriod, MinimumSenderReputationLevel
+                }
+            }
+            catch {
+                $edgeEndpointWarnings += ('Get-SenderReputationConfig (Edge/Negotiate) failed: ' + $_.Exception.Message)
+            }
+
+            try {
+                $edgeData.SenderIdConfig = Invoke-EDCAExchangeEndpointCommand -Server $invokeTarget -Authentication Negotiate -ScriptBlock {
+                    Get-SenderIdConfig -ErrorAction Stop | Select-Object -Property Enabled, SpoofedDomainAction
+                }
+            }
+            catch {
+                $edgeEndpointWarnings += ('Get-SenderIdConfig (Edge/Negotiate) failed: ' + $_.Exception.Message)
             }
 
             $inventory.Exchange.EdgeData = $edgeData
