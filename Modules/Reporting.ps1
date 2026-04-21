@@ -168,6 +168,20 @@ function New-EDCAHtmlReport {
 
     Write-Verbose ('Generating HTML report for {0} findings and {1} server entries.' -f @($AnalysisData.Findings).Count, @($CollectionData.Servers).Count)
 
+    # Build a map of server name -> role for role badge display in evidence tables.
+    $serverRoleMap = @{}
+    foreach ($srv in @($CollectionData.Servers)) {
+        $srvName = if ($srv.PSObject.Properties.Name -contains 'Name') { [string]$srv.Name } else { '' }
+        if ([string]::IsNullOrEmpty($srvName)) { continue }
+        if (($srv.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $srv.Exchange -and
+            ($srv.Exchange.PSObject.Properties.Name -contains 'IsEdge') -and [bool]$srv.Exchange.IsEdge) {
+            $serverRoleMap[$srvName] = 'Edge'
+        }
+        else {
+            $serverRoleMap[$srvName] = 'Mailbox'
+        }
+    }
+
     # Build framework filter dropdown options from scores actually present in this report.
     $frameworkLabelMap = @{ 'ENISA' = 'ENISA/NIS2' }
     $frameworkOptions = New-Object System.Text.StringBuilder
@@ -209,8 +223,15 @@ function New-EDCAHtmlReport {
                 if (-not $hasAll) { continue }
                 $dateLabel = ''
                 try {
-                    $ts = [datetime]::Parse($entry.Metadata.AnalysisTimestamp)
-                    $dateLabel = $ts.ToString('d MMM')
+                    $rawTs = [string]$entry.Metadata.AnalysisTimestamp
+                    # Handle PS5.1 /Date(ms)/ serialization as well as ISO 8601 strings
+                    if ($rawTs -match '^/Date\((-?\d+)\)/$') {
+                        $ts = [datetime]::new(621355968000000000, [System.DateTimeKind]::Utc).AddMilliseconds([long]$Matches[1]).ToLocalTime()
+                    }
+                    else {
+                        $ts = [datetime]::Parse($rawTs)
+                    }
+                    $dateLabel = $ts.ToString('d MMM yyyy')
                 }
                 catch { $dateLabel = '' }
                 $parts = '"d":"' + $dateLabel + '"'
@@ -285,11 +306,14 @@ function New-EDCAHtmlReport {
         $subjectLabel = if (($finding.PSObject.Properties.Name -contains 'SubjectLabel') -and -not [string]::IsNullOrWhiteSpace([string]$finding.SubjectLabel)) { [string]$finding.SubjectLabel } else { 'Server' }
         foreach ($serverResult in $finding.ServerResults) {
             $serverRagLabel = Get-EDCARagLabel -Status $serverResult.Status
-            $serverLines += ('<tr class="{1}"><td>{0}</td><td>{2}</td><td class="evidence-cell">{3}</td></tr>' -f
-                $serverResult.Server,
+            $srvName = [string]$serverResult.Server
+            $srvRoleBadge = if ($serverRoleMap.ContainsKey($srvName) -and $serverRoleMap[$srvName] -eq 'Edge') { ' <span class="role-badge role-edge" title="Edge Transport server">Edge</span>' } else { '' }
+            $serverLines += ('<tr class="{1}"><td>{0}{4}</td><td>{2}</td><td class="evidence-cell">{3}</td></tr>' -f
+                (ConvertTo-EDCAHtmlEncoded -Value $srvName),
                 (Get-EDCAStatusClass -Status $serverResult.Status),
                 $serverRagLabel,
-                (ConvertTo-EDCAHtmlWithLineBreaks -Value $serverResult.Evidence)
+                (ConvertTo-EDCAHtmlWithLineBreaks -Value $serverResult.Evidence),
+                $srvRoleBadge
             )
         }
 
@@ -379,14 +403,25 @@ function New-EDCAHtmlReport {
 
     # Build environment notices (Edge servers, unsupported Exchange versions)
     $noticesHtml = New-Object System.Text.StringBuilder
-    $edgeServers = @()
+    # Determine which Edge servers were collected vs. only detected in the org topology.
+    $collectedEdgeServers = @($CollectionData.Servers | Where-Object {
+            ($_.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $_.Exchange -and
+            ($_.Exchange.PSObject.Properties.Name -contains 'IsEdge') -and [bool]$_.Exchange.IsEdge
+        })
+    $orgEdgeServers = @()
     if (($CollectionData.PSObject.Properties.Name -contains 'Organization') -and $null -ne $CollectionData.Organization -and
         ($CollectionData.Organization.PSObject.Properties.Name -contains 'EdgeServers')) {
-        $edgeServers = @($CollectionData.Organization.EdgeServers)
+        $orgEdgeServers = @($CollectionData.Organization.EdgeServers)
     }
-    if ($edgeServers.Count -gt 0) {
-        $edgeNames = ($edgeServers | ForEach-Object { ConvertTo-EDCAHtmlEncoded -Value $_.Name }) -join ', '
-        $null = $noticesHtml.AppendLine('<div class="env-notice"><span class="env-notice-icon">&#9888;</span><div><strong>Edge Transport servers detected</strong>Exchange Edge Transport servers are present in this environment (' + $edgeNames + '). EDCA does not collect data from or evaluate controls against Edge Transport servers. Edge-specific controls are not covered by this report.</div></div>')
+    $collectedEdgeNames = @($collectedEdgeServers | ForEach-Object { if ($_.PSObject.Properties.Name -contains 'Name') { [string]$_.Name } else { '' } })
+    $uncollectedEdgeServers = @($orgEdgeServers | Where-Object { $n = if ($_.PSObject.Properties.Name -contains 'Name') { [string]$_.Name } else { '' }; $collectedEdgeNames -notcontains $n })
+    if ($collectedEdgeServers.Count -gt 0) {
+        $edgeNamesHtml = ($collectedEdgeServers | ForEach-Object { ConvertTo-EDCAHtmlEncoded -Value (if ($_.PSObject.Properties.Name -contains 'Name') { $_.Name } else { '' }) }) -join ', '
+        $null = $noticesHtml.AppendLine('<div class="env-notice env-notice-info"><span class="env-notice-icon">&#10003;</span><div><strong>Edge Transport servers collected and assessed</strong>' + $collectedEdgeServers.Count + ' Edge Transport server(s) were collected and assessed with role-specific controls: ' + $edgeNamesHtml + '.</div></div>')
+    }
+    if ($uncollectedEdgeServers.Count -gt 0) {
+        $edgeNames = ($uncollectedEdgeServers | ForEach-Object { ConvertTo-EDCAHtmlEncoded -Value (if ($_.PSObject.Properties.Name -contains 'Name') { $_.Name } else { '' }) }) -join ', '
+        $null = $noticesHtml.AppendLine('<div class="env-notice"><span class="env-notice-icon">&#9888;</span><div><strong>Edge Transport servers not collected</strong>The following Edge Transport server(s) were detected in the Exchange organisation but not collected. Re-run EDCA specifying these servers to assess Edge-specific controls: ' + $edgeNames + '.</div></div>')
     }
     $exchange2013Servers = @($CollectionData.Servers | Where-Object {
             ($_.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $_.Exchange -and
@@ -503,6 +538,13 @@ function New-EDCAHtmlReport {
         .rag-warn { color: #d97706; }
         .rag-fail { color: #dc2626; }
         .rag-skip { color: #94a3b8; }
+        /* Role badges */
+        .role-badge { display: inline-block; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 4px; vertical-align: middle; margin-left: 5px; letter-spacing: .04em; text-transform: uppercase; line-height: 16px; }
+        .role-edge { background: #dbeafe; color: #1d4ed8; }
+        body.dark .role-edge { background: #1e3a5f; color: #93c5fd; }
+        /* Info env-notice variant (Edge collected) */
+        .env-notice-info { border-left-color: #2563eb; background: #eff6ff; color: #1e40af; }
+        body.dark .env-notice-info { background: #1e3a5f; color: #93c5fd; border-left-color: #3b82f6; }
         /* Filters */
         .filters { display: flex; gap: 12px; flex-wrap: wrap; margin: 12px 0 16px; }
         select { padding: 8px 12px; border-radius: 8px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--fg); font-size: 14px; cursor: pointer; }

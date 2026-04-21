@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.7 Preview
+- **Edge Transport server support**: EDCA now can collect and assesses Edge Transport servers in addition to Mailbox servers.
+  - **Collection** (`Collection.ps1`): Edge servers are detected by their `ServerRole` property. Collection runs in-process locally (no WinRM session) when the target is the local machine, allowing EDCA to be invoked directly on the Edge server. An Edge-specific endpoint block collects anti-spam configuration, Edge subscriptions, send connectors, and certificates.
+  - **Analysis** (`Analysis.ps1`): Role-aware skip logic skips controls not applicable to the server role being evaluated (e.g. IIS/OWA/DAG controls are skipped on Edge servers; Edge-specific controls are skipped on Mailbox servers). All 173 existing controls now carry a `roles` field in `Config/controls.json`.
+  - **New controls**: 7 Edge-specific controls added (`EDCA-EDGE-001` through `EDCA-EDGE-007`), all categorised under **Transport Security**, covering Edge subscription health, anti-spam agent enablement, recipient validation, blank sender blocking, send connector TLS enforcement, protocol logging, and SMTP certificate assignment.
+  - **Reporting** (`Reporting.ps1`): An `EDGE` role badge is displayed next to Edge server names in the control evidence tables. The environment notices section now distinguishes between Edge servers that were collected and assessed, and Edge servers detected in the organisation topology but not collected.
+- **Trend chart tooltip date** (`Reporting.ps1`, `Analysis.ps1`): `AnalysisTimestamp` is now stored as ISO 8601 (`'o'` format) instead of relying on `[datetime]` serialisation. The report parses both ISO 8601 and the PS5.1 `/Date(ms)/` legacy format, and formats dates as `d MMM yyyy` (e.g. `21 Apr 2026`) in the trend chart tooltip.
+
 ## v0.6 Preview
 - **EDCA-RES-011** (Single Item Recovery): fixed double-counting — `Get-Mailbox -ResultSize Unlimited` is org-scoped and stored identically on every server; the analysis now takes the value from the first available server instead of summing across all servers (which multiplied the count by the server count).
 - **EDCA-RES-011** remediation `scriptTemplate` updated to use `-RecipientTypeDetails UserMailbox` as a native server-side parameter instead of a `Where-Object` post-filter on `RecipientTypeDetails`.

@@ -4,7 +4,7 @@ PowerShell-based tool to collect Exchange on-premises deployment data, evaluate 
 
 ## Key Features
 
-- Supports Exchange 2016, Exchange 2019, and Exchange SE.
+- Supports Exchange 2016, Exchange 2019, and Exchange SE (Subscription Edition).
 - Evaluates controls against seven compliance frameworks: [Best Practice](#frameworks), [ANSSI](#frameworks) 🇫🇷, [BSI](#frameworks) 🇩🇪, [CIS](#frameworks) 🇺🇸, [CISA](#frameworks) 🇺🇸, [DISA](#frameworks) 🇺🇸, and [ENISA/NIS2](#frameworks) 🇪🇺.
 - Interactive HTML report with per-framework scores, colour-coded findings, search, and filters.
 - Collect data from all discovered Exchange servers, or a specific set via `-Servers`.
@@ -32,6 +32,7 @@ No installation required. EDCA is a self-contained PowerShell script.
 - When `-Servers` is not specified, Exchange servers are auto-discovered via Active Directory (the "Exchange Servers" security group). EDCA must be able to reach a domain controller.
 - EDCA uses remoting sessions to the Exchange servers through http (80).
 - EDCA uses LDAPS to Domain Controllers with the Global Catalog role (3269), and CIM uses WS-MAN (5985) to read CPU details.
+- To collect data from Edge Transport servers, run EDCA using -Local and move its server JSON file for analyzing.
 
 ## Required Permissions
 
@@ -57,7 +58,7 @@ From the `EDCA` folder:
 # Collect + analysis + HTML (both phases run by default)
 .\EDCA.ps1 -Servers EXCH01,EXCH02
 
-# Collect + analysis + HTML for the local server only
+# Collect + analysis + HTML for the local server only (Edge Transport)
 .\EDCA.ps1 -Local
 
 # Collect only (no report), limit parallel collection jobs

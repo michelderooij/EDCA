@@ -2636,7 +2636,14 @@ function Test-EDCAControl {
         'EDCA-MON-012',
         'EDCA-DATA-017',
         'EDCA-DATA-018',
-        'EDCA-SEC-040'
+        'EDCA-SEC-040',
+        'EDCA-TLS-030',
+        'EDCA-TLS-031',
+        'EDCA-TLS-032',
+        'EDCA-TLS-033',
+        'EDCA-TLS-034',
+        'EDCA-TLS-035',
+        'EDCA-TLS-036'
     )
 
     $exchangeBuilds = $null
@@ -2669,6 +2676,25 @@ function Test-EDCAControl {
             ($server.Exchange.PSObject.Properties.Name -contains 'IsExchangeServer') -and
             [bool]$server.Exchange.IsExchangeServer
         )
+        $isEdge = $isExchangeServer -and
+        ($server.Exchange.PSObject.Properties.Name -contains 'IsEdge') -and
+        [bool]$server.Exchange.IsEdge
+        $serverRole = if ($isEdge) { 'Edge' } elseif ($isExchangeServer) { 'Mailbox' } else { 'Unknown' }
+
+        # Role-aware skip: control declares roles and this Exchange server's role is not in the list
+        if ($isExchangeServer -and
+            ($Control.PSObject.Properties.Name -contains 'roles') -and
+            $null -ne $Control.roles -and
+            @($Control.roles).Count -gt 0 -and
+            $serverRole -ne 'Unknown' -and
+            $serverRole -notin @($Control.roles | ForEach-Object { [string]$_ })) {
+            $serverResults += [pscustomobject]@{
+                Server   = $serverName
+                Status   = 'Skipped'
+                Evidence = ('Control not applicable to {0} servers.' -f $serverRole)
+            }
+            continue
+        }
 
         if (($Control.id -in $exchangeOnlyControlIds) -and -not $isExchangeServer) {
             $serverResults += [pscustomobject]@{
@@ -7049,6 +7075,202 @@ function Test-EDCAControl {
                     }
                 }
             }
+            'EDCA-TLS-030' {
+                $edgeData = $null
+                if (($server.Exchange.PSObject.Properties.Name -contains 'EdgeData') -and $null -ne $server.Exchange.EdgeData) {
+                    $edgeData = $server.Exchange.EdgeData
+                }
+                if ($null -eq $edgeData) {
+                    $status = 'Unknown'
+                    $evidence = 'Edge subscription data unavailable; Exchange cmdlet collection may have failed. Ensure the Edge server was collected locally with -Local.'
+                }
+                else {
+                    $subs = @($edgeData.EdgeSubscriptions)
+                    if ($subs.Count -eq 0) {
+                        $status = 'Fail'
+                        $evidence = 'No Edge subscriptions found. The Edge server is not subscribed to an Exchange organisation. Run New-EdgeSubscription and import the subscription file on a Mailbox server.'
+                    }
+                    else {
+                        $invalid = @($subs | Where-Object { ($_.PSObject.Properties.Name -contains 'IsValid') -and [bool]$_.IsValid -eq $false })
+                        $sites = @($subs | ForEach-Object { if ($_.PSObject.Properties.Name -contains 'Site') { [string]$_.Site } }) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+                        if ($invalid.Count -gt 0) {
+                            $status = 'Fail'
+                            $evidence = ('Edge subscription(s) marked invalid: {0}. Re-run the Edge subscription wizard.' -f (($invalid | ForEach-Object { [string]$_.Name } | Where-Object { $_ }) -join ', '))
+                        }
+                        else {
+                            $status = 'Pass'
+                            $evidence = ('{0} valid Edge subscription(s) found, synchronising to site(s): {1}.' -f $subs.Count, ($sites -join ', '))
+                        }
+                    }
+                }
+            }
+            'EDCA-TLS-031' {
+                $edgeData = $null
+                if (($server.Exchange.PSObject.Properties.Name -contains 'EdgeData') -and $null -ne $server.Exchange.EdgeData) {
+                    $edgeData = $server.Exchange.EdgeData
+                }
+                if ($null -eq $edgeData) {
+                    $status = 'Unknown'
+                    $evidence = 'Anti-spam agent data unavailable; Exchange cmdlet collection may have failed.'
+                }
+                else {
+                    $disabled = @()
+                    foreach ($pair in @(
+                            @('ContentFilterConfig', 'Content filtering'),
+                            @('RecipientFilterConfig', 'Recipient filtering'),
+                            @('SenderFilterConfig', 'Sender filtering'),
+                            @('ConnectionFilterConfig', 'Connection filtering')
+                        )) {
+                        $prop = $pair[0]; $label = $pair[1]
+                        $cfg = $edgeData.PSObject.Properties[$prop]
+                        if ($null -eq $cfg -or $null -eq $cfg.Value) {
+                            $disabled += "$label (data unavailable)"
+                        }
+                        elseif (($cfg.Value.PSObject.Properties.Name -contains 'Enabled') -and [bool]$cfg.Value.Enabled -eq $false) {
+                            $disabled += "$label is disabled"
+                        }
+                    }
+                    if ($disabled.Count -eq 0) {
+                        $status = 'Pass'
+                        $evidence = 'Content, recipient, sender, and connection filtering agents are all enabled.'
+                    }
+                    else {
+                        $status = 'Fail'
+                        $evidence = Format-EDCAEvidenceWithElements -Summary ('Anti-spam agents not enabled:') -Elements $disabled
+                    }
+                }
+            }
+            'EDCA-TLS-032' {
+                $edgeData = $null
+                if (($server.Exchange.PSObject.Properties.Name -contains 'EdgeData') -and $null -ne $server.Exchange.EdgeData) {
+                    $edgeData = $server.Exchange.EdgeData
+                }
+                if ($null -eq $edgeData -or $null -eq $edgeData.RecipientFilterConfig) {
+                    $status = 'Unknown'
+                    $evidence = 'Recipient filter configuration data unavailable.'
+                }
+                elseif (($edgeData.RecipientFilterConfig.PSObject.Properties.Name -contains 'RecipientValidationEnabled') -and [bool]$edgeData.RecipientFilterConfig.RecipientValidationEnabled) {
+                    $status = 'Pass'
+                    $evidence = 'Recipient validation is enabled; mail for non-existent recipients is rejected at the Edge.'
+                }
+                else {
+                    $status = 'Fail'
+                    $evidence = 'Recipient validation is disabled. The Edge server accepts mail for non-existent recipients, exposing the organisation to directory harvest attacks. Run: Set-RecipientFilterConfig -RecipientValidationEnabled $true'
+                }
+            }
+            'EDCA-TLS-033' {
+                $edgeData = $null
+                if (($server.Exchange.PSObject.Properties.Name -contains 'EdgeData') -and $null -ne $server.Exchange.EdgeData) {
+                    $edgeData = $server.Exchange.EdgeData
+                }
+                if ($null -eq $edgeData -or $null -eq $edgeData.SenderFilterConfig) {
+                    $status = 'Unknown'
+                    $evidence = 'Sender filter configuration data unavailable.'
+                }
+                elseif (($edgeData.SenderFilterConfig.PSObject.Properties.Name -contains 'BlankSenderBlockingEnabled') -and [bool]$edgeData.SenderFilterConfig.BlankSenderBlockingEnabled) {
+                    $status = 'Pass'
+                    $evidence = 'Blank sender blocking is enabled; mail with an empty MAIL FROM address is rejected.'
+                }
+                else {
+                    $status = 'Fail'
+                    $evidence = 'Blank sender blocking is disabled. The Edge server accepts mail with an empty MAIL FROM address, facilitating bounce spam and backscatter. Run: Set-SenderFilterConfig -BlankSenderBlockingEnabled $true'
+                }
+            }
+            'EDCA-TLS-034' {
+                $edgeData = $null
+                if (($server.Exchange.PSObject.Properties.Name -contains 'EdgeData') -and $null -ne $server.Exchange.EdgeData) {
+                    $edgeData = $server.Exchange.EdgeData
+                }
+                if ($null -eq $edgeData) {
+                    $status = 'Unknown'
+                    $evidence = 'Send connector data unavailable.'
+                }
+                else {
+                    $connectors = @($edgeData.SendConnectors)
+                    if ($connectors.Count -eq 0) {
+                        $status = 'Unknown'
+                        $evidence = 'No send connectors found on this Edge server.'
+                    }
+                    else {
+                        $noTls = @($connectors | Where-Object {
+                                ($_.PSObject.Properties.Name -contains 'RequireTls') -and [bool]$_.RequireTls -eq $false -and
+                                ($_.PSObject.Properties.Name -contains 'Enabled') -and [bool]$_.Enabled
+                            })
+                        if ($noTls.Count -eq 0) {
+                            $status = 'Pass'
+                            $evidence = ('All {0} send connector(s) have RequireTls enabled.' -f $connectors.Count)
+                        }
+                        else {
+                            $status = 'Fail'
+                            $summary = ('{0} of {1} enabled send connector(s) do not require TLS:' -f $noTls.Count, $connectors.Count)
+                            $evidence = Format-EDCAEvidenceWithElements -Summary $summary -Elements @($noTls | ForEach-Object { [string]$_.Identity })
+                        }
+                    }
+                }
+            }
+            'EDCA-TLS-035' {
+                $edgeData = $null
+                if (($server.Exchange.PSObject.Properties.Name -contains 'EdgeData') -and $null -ne $server.Exchange.EdgeData) {
+                    $edgeData = $server.Exchange.EdgeData
+                }
+                if ($null -eq $edgeData) {
+                    $status = 'Unknown'
+                    $evidence = 'Send connector data unavailable.'
+                }
+                else {
+                    $connectors = @($edgeData.SendConnectors)
+                    if ($connectors.Count -eq 0) {
+                        $status = 'Unknown'
+                        $evidence = 'No send connectors found on this Edge server.'
+                    }
+                    else {
+                        $nonVerbose = @($connectors | Where-Object {
+                                ($_.PSObject.Properties.Name -contains 'ProtocolLoggingLevel') -and
+                                [string]$_.ProtocolLoggingLevel -ne 'Verbose'
+                            })
+                        if ($nonVerbose.Count -eq 0) {
+                            $status = 'Pass'
+                            $evidence = ('All {0} send connector(s) have Verbose protocol logging enabled.' -f $connectors.Count)
+                        }
+                        else {
+                            $status = 'Fail'
+                            $summary = ('{0} of {1} send connector(s) do not have Verbose protocol logging:' -f $nonVerbose.Count, $connectors.Count)
+                            $evidence = Format-EDCAEvidenceWithElements -Summary $summary -Elements @($nonVerbose | ForEach-Object { '{0} (ProtocolLoggingLevel: {1})' -f [string]$_.Identity, [string]$_.ProtocolLoggingLevel })
+                        }
+                    }
+                }
+            }
+            'EDCA-TLS-036' {
+                $certs = @()
+                if (($server.PSObject.Properties.Name -contains 'Certificates') -and $null -ne $server.Certificates) {
+                    $certs = @($server.Certificates)
+                }
+                if ($certs.Count -eq 0) {
+                    $status = 'Unknown'
+                    $evidence = 'Certificate data unavailable; cannot verify SMTP service assignment.'
+                }
+                else {
+                    $smtpCerts = @($certs | Where-Object {
+                            ($_.PSObject.Properties.Name -contains 'Services') -and [string]$_.Services -match 'SMTP' -and
+                            ($_.PSObject.Properties.Name -contains 'IsExpired') -and [bool]$_.IsExpired -eq $false
+                        })
+                    if ($smtpCerts.Count -gt 0) {
+                        $status = 'Pass'
+                        $evidence = ('{0} non-expired certificate(s) with the SMTP service assigned: {1}' -f $smtpCerts.Count, (($smtpCerts | ForEach-Object { [string]$_.Subject }) -join ', '))
+                    }
+                    else {
+                        $anySmt = @($certs | Where-Object { ($_.PSObject.Properties.Name -contains 'Services') -and [string]$_.Services -match 'SMTP' })
+                        if ($anySmt.Count -gt 0) {
+                            $status = 'Fail'
+                            $evidence = ('SMTP service is assigned but the certificate is expired. The Edge server cannot negotiate TLS until a valid certificate is assigned. Renew: Enable-ExchangeCertificate -Thumbprint <thumb> -Services SMTP')
+                        }
+                        else {
+                            $status = 'Fail'
+                            $evidence = 'No certificate has the SMTP service assigned. The Edge server will not present a certificate for STARTTLS. Assign with: Enable-ExchangeCertificate -Thumbprint <thumb> -Services SMTP'
+                        }
+                    }
+                }
+            }
             default {
                 $status = 'Unknown'
                 $evidence = 'Control evaluator not implemented.'
@@ -7213,7 +7435,7 @@ function Invoke-EDCAAnalysis {
 
     return [pscustomobject]@{
         Metadata = [pscustomobject]@{
-            AnalysisTimestamp   = (Get-Date)
+            AnalysisTimestamp   = (Get-Date -Format 'o')
             ControlCount        = $Controls.Count
             EnabledControlCount = (@($Controls | Where-Object { $_.verify }).Count)
         }

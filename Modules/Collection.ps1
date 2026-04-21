@@ -241,6 +241,9 @@ function Get-EDCAExchangeServerInfo {
             Edition                                  = $null
             ProductLine                              = 'Unknown'
             IsExchangeServer                         = $false
+            IsEdge                                   = $false
+            ServerRole                               = 'Unknown'
+            EdgeData                                 = $null
             ExtendedProtectionStatus                 = @()
             OutlookAnywhereSSLOffloading             = @()
             AdminAuditLogEnabled                     = $null
@@ -2067,6 +2070,9 @@ function Get-EDCAServerInventory {
             Edition                                  = $null
             ProductLine                              = 'Unknown'
             IsExchangeServer                         = $false
+            IsEdge                                   = $false
+            ServerRole                               = 'Unknown'
+            EdgeData                                 = $null
             ExtendedProtectionStatus                 = @()
             AdminAuditLogEnabled                     = $null
             ReplicationHealthPassed                  = $null
@@ -3832,6 +3838,9 @@ function Get-EDCAServerInventory {
             try {
                 $serverObject = Get-ExchangeServer -Identity $env:COMPUTERNAME -ErrorAction Stop
                 $exchangeInfo.IsExchangeServer = $true
+                $isEdge = ($serverObject.PSObject.Properties.Name -contains 'ServerRole') -and ([string]$serverObject.ServerRole -match 'Edge')
+                $exchangeInfo.IsEdge = $isEdge
+                $exchangeInfo.ServerRole = if ($isEdge) { 'Edge' } else { 'Mailbox' }
                 $exchangeInfo.Name = $serverObject.Name
                 $exchangeInfo.AdminDisplayVersion = [string]$serverObject.AdminDisplayVersion
                 try {
@@ -4358,16 +4367,35 @@ function Get-EDCAServerInventory {
     }
 
     $invokeTarget = $Server
+    $isLocalTarget = $Server.Equals($env:COMPUTERNAME, [System.StringComparison]::OrdinalIgnoreCase) -or
+        $Server -in @('.', 'localhost')
 
-    Write-Verbose ('Executing unified collection script block on {0} via Invoke-Command -ComputerName.' -f $invokeTarget)
-    $rawInventoryJson = Invoke-Command -ComputerName $invokeTarget -ScriptBlock $collectionScriptBlock -ArgumentList $false -ErrorAction Stop
+    if ($isLocalTarget) {
+        Write-Verbose ('Executing unified collection script block locally (no WinRM).')
+        $rawInventoryJson = & $collectionScriptBlock $false
+    }
+    else {
+        Write-Verbose ('Executing unified collection script block on {0} via Invoke-Command -ComputerName.' -f $invokeTarget)
+        $rawInventoryJson = Invoke-Command -ComputerName $invokeTarget -ScriptBlock $collectionScriptBlock -ArgumentList $false -ErrorAction Stop
+    }
 
     $inventory = $rawInventoryJson | ConvertFrom-Json
     if ($inventory.PSObject.Properties.Name -contains 'Server') {
         $inventory.Server = $Server
     }
 
-    if (($inventory.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $inventory.Exchange -and ($inventory.Exchange.PSObject.Properties.Name -contains 'ExchangeComputerMembership')) {
+    $isEdge = ($inventory.PSObject.Properties.Name -contains 'Exchange') -and
+        $null -ne $inventory.Exchange -and
+        ($inventory.Exchange.PSObject.Properties.Name -contains 'IsEdge') -and
+        [bool]$inventory.Exchange.IsEdge
+
+    if ($isEdge -and -not $isLocalTarget) {
+        $inventory.Exchange.CollectionWarnings = @($inventory.Exchange.CollectionWarnings) + @('Edge Transport server detected: Exchange cmdlet collection requires running EDCA on the Edge server itself (use -Local or target the Edge server by name).')
+        Write-EDCALog -Level 'WARN' -Message ('Edge Transport server {0}: Exchange cmdlet phase skipped. Run EDCA on the Edge server using -Local.' -f $Server)
+        return $inventory
+    }
+
+    if (-not $isEdge -and ($inventory.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $inventory.Exchange -and ($inventory.Exchange.PSObject.Properties.Name -contains 'ExchangeComputerMembership')) {
         $computerCn = $Server -replace '\..*$', ''
         try {
             $gcRootDse = [System.DirectoryServices.DirectoryEntry]::new('GC://RootDSE')
@@ -4418,9 +4446,9 @@ function Get-EDCAServerInventory {
         }
     }
 
-    if (($inventory.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $inventory.Exchange -and ($inventory.Exchange.PSObject.Properties.Name -contains 'IsExchangeServer') -and [bool]$inventory.Exchange.IsExchangeServer) {
+    $exchEndpointWarnings = @()
+    if (-not $isEdge -and ($inventory.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $inventory.Exchange -and ($inventory.Exchange.PSObject.Properties.Name -contains 'IsExchangeServer') -and [bool]$inventory.Exchange.IsExchangeServer) {
         Write-Verbose ('Collecting Exchange cmdlet data for {0} via Exchange endpoint (ConnectionUri/Kerberos).' -f $invokeTarget)
-        $exchEndpointWarnings = @()
         $cmdletsAvailable = $false
 
         try {
@@ -5295,6 +5323,141 @@ function Get-EDCAServerInventory {
         }
     }
 
+    if ($isEdge -and ($inventory.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $inventory.Exchange -and [bool]$inventory.Exchange.IsExchangeServer) {
+        Write-Verbose ('Collecting Exchange cmdlet data for Edge server {0} via Exchange endpoint (ConnectionUri/Negotiate).' -f $invokeTarget)
+        $edgeEndpointWarnings = @()
+        $edgeCmdletsAvailable = $false
+        $edgeData = [pscustomobject]@{
+            AntiSpamUpdates        = $null
+            EdgeSubscriptions      = @()
+            ContentFilterConfig    = $null
+            RecipientFilterConfig  = $null
+            SenderFilterConfig     = $null
+            ConnectionFilterConfig = $null
+            SendConnectors         = @()
+        }
+
+        try {
+            $sbEdgeSrv = [scriptblock]::Create("Get-ExchangeServer -Identity '$invokeTarget'")
+            $edgeServer = Invoke-EDCAExchangeEndpointCommand -Server $invokeTarget -ScriptBlock $sbEdgeSrv -Authentication Negotiate
+            if ($null -ne $edgeServer) {
+                $edgeCmdletsAvailable = $true
+                $inventory.Exchange.ExchangeCmdletsAvailable = $true
+                if ($edgeServer.PSObject.Properties.Name -contains 'Name') { $inventory.Exchange.Name = [string]$edgeServer.Name }
+                if ($edgeServer.PSObject.Properties.Name -contains 'AdminDisplayVersion') { $inventory.Exchange.AdminDisplayVersion = [string]$edgeServer.AdminDisplayVersion }
+                if ($edgeServer.PSObject.Properties.Name -contains 'Edition') { $inventory.Exchange.Edition = [string]$edgeServer.Edition }
+                $adv = [string]$inventory.Exchange.AdminDisplayVersion
+                if ($adv -match 'Version 15\.1') { $inventory.Exchange.ProductLine = 'Exchange2016' }
+                elseif ($adv -match 'Version 15\.2') {
+                    $isSe = $false
+                    if ($edgeServer.PSObject.Properties.Name -contains 'IsExchangeServerSubscriptionEdition') { $isSe = [bool]$edgeServer.IsExchangeServerSubscriptionEdition }
+                    if (-not $isSe -and $adv -match 'Subscription|SE') { $isSe = $true }
+                    if (-not $isSe -and $adv -match 'Build\s+(\d+)\.') { if ([int]$matches[1] -ge 2562) { $isSe = $true } }
+                    $inventory.Exchange.ProductLine = if ($isSe) { 'ExchangeSE' } else { 'Exchange2019' }
+                }
+            }
+        }
+        catch {
+            $edgeEndpointWarnings += ('Get-ExchangeServer (Edge/Negotiate) failed: ' + $_.Exception.Message)
+        }
+
+        if ($edgeCmdletsAvailable) {
+            try {
+                $certSvcResult = @(Invoke-EDCAExchangeEndpointCommand -Server $invokeTarget -Authentication Negotiate -ScriptBlock {
+                        Get-ExchangeCertificate -ErrorAction Stop | Select-Object -Property Thumbprint, Services
+                    })
+                $certSvcMap = @{}
+                foreach ($ec in $certSvcResult) {
+                    if (-not [string]::IsNullOrWhiteSpace([string]$ec.Thumbprint)) { $certSvcMap[[string]$ec.Thumbprint] = [string]$ec.Services }
+                }
+                $updatedCerts = @()
+                foreach ($cert in @($inventory.Certificates)) {
+                    $svc = if ($certSvcMap.ContainsKey([string]$cert.Thumbprint)) { $certSvcMap[[string]$cert.Thumbprint] } else { 'None' }
+                    $updatedCerts += [pscustomobject]@{
+                        Subject    = [string]$cert.Subject
+                        Thumbprint = [string]$cert.Thumbprint
+                        NotAfter   = $cert.NotAfter
+                        IsExpired  = [bool]$cert.IsExpired
+                        Services   = $svc
+                    }
+                }
+                $inventory | Add-Member -MemberType NoteProperty -Name Certificates -Value $updatedCerts -Force
+            }
+            catch {
+                $edgeEndpointWarnings += ('Get-ExchangeCertificate (Edge/Negotiate) failed: ' + $_.Exception.Message)
+            }
+
+            try {
+                $edgeData.AntiSpamUpdates = Invoke-EDCAExchangeEndpointCommand -Server $invokeTarget -Authentication Negotiate -ScriptBlock {
+                    Get-AntiSpamUpdates -ErrorAction Stop
+                }
+            }
+            catch {
+                $edgeEndpointWarnings += ('Get-AntiSpamUpdates (Edge/Negotiate) failed: ' + $_.Exception.Message)
+            }
+
+            try {
+                $edgeData.EdgeSubscriptions = @(Invoke-EDCAExchangeEndpointCommand -Server $invokeTarget -Authentication Negotiate -ScriptBlock {
+                        Get-EdgeSubscription -ErrorAction Stop | Select-Object -Property Name, Domain, Site, CreateUtc, LifeTime, LeaseType, IsValid
+                    })
+            }
+            catch {
+                $edgeEndpointWarnings += ('Get-EdgeSubscription (Edge/Negotiate) failed: ' + $_.Exception.Message)
+            }
+
+            try {
+                $edgeData.ContentFilterConfig = Invoke-EDCAExchangeEndpointCommand -Server $invokeTarget -Authentication Negotiate -ScriptBlock {
+                    Get-ContentFilterConfig -ErrorAction Stop | Select-Object -Property Enabled, QuarantineMailbox, RejectionResponse, SCLRejectEnabled, SCLDeleteEnabled
+                }
+            }
+            catch {
+                $edgeEndpointWarnings += ('Get-ContentFilterConfig (Edge/Negotiate) failed: ' + $_.Exception.Message)
+            }
+
+            try {
+                $edgeData.RecipientFilterConfig = Invoke-EDCAExchangeEndpointCommand -Server $invokeTarget -Authentication Negotiate -ScriptBlock {
+                    Get-RecipientFilterConfig -ErrorAction Stop | Select-Object -Property Enabled, BlockListEnabled, RecipientValidationEnabled
+                }
+            }
+            catch {
+                $edgeEndpointWarnings += ('Get-RecipientFilterConfig (Edge/Negotiate) failed: ' + $_.Exception.Message)
+            }
+
+            try {
+                $edgeData.SenderFilterConfig = Invoke-EDCAExchangeEndpointCommand -Server $invokeTarget -Authentication Negotiate -ScriptBlock {
+                    Get-SenderFilterConfig -ErrorAction Stop | Select-Object -Property Enabled, BlankSenderBlockingEnabled, BlockedSenders, BlockedDomains
+                }
+            }
+            catch {
+                $edgeEndpointWarnings += ('Get-SenderFilterConfig (Edge/Negotiate) failed: ' + $_.Exception.Message)
+            }
+
+            try {
+                $edgeData.ConnectionFilterConfig = Invoke-EDCAExchangeEndpointCommand -Server $invokeTarget -Authentication Negotiate -ScriptBlock {
+                    Get-ConnectionFilterConfig -ErrorAction Stop | Select-Object -Property Enabled, IPAllowList, IPBlockList, IPBlockListProviders
+                }
+            }
+            catch {
+                $edgeEndpointWarnings += ('Get-ConnectionFilterConfig (Edge/Negotiate) failed: ' + $_.Exception.Message)
+            }
+
+            try {
+                $edgeData.SendConnectors = @(Invoke-EDCAExchangeEndpointCommand -Server $invokeTarget -Authentication Negotiate -ScriptBlock {
+                        Get-SendConnector -ErrorAction Stop | Select-Object -Property Identity, RequireTls, TlsAuthLevel, TlsDomain, Enabled, ProtocolLoggingLevel, SmartHosts, MaxMessageSize
+                    })
+            }
+            catch {
+                $edgeEndpointWarnings += ('Get-SendConnector (Edge/Negotiate) failed: ' + $_.Exception.Message)
+            }
+
+            $inventory.Exchange.EdgeData = $edgeData
+        }
+
+        foreach ($w in $edgeEndpointWarnings) {
+            $inventory.Exchange.CollectionWarnings = @($inventory.Exchange.CollectionWarnings) + @($w)
+        }
+    }
+
     foreach ($w in $exchEndpointWarnings) {
         $inventory.Exchange.CollectionWarnings = @($inventory.Exchange.CollectionWarnings) + @($w)
     }
@@ -5576,7 +5739,9 @@ function Invoke-EDCAExchangeEndpointCommand {
         [Parameter(Mandatory = $true)]
         [string]$Server,
         [Parameter(Mandatory = $true)]
-        [scriptblock]$ScriptBlock
+        [scriptblock]$ScriptBlock,
+        [ValidateSet('Kerberos', 'Negotiate')]
+        [string]$Authentication = 'Kerberos'
     )
 
     $connectionHost = $Server
@@ -5593,7 +5758,7 @@ function Invoke-EDCAExchangeEndpointCommand {
 
     $connectionUri = ('http://{0}/PowerShell' -f $connectionHost)
 
-    return Invoke-Command -ConnectionUri $connectionUri -ConfigurationName Microsoft.Exchange -ScriptBlock $ScriptBlock -Authentication Kerberos -ErrorAction Stop
+    return Invoke-Command -ConnectionUri $connectionUri -ConfigurationName Microsoft.Exchange -ScriptBlock $ScriptBlock -Authentication $Authentication -ErrorAction Stop
 }
 
 function Get-EDCAOrganizationInventory {
