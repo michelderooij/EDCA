@@ -79,30 +79,31 @@ function Test-EDCAServerRemoteConnectivity {
     if ($localAliases -contains $Server -or $Server.Equals($env:COMPUTERNAME, [System.StringComparison]::OrdinalIgnoreCase)) {
         Write-Verbose ('Connectivity precheck for {0}: local target, remoting check skipped.' -f $Server)
         return [pscustomobject]@{
-            Server                = $Server
-            IsLocal               = $true
-            TcpPort80Reachable    = $true
-            CanConnect            = $true
-            CanReadRemoteRegistry = $true
-            Details               = 'Local execution target.'
+            Server                 = $Server
+            IsLocal                = $true
+            TcpPort5985Reachable   = $true
+            CanConnect             = $true
+            CanReadRemoteRegistry  = $true
+            Details                = 'Local execution target.'
         }
     }
 
     $details = @()
     $canConnect = $true
-    $tcpPort80Reachable = $false
+    $tcpPort5985Reachable = $false
     $canReadRemoteRegistry = $false
 
-    # Fast TCP port 80 reachability check — avoids waiting for timeouts when the
-    # server is simply unreachable. A 5-second window should be enough for LAN/WAN targets.
+    # Fast TCP port 5985 (WinRM HTTP) reachability check — if this port is unreachable the
+    # WinRM probe is guaranteed to fail, so we short-circuit immediately. A 5-second window
+    # is enough for LAN/WAN targets.
     try {
-        Write-Verbose ('Connectivity precheck for {0}: TCP port 80 reachability check.' -f $Server)
+        Write-Verbose ('Connectivity precheck for {0}: TCP port 5985 (WinRM) reachability check.' -f $Server)
         $tcpClient = [System.Net.Sockets.TcpClient]::new()
         try {
-            $connectTask = $tcpClient.ConnectAsync($Server, 80)
+            $connectTask = $tcpClient.ConnectAsync($Server, 5985)
             if (-not $connectTask.Wait(5000)) {
                 $canConnect = $false
-                $details += 'TCP port 80 reachability check timed out after 5 seconds.'
+                $details += 'TCP port 5985 (WinRM) reachability check timed out after 5 seconds.'
             }
             elseif ($connectTask.IsFaulted) {
                 $canConnect = $false
@@ -110,11 +111,11 @@ function Test-EDCAServerRemoteConnectivity {
                     $connectTask.Exception.InnerException.Message
                 }
                 else { [string]$connectTask.Exception }
-                $details += ('TCP port 80 reachability check failed: {0}' -f $innerMsg)
+                $details += ('TCP port 5985 (WinRM) reachability check failed: {0}' -f $innerMsg)
             }
             else {
-                $tcpPort80Reachable = $true
-                $details += 'TCP port 80 reachability check passed.'
+                $tcpPort5985Reachable = $true
+                $details += 'TCP port 5985 (WinRM) reachability check passed.'
             }
         }
         finally {
@@ -123,18 +124,7 @@ function Test-EDCAServerRemoteConnectivity {
     }
     catch {
         $canConnect = $false
-        $details += ('TCP port 80 reachability check error: {0}' -f $_.Exception.Message)
-    }
-
-    if ($canConnect) {
-        try {
-            Write-Verbose ('Connectivity precheck for {0}: probing WinRM endpoint.' -f $Server)
-            Test-WSMan -ComputerName $Server -ErrorAction Stop | Out-Null
-        }
-        catch {
-            $canConnect = $false
-            $details += ('WinRM probe failed: {0}' -f $_.Exception.Message)
-        }
+        $details += ('TCP port 5985 (WinRM) reachability check error: {0}' -f $_.Exception.Message)
     }
 
     if ($canConnect) {
@@ -162,12 +152,12 @@ function Test-EDCAServerRemoteConnectivity {
     }
 
     return [pscustomobject]@{
-        Server                = $Server
-        IsLocal               = $false
-        TcpPort80Reachable    = $tcpPort80Reachable
-        CanConnect            = $canConnect
-        CanReadRemoteRegistry = $canReadRemoteRegistry
-        Details               = ($details -join ' ')
+        Server                 = $Server
+        IsLocal                = $false
+        TcpPort5985Reachable   = $tcpPort5985Reachable
+        CanConnect             = $canConnect
+        CanReadRemoteRegistry  = $canReadRemoteRegistry
+        Details                = ($details -join ' ')
     }
 }
 
