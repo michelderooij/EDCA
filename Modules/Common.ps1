@@ -44,7 +44,32 @@ function Write-EDCALog {
     )
 
     $timestamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
-    Write-Host ('[{0}] [{1}] {2}' -f $timestamp, $Level, $Message)
+    # Collapse embedded newlines so every log entry stays on a single line.
+    $normalizedMessage = ($Message -replace '\r?\n\s*', ' | ').Trim()
+    Write-Host ('[{0}] [{1}] {2}' -f $timestamp, $Level, $normalizedMessage)
+}
+
+function Get-EDCAExceptionMessage {
+    <#
+    .SYNOPSIS
+        Returns a single-line diagnostic string by walking the full exception chain.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.ErrorRecord]$ErrorRecord
+    )
+
+    $parts = [System.Collections.Generic.List[string]]::new()
+    $ex = $ErrorRecord.Exception
+    while ($null -ne $ex) {
+        $msg = ($ex.Message -replace '\r?\n\s*', ' ').Trim()
+        if (-not [string]::IsNullOrWhiteSpace($msg) -and -not $parts.Contains($msg)) {
+            $parts.Add($msg)
+        }
+        $ex = $ex.InnerException
+    }
+    return ($parts -join ' -> ')
 }
 
 function Invoke-EDCAServerCommand {
@@ -79,31 +104,30 @@ function Test-EDCAServerRemoteConnectivity {
     if ($localAliases -contains $Server -or $Server.Equals($env:COMPUTERNAME, [System.StringComparison]::OrdinalIgnoreCase)) {
         Write-Verbose ('Connectivity precheck for {0}: local target, remoting check skipped.' -f $Server)
         return [pscustomobject]@{
-            Server                 = $Server
-            IsLocal                = $true
-            TcpPort5985Reachable   = $true
-            CanConnect             = $true
-            CanReadRemoteRegistry  = $true
-            Details                = 'Local execution target.'
+            Server                = $Server
+            IsLocal               = $true
+            CanReachPort          = $true
+            CanConnect            = $true
+            CanReadRemoteRegistry = $true
+            Details               = 'Local execution target.'
         }
     }
 
     $details = @()
     $canConnect = $true
-    $tcpPort5985Reachable = $false
+    $canReachPort = $false
     $canReadRemoteRegistry = $false
 
-    # Fast TCP port 5985 (WinRM HTTP) reachability check — if this port is unreachable the
-    # WinRM probe is guaranteed to fail, so we short-circuit immediately. A 5-second window
-    # is enough for LAN/WAN targets.
+    # Fast TCP port 80 reachability check — if this port is unreachable the
+    # remote endpoint is guaranteed to be unreachable, so we short-circuit immediately.
     try {
-        Write-Verbose ('Connectivity precheck for {0}: TCP port 5985 (WinRM) reachability check.' -f $Server)
+        Write-Verbose ('Connectivity precheck for {0}: TCP port 80 reachability check.' -f $Server)
         $tcpClient = [System.Net.Sockets.TcpClient]::new()
         try {
-            $connectTask = $tcpClient.ConnectAsync($Server, 5985)
+            $connectTask = $tcpClient.ConnectAsync($Server, 80)
             if (-not $connectTask.Wait(5000)) {
                 $canConnect = $false
-                $details += 'TCP port 5985 (WinRM) reachability check timed out after 5 seconds.'
+                $details += 'TCP port 80 reachability check timed out after 5 seconds.'
             }
             elseif ($connectTask.IsFaulted) {
                 $canConnect = $false
@@ -111,11 +135,11 @@ function Test-EDCAServerRemoteConnectivity {
                     $connectTask.Exception.InnerException.Message
                 }
                 else { [string]$connectTask.Exception }
-                $details += ('TCP port 5985 (WinRM) reachability check failed: {0}' -f $innerMsg)
+                $details += ('TCP port 80 reachability check failed: {0}' -f $innerMsg)
             }
             else {
-                $tcpPort5985Reachable = $true
-                $details += 'TCP port 5985 (WinRM) reachability check passed.'
+                $canReachPort = $true
+                $details += 'TCP port 80 reachability check passed.'
             }
         }
         finally {
@@ -124,7 +148,7 @@ function Test-EDCAServerRemoteConnectivity {
     }
     catch {
         $canConnect = $false
-        $details += ('TCP port 5985 (WinRM) reachability check error: {0}' -f $_.Exception.Message)
+        $details += ('TCP port 80 reachability check error: {0}' -f $_.Exception.Message)
     }
 
     if ($canConnect) {
@@ -152,12 +176,12 @@ function Test-EDCAServerRemoteConnectivity {
     }
 
     return [pscustomobject]@{
-        Server                 = $Server
-        IsLocal                = $false
-        TcpPort5985Reachable   = $tcpPort5985Reachable
-        CanConnect             = $canConnect
-        CanReadRemoteRegistry  = $canReadRemoteRegistry
-        Details                = ($details -join ' ')
+        Server                = $Server
+        IsLocal               = $false
+        CanReachPort          = $canReachPort
+        CanConnect            = $canConnect
+        CanReadRemoteRegistry = $canReadRemoteRegistry
+        Details               = ($details -join ' ')
     }
 }
 

@@ -4553,7 +4553,7 @@ function Get-EDCAServerInventory {
             }
         }
         catch {
-            $exchEndpointWarnings += ('Get-ExchangeServer via endpoint failed: ' + $_.Exception.Message)
+            $exchEndpointWarnings += ('Get-ExchangeServer via endpoint failed: ' + (Get-EDCAExceptionMessage -ErrorRecord $_))
         }
 
         if ($cmdletsAvailable) {
@@ -5604,10 +5604,11 @@ function Invoke-EDCAServerCollectionWorker {
         return $inventory
     }
     catch {
-        Write-EDCALog -Level 'WARN' -Message ('Collection failed on {0}: {1}' -f $Server, $_.Exception.Message)
+        $errorDetail = Get-EDCAExceptionMessage -ErrorRecord $_
+        Write-EDCALog -Level 'WARN' -Message ('Collection failed on {0}: {1}' -f $Server, $errorDetail)
         return [pscustomobject]@{
             Server               = $Server
-            CollectionError      = $_.Exception.Message
+            CollectionError      = $errorDetail
             ConnectivityPrecheck = $connectivity
         }
     }
