@@ -3910,6 +3910,46 @@ function Test-EDCAControl {
                     }
                 }
             }
+            'EDCA-MON-014' {
+                $osInfo = Get-EDCAOsBuildInfo -Server $server
+                if (-not $osInfo.IsKnown) {
+                    $status = 'Unknown'
+                    $evidence = ('PowerShell Module Logging applicability unknown. {0}' -f $osInfo.Evidence)
+                }
+                elseif ([int]$osInfo.Build -lt 17763) {
+                    $status = 'Skipped'
+                    $evidence = ('Not applicable for this baseline. {0}; expected Windows Server 2019/2022/2025 benchmark scope.' -f $osInfo.Evidence)
+                }
+                else {
+                    $modEnabled = $null
+                    $modAllModules = $null
+                    if (($server.OS.PSObject.Properties.Name -contains 'CisPolicy') -and $null -ne $server.OS.CisPolicy) {
+                        if ($server.OS.CisPolicy.PSObject.Properties.Name -contains 'ModuleLoggingEnabled') {
+                            $modEnabled = $server.OS.CisPolicy.ModuleLoggingEnabled
+                        }
+                        if ($server.OS.CisPolicy.PSObject.Properties.Name -contains 'ModuleLoggingAllModules') {
+                            $modAllModules = $server.OS.CisPolicy.ModuleLoggingAllModules
+                        }
+                    }
+
+                    if ($null -eq $modEnabled) {
+                        $status = 'Fail'
+                        $evidence = ('PowerShell Module Logging policy registry key is absent — EnableModuleLogging is not configured. {0}' -f $osInfo.Evidence)
+                    }
+                    elseif (-not [bool]$modEnabled) {
+                        $status = 'Fail'
+                        $evidence = ('PowerShell Module Logging is disabled (EnableModuleLogging = 0). {0}' -f $osInfo.Evidence)
+                    }
+                    elseif ($modAllModules -ne $true) {
+                        $status = 'Fail'
+                        $evidence = ('PowerShell Module Logging is enabled but the ModuleNames key does not contain ''*'' — not all modules are logged. {0}' -f $osInfo.Evidence)
+                    }
+                    else {
+                        $status = 'Pass'
+                        $evidence = ('PowerShell Module Logging is enabled for all modules (*). {0}' -f $osInfo.Evidence)
+                    }
+                }
+            }
             'EDCA-IAC-006' {
                 $osInfo = Get-EDCAOsBuildInfo -Server $server
                 if (-not $osInfo.IsKnown) {

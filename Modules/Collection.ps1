@@ -2556,6 +2556,26 @@ function Get-EDCAServerInventory {
         catch {
         }
 
+        $moduleLoggingEnabled = $null
+        $moduleLoggingAllModules = $null
+        try {
+            $modLogging = Get-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\PowerShell\ModuleLogging' -ErrorAction SilentlyContinue
+            if ($null -ne $modLogging -and $modLogging.PSObject.Properties.Name -contains 'EnableModuleLogging') {
+                $moduleLoggingEnabled = ([int]$modLogging.EnableModuleLogging -eq 1)
+            }
+            if ($moduleLoggingEnabled -eq $true) {
+                $modNames = Get-Item -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\PowerShell\ModuleLogging\ModuleNames' -ErrorAction SilentlyContinue
+                if ($null -ne $modNames) {
+                    $moduleLoggingAllModules = ($modNames.GetValueNames() -contains '*')
+                }
+                else {
+                    $moduleLoggingAllModules = $false
+                }
+            }
+        }
+        catch {
+        }
+
         $netFrameworkRelease = $null
         try {
             $netReg = Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\NET Framework Setup\NDP\v4\Full' -Name Release -ErrorAction SilentlyContinue
@@ -3165,6 +3185,8 @@ function Get-EDCAServerInventory {
                 DefenderExclusionProcesses        = $defenderExclusionProcesses
                 CredentialGuardEnabled            = $credentialGuardEnabled
                 ScriptBlockLoggingEnabled         = $scriptBlockLoggingEnabled
+                ModuleLoggingEnabled              = $moduleLoggingEnabled
+                ModuleLoggingAllModules           = $moduleLoggingAllModules
                 TcpKeepAlive                      = $tcpKeepAliveTime
                 RpcMinConnectionTimeout           = $rpcMinConnectionTimeout
                 IPv6DisabledComponents            = $ipv6DisabledComponents
