@@ -376,7 +376,7 @@ function New-EDCAHtmlReport {
         $groupStatus = Get-EDCAAggregateStatus -Statuses @($group.Statuses)
         $groupCss = Get-EDCAStatusClass -Status $groupStatus
         $groupRagLabel = Get-EDCARagLabel -Status $groupStatus
-        $groupCount = @($group.Statuses).Count
+        $groupCount = @($group.Statuses | Where-Object { $_ -ne 'Skipped' }).Count
         $encodedCategoryName = ConvertTo-EDCAHtmlEncoded -Value $categoryName
 
         $null = $groupedFindingRows.AppendLine((

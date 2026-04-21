@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.8 Preview
+- **Role-aware connectivity errors** (`Analysis.ps1`): when a server fails collection due to a connectivity error, the pre-check failure is no longer surfaced as evidence for controls that do not apply to that server's role. The control is instead marked **Skipped** ("Control not applicable to Edge/Mailbox servers"). Server role is resolved from the organisation-level `EdgeServers` list, matching the same approach used elsewhere in analysis.
+- **Category control count excludes skipped controls** (`Reporting.ps1`): the control count shown next to each category header in the HTML report no longer includes controls with an **Overall Status** of `Skipped`.
+- **WinRM pre-check improved** (`Common.ps1`): connectivity pre-check now tests TCP port 5985 (WinRM HTTP) instead of port 80, matching the actual transport used by `Invoke-Command`. The `Test-WSMan` stage has been removed; the second stage uses an `Invoke-Command` probe identical to the collection mechanism. Local servers bypass the pre-check entirely.
+- **Stray lines in certificate collection fixed** (`Collection.ps1`): three hash-table property lines (`ReceiveConnectors`, `SenderReputationConfig`, `SenderIdConfig`) accidentally embedded inside the `Get-ExchangeCertificate` `foreach` loop have been removed, preventing a "term not recognised" error during remote certificate collection.
+- **Trend chart x-axis date labels removed** (`Reporting.ps1`): date labels are no longer rendered on the horizontal axis of the compliance trend chart; dates remain available via the hover tooltip.
+- **`$selectedOrgId` script-scope initialisation** (`EDCA.ps1`): the variable is now initialised at script scope before the collection block, preventing a `VariableIsUndefined` error under `Set-StrictMode -Version Latest` when running with `-Collect` only (without `-Report`).
+
 ## v0.7 Preview
 - **ENISA framework renamed to NIS2**: the `ENISA` framework tag has been renamed to `NIS2` across all controls, code, and documentation. The framework was already exclusively backed by the NIS2 Directive (EU) 2022/2555 and the NCSC-NL TLS Guidelines 2025-05 — the ENISA label was a misnomer. Use `-Framework NIS2` where you previously used `-Framework ENISA`.
 - **NIS2 framework expanded**: 3 additional Transport Security controls now carry the `NIS2` tag — `EDCA-TLS-011` (external send connector STARTTLS), `EDCA-TLS-014` (domain security / mutual TLS), and `EDCA-TLS-021` (internal receive connectors require encryption). Total NIS2-tagged controls: 27.
