@@ -2672,6 +2672,30 @@ function Test-EDCAControl {
     foreach ($server in $CollectionData.Servers) {
         $serverName = ([string]$server.Server -split '\.')[0]
         if ($server.PSObject.Properties.Name -contains 'CollectionError') {
+            # Determine server role using org-level EdgeServers list (Exchange metadata is
+            # unavailable when collection failed). If the control does not apply to this
+            # server's role, emit Skipped instead of surfacing the connectivity error.
+            $ceIsEdge = $false
+            if (($CollectionData.PSObject.Properties.Name -contains 'Organization') -and
+                $null -ne $CollectionData.Organization -and
+                ($CollectionData.Organization.PSObject.Properties.Name -contains 'EdgeServers')) {
+                $ceIsEdge = @(@($CollectionData.Organization.EdgeServers) |
+                    Where-Object { [string]$_.Name -eq $serverName }).Count -gt 0
+            }
+            $ceServerRole = if ($ceIsEdge) { 'Edge' } else { 'Mailbox' }
+
+            if (($Control.PSObject.Properties.Name -contains 'roles') -and
+                $null -ne $Control.roles -and
+                @($Control.roles).Count -gt 0 -and
+                $ceServerRole -notin @($Control.roles | ForEach-Object { [string]$_ })) {
+                $serverResults += [pscustomobject]@{
+                    Server   = $serverName
+                    Status   = 'Skipped'
+                    Evidence = ('Control not applicable to {0} servers.' -f $ceServerRole)
+                }
+                continue
+            }
+
             $serverResults += [pscustomobject]@{
                 Server   = $serverName
                 Status   = 'Unknown'

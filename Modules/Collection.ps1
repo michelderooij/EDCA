@@ -5354,9 +5354,6 @@ function Get-EDCAServerInventory {
                         IsExpired  = [bool]$cert.IsExpired
                         Services   = $svc
                     }
-            ReceiveConnectors      = @()
-            SenderReputationConfig = $null
-            SenderIdConfig         = $null
                 }
                 $inventory | Add-Member -MemberType NoteProperty -Name Certificates -Value $updatedCerts -Force
             }

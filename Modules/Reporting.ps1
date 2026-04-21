@@ -857,11 +857,7 @@ function New-EDCAHtmlReport {
                         ctx.fillRect(xL, yBase - stack - barH, barW, barH);
                         stack += barH;
                     }
-                    /* x-axis date label */
-                    ctx.fillStyle = textColor;
-                    ctx.textAlign = 'center';
-                    ctx.textBaseline = 'top';
-                    ctx.fillText(ce2.d || '', xL + barW / 2, padT + chartH + 4);
+                    /* x-axis date label — omitted */
                 }
             }
 
