@@ -305,6 +305,7 @@ function New-EDCAHtmlReport {
         $serverLines = @()
         $subjectLabel = if (($finding.PSObject.Properties.Name -contains 'SubjectLabel') -and -not [string]::IsNullOrWhiteSpace([string]$finding.SubjectLabel)) { [string]$finding.SubjectLabel } else { 'Server' }
         foreach ($serverResult in $finding.ServerResults) {
+            if ($serverResult.Status -eq 'Skipped') { continue }
             $serverRagLabel = Get-EDCARagLabel -Status $serverResult.Status
             $srvName = [string]$serverResult.Server
             $srvRoleBadge = if ($serverRoleMap.ContainsKey($srvName) -and $serverRoleMap[$srvName] -eq 'Edge') { ' <span class="role-badge role-edge" title="Edge Transport server">Edge</span>' } else { '' }
@@ -317,12 +318,22 @@ function New-EDCAHtmlReport {
             )
         }
 
+        # Derive filter data attributes for subject and role targeting
+        $findingSubject = if ($finding.PSObject.Properties.Name -contains 'Subject') { [string]$finding.Subject } else { '' }
+        $findingRoles = if ($finding.PSObject.Properties.Name -contains 'Roles') { @($finding.Roles | ForEach-Object { [string]$_ }) } else { @() }
+        $rolesValue = ($findingRoles -join ',')
+        $targetValue = if ($findingSubject -eq 'Database') { 'Database' }
+        elseif ($findingSubject -eq 'Mailbox') { 'Mailbox' }
+        elseif ($subjectLabel -eq 'Domain') { 'Domain' }
+        elseif ($subjectLabel -eq 'Organization' -or $findingSubject -eq 'Organization') { 'Organization' }
+        else { 'Server' }
+
         $overallCss = Get-EDCAStatusClass -Status $finding.OverallStatus
         $overallRagLabel = Get-EDCARagLabel -Status $finding.OverallStatus
         $findingModalId = 'modal-' + ($finding.ControlId -replace '[^a-zA-Z0-9]', '-')
         $descriptionHtml = ConvertTo-EDCAHtmlMarkdown -Value $finding.Description
         $findingHtml = (
-            ('<div class="finding-row {0}" data-status="{1}" data-category="{2}" data-framework="{3}" data-modal="{4}" data-id="{6}" data-title="{7}" data-description="{10}">' +
+            ('<div class="finding-row {0}" data-status="{1}" data-category="{2}" data-framework="{3}" data-modal="{4}" data-id="{6}" data-title="{7}" data-description="{10}" data-subject="{17}" data-roles="{18}">' +
             '{5}<span class="finding-id">{6}</span> <span class="finding-title">{7}</span>' +
             '</div>' +
             '<div class="modal-data" id="{4}" hidden>' +
@@ -351,7 +362,9 @@ function New-EDCAHtmlReport {
             $referencesHtml,
             $considerationsHtml,
             $subjectLabel,
-            $descriptionHtml
+            $descriptionHtml,
+            $targetValue,
+            $rolesValue
         )
 
         $categoryName = [string]$finding.Category
@@ -413,14 +426,23 @@ function New-EDCAHtmlReport {
         ($CollectionData.Organization.PSObject.Properties.Name -contains 'EdgeServers')) {
         $orgEdgeServers = @($CollectionData.Organization.EdgeServers)
     }
-    $collectedEdgeNames = @($collectedEdgeServers | ForEach-Object { if ($_.PSObject.Properties.Name -contains 'Name') { [string]$_.Name } else { '' } })
+    $collectedEdgeNames = @($collectedEdgeServers | ForEach-Object {
+            if (($_.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $_.Exchange -and ($_.Exchange.PSObject.Properties.Name -contains 'Name')) { [string]$_.Exchange.Name }
+            elseif ($_.PSObject.Properties.Name -contains 'Server') { [string]$_.Server }
+            else { '' }
+        })
     $uncollectedEdgeServers = @($orgEdgeServers | Where-Object { $n = if ($_.PSObject.Properties.Name -contains 'Name') { [string]$_.Name } else { '' }; $collectedEdgeNames -notcontains $n })
     if ($collectedEdgeServers.Count -gt 0) {
-        $edgeNamesHtml = ($collectedEdgeServers | ForEach-Object { ConvertTo-EDCAHtmlEncoded -Value (if ($_.PSObject.Properties.Name -contains 'Name') { $_.Name } else { '' }) }) -join ', '
+        $edgeNamesHtml = ($collectedEdgeServers | ForEach-Object {
+                $n = if (($_.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $_.Exchange -and ($_.Exchange.PSObject.Properties.Name -contains 'Name')) { [string]$_.Exchange.Name }
+                elseif ($_.PSObject.Properties.Name -contains 'Server') { [string]$_.Server }
+                else { '' }
+                ConvertTo-EDCAHtmlEncoded -Value $n
+            }) -join ', '
         $null = $noticesHtml.AppendLine('<div class="env-notice env-notice-info"><span class="env-notice-icon">&#10003;</span><div><strong>Edge Transport servers collected and assessed</strong>' + $collectedEdgeServers.Count + ' Edge Transport server(s) were collected and assessed with role-specific controls: ' + $edgeNamesHtml + '.</div></div>')
     }
     if ($uncollectedEdgeServers.Count -gt 0) {
-        $edgeNames = ($uncollectedEdgeServers | ForEach-Object { ConvertTo-EDCAHtmlEncoded -Value (if ($_.PSObject.Properties.Name -contains 'Name') { $_.Name } else { '' }) }) -join ', '
+        $edgeNames = ($uncollectedEdgeServers | ForEach-Object { ConvertTo-EDCAHtmlEncoded -Value $(if ($_.PSObject.Properties.Name -contains 'Name') { $_.Name } else { '' }) }) -join ', '
         $null = $noticesHtml.AppendLine('<div class="env-notice"><span class="env-notice-icon">&#9888;</span><div><strong>Edge Transport servers not collected</strong>The following Edge Transport server(s) were detected in the Exchange organisation but not collected. Re-run EDCA specifying these servers to assess Edge-specific controls: ' + $edgeNames + '.</div></div>')
     }
     $exchange2013Servers = @($CollectionData.Servers | Where-Object {
@@ -685,6 +707,14 @@ function New-EDCAHtmlReport {
                     <option value="Platform Security">Platform Security</option>
                     <option value="Resilience">Resilience</option>
                     <option value="Transport Security">Transport Security</option>
+                </select>
+                <select id="targetFilter">
+                    <option value="all">All Targets</option>
+                    <option value="org">Organisation</option>
+                    <option value="domain">Domain Name</option>
+                    <option value="mailbox">Mailbox Server</option>
+                    $(if ($collectedEdgeServers.Count -gt 0) { '<option value="edge">Edge Transport Server</option>' })
+                    <option value="database">Database</option>
                 </select>
             </div>
             <div id="findingContainer">
@@ -1009,6 +1039,7 @@ function New-EDCAHtmlReport {
             var statusFilter    = document.getElementById('statusFilter');
             var frameworkFilter = document.getElementById('frameworkFilter');
             var categoryFilter  = document.getElementById('categoryFilter');
+            var targetFilter    = document.getElementById('targetFilter');
             var searchFilter    = document.getElementById('searchFilter');
             var groups = document.querySelectorAll('details.category-group');
 
@@ -1050,7 +1081,16 @@ function New-EDCAHtmlReport {
                         var rowTitle = (row.getAttribute('data-title') || '').toLowerCase();
                         var rowDesc  = (row.getAttribute('data-description') || '').toLowerCase();
                         var searchMatch = searchText === '' || rowId.indexOf(searchText) >= 0 || rowTitle.indexOf(searchText) >= 0 || rowDesc.indexOf(searchText) >= 0;
-                        var rowVisible = statusMatch && frameworkMatch && categoryMatch && searchMatch;
+                        var rowSubject = row.getAttribute('data-subject') || '';
+                        var rowRoles   = row.getAttribute('data-roles')   || '';
+                        var tVal = targetFilter ? targetFilter.value : 'all';
+                        var targetMatch = tVal === 'all' ||
+                            (tVal === 'org'      && rowSubject === 'Organization') ||
+                            (tVal === 'domain'   && rowSubject === 'Domain') ||
+                            (tVal === 'mailbox'  && rowRoles.indexOf('Mailbox') >= 0) ||
+                            (tVal === 'edge'     && rowRoles.indexOf('Edge') >= 0) ||
+                            (tVal === 'database' && rowSubject === 'Database');
+                        var rowVisible = statusMatch && frameworkMatch && categoryMatch && searchMatch && targetMatch;
                         row.style.display = rowVisible ? '' : 'none';
                         if (rowVisible) {
                             visibleCount++;
@@ -1083,6 +1123,7 @@ function New-EDCAHtmlReport {
             statusFilter.addEventListener('change', applyFilters);
             frameworkFilter.addEventListener('change', applyFilters);
             categoryFilter.addEventListener('change', applyFilters);
+            if (targetFilter) { targetFilter.addEventListener('change', applyFilters); }
             if (searchFilter) { searchFilter.addEventListener('input', applyFilters); }
             var clearBtn = document.getElementById('searchClear');
             if (searchFilter && clearBtn) {

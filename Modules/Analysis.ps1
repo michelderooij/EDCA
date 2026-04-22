@@ -2550,6 +2550,8 @@ function Test-EDCAControl {
             Frameworks     = @($Control.frameworks)
             Verify         = [bool]$Control.verify
             OverallStatus  = $status
+            Subject        = [string]$Control.subject
+            Roles          = @($Control.roles | ForEach-Object { [string]$_ })
             ServerResults  = if ($null -ne $domainServerResults) { $domainServerResults } else {
                 @([pscustomobject]@{ Server = 'Organization'; Status = $status; Evidence = $evidence })
             }
@@ -2674,7 +2676,7 @@ function Test-EDCAControl {
         if ($server.PSObject.Properties.Name -contains 'CollectionError') {
             # Determine server role using org-level EdgeServers list (Exchange metadata is
             # unavailable when collection failed). If the control does not apply to this
-            # server's role, emit Skipped instead of surfacing the connectivity error.
+            # server's role, skip silently rather than surfacing the connectivity error.
             $ceIsEdge = $false
             if (($CollectionData.PSObject.Properties.Name -contains 'Organization') -and
                 $null -ne $CollectionData.Organization -and
@@ -2688,11 +2690,6 @@ function Test-EDCAControl {
                 $null -ne $Control.roles -and
                 @($Control.roles).Count -gt 0 -and
                 $ceServerRole -notin @($Control.roles | ForEach-Object { [string]$_ })) {
-                $serverResults += [pscustomobject]@{
-                    Server   = $serverName
-                    Status   = 'Skipped'
-                    Evidence = ('Control not applicable to {0} servers.' -f $ceServerRole)
-                }
                 continue
             }
 
@@ -2718,18 +2715,15 @@ function Test-EDCAControl {
         [bool]$server.Exchange.IsEdge
         $serverRole = if ($isEdge) { 'Edge' } elseif ($isExchangeServer) { 'Mailbox' } else { 'Unknown' }
 
-        # Role-aware skip: control declares roles and this Exchange server's role is not in the list
+        # Role-aware skip: control declares roles and this Exchange server's role is not in the list.
+        # No entry is added to $serverResults; the overall-status logic treats an empty non-skipped
+        # set as 'Skipped', so the finding is still correctly marked N/A for role-filtered servers.
         if ($isExchangeServer -and
             ($Control.PSObject.Properties.Name -contains 'roles') -and
             $null -ne $Control.roles -and
             @($Control.roles).Count -gt 0 -and
             $serverRole -ne 'Unknown' -and
             $serverRole -notin @($Control.roles | ForEach-Object { [string]$_ })) {
-            $serverResults += [pscustomobject]@{
-                Server   = $serverName
-                Status   = 'Skipped'
-                Evidence = ('Control not applicable to {0} servers.' -f $serverRole)
-            }
             continue
         }
 
@@ -2966,15 +2960,31 @@ function Test-EDCAControl {
                 }
             }
             'EDCA-RES-001' {
-                $problem = @($server.Services | Where-Object { $_.Status -ne 'Running' })
-                $status = if ($problem.Count -eq 0) { 'Pass' } else { 'Fail' }
-                $summary = ('Non-running required services: {0}' -f $problem.Count)
-                if ($problem.Count -gt 0) {
-                    $problemDetails = @($problem | ForEach-Object { '{0} status={1}' -f [string]$_.Name, [string]$_.Status })
-                    $evidence = Format-EDCAEvidenceWithElements -Summary $summary -Elements $problemDetails
+                $serviceHealth = $null
+                if (($server.Exchange.PSObject.Properties.Name -contains 'ServiceHealth') -and $null -ne $server.Exchange.ServiceHealth) {
+                    $serviceHealth = @($server.Exchange.ServiceHealth)
+                }
+
+                if ($null -eq $serviceHealth -or $serviceHealth.Count -eq 0) {
+                    $status = 'Unknown'
+                    $evidence = 'Service health data unavailable.'
                 }
                 else {
-                    $evidence = 'Compliant — all required Exchange services are running.'
+                    $failingRoles = @($serviceHealth | Where-Object { $_.RequiredServicesRunning -eq $false })
+                    if ($failingRoles.Count -eq 0) {
+                        $status = 'Pass'
+                        $evidence = 'Compliant — all required Exchange services are running.'
+                    }
+                    else {
+                        $status = 'Fail'
+                        $problemDetails = @($failingRoles | ForEach-Object {
+                                $roleName = [string]$_.Role
+                                $notRunning = @($_.ServicesNotRunning | ForEach-Object { [string]$_ })
+                                ('{0}: {1}' -f $roleName, ($notRunning -join ', '))
+                            })
+                        $summary = ('Required services not running across {0} role(s).' -f $failingRoles.Count)
+                        $evidence = Format-EDCAEvidenceWithElements -Summary $summary -Elements $problemDetails
+                    }
                 }
             }
             'EDCA-RES-003' {
@@ -3651,28 +3661,49 @@ function Test-EDCAControl {
                 else {
                     $hasDedicatedExternal = @($connectors | Where-Object { ([string]$_.PermissionGroups -match 'AnonymousUsers') -and ([string]$_.AuthMechanism -match 'Tls') }).Count -gt 0
                     $hasDedicatedInternal = @($connectors | Where-Object { ([string]$_.PermissionGroups -match 'ExchangeServers|ExchangeUsers') -and ([string]$_.PermissionGroups -notmatch 'AnonymousUsers') }).Count -gt 0
-                    $status = if ($hasDedicatedExternal -and $hasDedicatedInternal) { 'Pass' } else { 'Fail' }
-                    $summary = ('Connectors evaluated: {0}; external relay pattern is {1}; internal relay pattern is {2}.' -f
-                        $connectors.Count,
-                        (Get-EDCAStateDescriptor -Value $hasDedicatedExternal -Expectation 'Present'),
-                        (Get-EDCAStateDescriptor -Value $hasDedicatedInternal -Expectation 'Present'))
 
-                    if ($status -eq 'Fail') {
-                        $missingPatterns = @()
-                        if (-not $hasDedicatedExternal) {
-                            $missingPatterns += 'Missing external relay connector pattern: AnonymousUsers + TLS authentication.'
-                        }
-                        if (-not $hasDedicatedInternal) {
-                            $missingPatterns += 'Missing internal relay connector pattern: ExchangeServers/ExchangeUsers without AnonymousUsers.'
-                        }
+                    if ($isEdge) {
+                        # Edge Transport servers only accept inbound internet mail; no internal relay
+                        # connector is expected or required.
+                        $status = if ($hasDedicatedExternal) { 'Pass' } else { 'Fail' }
+                        $summary = ('Connectors evaluated: {0}; external relay pattern is {1} (internal relay pattern not required on Edge Transport).' -f
+                            $connectors.Count,
+                            (Get-EDCAStateDescriptor -Value $hasDedicatedExternal -Expectation 'Present'))
 
-                        $connectorDetails = @($connectors | ForEach-Object {
-                                '{0} | PermissionGroups={1} | AuthMechanism={2}' -f [string]$_.Name, [string]$_.PermissionGroups, [string]$_.AuthMechanism
-                            })
-                        $evidence = Format-EDCAEvidenceWithElements -Summary $summary -Elements (@($missingPatterns) + @($connectorDetails))
+                        if ($status -eq 'Fail') {
+                            $connectorDetails = @($connectors | ForEach-Object {
+                                    '{0} | PermissionGroups={1} | AuthMechanism={2}' -f [string]$_.Identity, [string]$_.PermissionGroups, [string]$_.AuthMechanism
+                                })
+                            $evidence = Format-EDCAEvidenceWithElements -Summary $summary -Elements (@('Missing external relay connector pattern: AnonymousUsers + TLS authentication.') + @($connectorDetails))
+                        }
+                        else {
+                            $evidence = ('Compliant — external relay connector pattern detected ({0} connectors). Internal relay pattern not required on Edge Transport.' -f $connectors.Count)
+                        }
                     }
                     else {
-                        $evidence = ('Compliant — external and internal relay connector patterns detected ({0} connectors).' -f $connectors.Count)
+                        $status = if ($hasDedicatedExternal -and $hasDedicatedInternal) { 'Pass' } else { 'Fail' }
+                        $summary = ('Connectors evaluated: {0}; external relay pattern is {1}; internal relay pattern is {2}.' -f
+                            $connectors.Count,
+                            (Get-EDCAStateDescriptor -Value $hasDedicatedExternal -Expectation 'Present'),
+                            (Get-EDCAStateDescriptor -Value $hasDedicatedInternal -Expectation 'Present'))
+
+                        if ($status -eq 'Fail') {
+                            $missingPatterns = @()
+                            if (-not $hasDedicatedExternal) {
+                                $missingPatterns += 'Missing external relay connector pattern: AnonymousUsers + TLS authentication.'
+                            }
+                            if (-not $hasDedicatedInternal) {
+                                $missingPatterns += 'Missing internal relay connector pattern: ExchangeServers/ExchangeUsers without AnonymousUsers.'
+                            }
+
+                            $connectorDetails = @($connectors | ForEach-Object {
+                                    '{0} | PermissionGroups={1} | AuthMechanism={2}' -f [string]$_.Identity, [string]$_.PermissionGroups, [string]$_.AuthMechanism
+                                })
+                            $evidence = Format-EDCAEvidenceWithElements -Summary $summary -Elements (@($missingPatterns) + @($connectorDetails))
+                        }
+                        else {
+                            $evidence = ('Compliant — external and internal relay connector patterns detected ({0} connectors).' -f $connectors.Count)
+                        }
                     }
                 }
             }
@@ -7714,7 +7745,7 @@ function Test-EDCAControl {
                         $badTarpit = @($connectors | Where-Object {
                                 ($_.PSObject.Properties.Name -contains 'TarpitInterval') -and
                                 $null -ne $_.TarpitInterval -and
-                                [TimeSpan]$_.TarpitInterval -lt $minInterval
+                                $(try { [TimeSpan]::new([long]$_.TarpitInterval.Ticks) -lt $minInterval } catch { $false })
                             })
                         if ($badTarpit.Count -eq 0) {
                             $status = 'Pass'
@@ -7773,6 +7804,8 @@ function Test-EDCAControl {
         Frameworks     = @($Control.frameworks)
         Verify         = [bool]$Control.verify
         OverallStatus  = $overallStatus
+        Subject        = [string]$Control.subject
+        Roles          = @($Control.roles | ForEach-Object { [string]$_ })
         SubjectLabel   = $subjectLabel
         ServerResults  = $serverResults
         References     = @($Control.references)

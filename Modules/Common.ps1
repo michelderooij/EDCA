@@ -195,3 +195,39 @@ function ConvertTo-EDCAJson {
     return ($InputObject | ConvertTo-Json -Depth 12)
 }
 
+function ConvertFrom-EDCAJson {
+    # Wrapper around ConvertFrom-Json that handles JSON files containing keys with different
+    # casing (e.g. EnhancedTimeSpan serialises with both a "value" field and a "Value" property).
+    # When PS7's strict parser rejects such a file, falls back to -AsHashTable and recursively
+    # converts the resulting hashtable tree back to PSCustomObjects so all downstream code that
+    # uses .PSObject.Properties continues to work without modification.
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true, ValueFromPipeline = $true)]
+        [string]$InputObject
+    )
+
+    try {
+        return $InputObject | ConvertFrom-Json
+    }
+    catch {
+        if ($_.Exception.Message -notlike '*keys with different casing*') { throw }
+        return ConvertFrom-EDCAJsonHashTableNode ($InputObject | ConvertFrom-Json -AsHashtable)
+    }
+}
+
+function ConvertFrom-EDCAJsonHashTableNode {
+    param([object]$Node)
+    if ($Node -is [System.Collections.IDictionary]) {
+        $obj = [pscustomobject]@{}
+        foreach ($k in $Node.Keys) {
+            $obj | Add-Member -MemberType NoteProperty -Name ([string]$k) -Value (ConvertFrom-EDCAJsonHashTableNode $Node[$k]) -Force
+        }
+        return $obj
+    }
+    if ($Node -is [System.Collections.IList] -and $Node -isnot [string]) {
+        return , @($Node | ForEach-Object { ConvertFrom-EDCAJsonHashTableNode $_ })
+    }
+    return $Node
+}
+

@@ -3403,8 +3403,8 @@
     ],
     "remediation": {
       "automatable": true,
-      "description": "Start critical Exchange services if they are stopped.",
-      "scriptTemplate": "Start-Service -Name MSExchangeIS -ErrorAction Stop; Start-Service -Name MSExchangeTransport -ErrorAction Stop"
+      "description": "Run Test-ServiceHealth to identify required Exchange services that are not running, then start them.",
+      "scriptTemplate": "# Diagnose: Check which required Exchange services are not running\nTest-ServiceHealth | Where-Object { -not $_.RequiredServicesRunning } | Select-Object Role, ServicesNotRunning\n\n# Remediate: Start services that are not running\nTest-ServiceHealth | Where-Object { -not $_.RequiredServicesRunning } | ForEach-Object { $_.ServicesNotRunning | ForEach-Object { Start-Service -Name $_ -ErrorAction SilentlyContinue } }"
     },
     "considerations": "Restarting Exchange services disrupts active client sessions and mail flow. Always use DAG maintenance mode or scheduled maintenance windows when restarting services on production servers.",
     "roles": [
@@ -3437,7 +3437,8 @@
     },
     "considerations": "The Unified Content Cleanup task temporarily increases I/O load on the transport database volume when running. Schedule cleanup tasks during low-traffic periods. Cleaning a large accumulated backlog may take extended time.",
     "roles": [
-      "Mailbox"
+      "Mailbox",
+      "Edge"
     ]
   },
   {

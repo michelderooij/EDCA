@@ -291,7 +291,7 @@ if ($doReport -and -not $doCollect) {
     $rawServerFiles = [System.Collections.Generic.List[pscustomobject]]::new()
 
     foreach ($jsonFile in $jsonFiles) {
-        $parsed = Get-Content -Path $jsonFile -Raw | ConvertFrom-Json
+        $parsed = Get-Content -Path $jsonFile -Raw | ConvertFrom-EDCAJson
 
         $fileTimestamp = [datetime]::MinValue
         if ($parsed.PSObject.Properties.Name -contains 'Metadata' -and
@@ -365,7 +365,16 @@ if ($doReport -and -not $doCollect) {
     $selectedOrgId = $null
     $selectedOrgTimestamps = @()
     if ($allOrgFiles.Count -gt 0) {
-        $bestOrgEntry = $allOrgFiles | Sort-Object -Property Timestamp -Descending | Select-Object -First 1
+        # Prefer org files where Organization.Available = true (from Mailbox servers) over
+        # Edge-sourced org files (Available = false, limited data). Tiebreak by recency.
+        $bestOrgEntry = $allOrgFiles | Sort-Object -Property @(
+            @{ Expression     = {
+                    $p = $_.Parsed
+                    if ($p.PSObject.Properties.Name -contains 'Organization' -and $null -ne $p.Organization -and
+                        $p.Organization.PSObject.Properties.Name -contains 'Available') { [int][bool]$p.Organization.Available } else { 0 }
+                }; Descending = $true
+            },
+            @{ Expression = 'Timestamp'; Descending = $true }) | Select-Object -First 1
         if ($bestOrgEntry.Parsed.PSObject.Properties.Name -contains 'Metadata' -and
             $bestOrgEntry.Parsed.Metadata.PSObject.Properties.Name -contains 'OrganizationId') {
             $selectedOrgId = [string]$bestOrgEntry.Parsed.Metadata.OrganizationId
@@ -413,7 +422,15 @@ if ($doReport -and -not $doCollect) {
         }
 
         # Skip files whose OrganizationId explicitly belongs to a different organization.
-        if ($null -ne $sfOrgId -and $null -ne $selectedOrgId -and $sfOrgId -ne $selectedOrgId) {
+        # Exception: Edge server files report a workgroup-derived org identity that never matches
+        # the AD org; include them regardless of OrgId mismatch.
+        $sfIsEdge = ($parsed.PSObject.Properties.Name -contains 'Servers') -and
+        @($parsed.Servers).Count -gt 0 -and
+        ($parsed.Servers[0].PSObject.Properties.Name -contains 'Exchange') -and
+        $null -ne $parsed.Servers[0].Exchange -and
+        ($parsed.Servers[0].Exchange.PSObject.Properties.Name -contains 'IsEdge') -and
+        [bool]$parsed.Servers[0].Exchange.IsEdge
+        if ($null -ne $sfOrgId -and $null -ne $selectedOrgId -and $sfOrgId -ne $selectedOrgId -and -not $sfIsEdge) {
             Write-EDCALog -Level 'WARN' -Message ('Excluding server file "{0}": belongs to organization "{1}", not "{2}".' -f (Split-Path $jsonFile -Leaf), $sfOrgId, $selectedOrgId)
             continue
         }
