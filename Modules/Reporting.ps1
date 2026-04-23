@@ -416,6 +416,8 @@ function New-EDCAHtmlReport {
 
     $metadata = $CollectionData.Metadata
     $reportGeneratedAt = Get-Date -Format 'o'
+    $reportGeneratedAtDisplay = Get-Date -Format 'yyyy-MM-dd HH:mm'
+    $collectedAtDisplay = try { [datetime]::Parse($metadata.CollectionTimestamp).ToString('yyyy-MM-dd HH:mm') } catch { $metadata.CollectionTimestamp }
 
     # Build environment notices (Edge servers, unsupported Exchange versions)
     $noticesHtml = New-Object System.Text.StringBuilder
@@ -672,7 +674,7 @@ function New-EDCAHtmlReport {
     <header>
         <div>
             <h1>EDCA: Exchange Deployment &amp; Compliance Assessment $($metadata.ToolVersion)</h1>
-            <p>Data collected: $($metadata.CollectionTimestamp) | Report generated: $reportGeneratedAt | Executed by: $($metadata.ExecutedBy)</p>
+            <p><a href="https://github.com/michelderooij/EDCA" target="_blank" rel="noopener">Source</a> | Data collected: $collectedAtDisplay | Report generated: $reportGeneratedAtDisplay | Executed by: $($metadata.ExecutedBy)</p>
         </div>
         <div class="dark-toggle no-print">
             <button class="print-btn" onclick="window.print()" title="Print or save as PDF">&#128438;&nbsp;Print&nbsp;/&nbsp;PDF</button>

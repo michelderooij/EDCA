@@ -4853,10 +4853,10 @@ function Get-EDCAServerInventory {
                 try { $sb = [scriptblock]::Create('Get-SenderReputationConfig'); $srCfg = Invoke-EDCAExchangeEndpointCommand -Server $invokeTarget -ScriptBlock $sb } catch {}
                 if ($null -ne $cfCfg -or $null -ne $sfCfg -or $null -ne $sidCfg -or $null -ne $srCfg) {
                     $inventory.Exchange.AntiSpamConfigs = [pscustomobject]@{
-                        ContentFilter    = if ($null -ne $cfCfg)  { [pscustomobject]@{ Enabled = [bool]$cfCfg.Enabled  } } else { $null }
-                        SenderFilter     = if ($null -ne $sfCfg)  { [pscustomobject]@{ Enabled = [bool]$sfCfg.Enabled  } } else { $null }
+                        ContentFilter    = if ($null -ne $cfCfg) { [pscustomobject]@{ Enabled = [bool]$cfCfg.Enabled } } else { $null }
+                        SenderFilter     = if ($null -ne $sfCfg) { [pscustomobject]@{ Enabled = [bool]$sfCfg.Enabled } } else { $null }
                         SenderIdConfig   = if ($null -ne $sidCfg) { [pscustomobject]@{ Enabled = [bool]$sidCfg.Enabled } } else { $null }
-                        SenderReputation = if ($null -ne $srCfg)  { [pscustomobject]@{ Enabled = [bool]$srCfg.Enabled  } } else { $null }
+                        SenderReputation = if ($null -ne $srCfg) { [pscustomobject]@{ Enabled = [bool]$srCfg.Enabled } } else { $null }
                     }
                 }
             }
@@ -5437,7 +5437,7 @@ function Get-EDCAServerInventory {
         $edgeEndpointWarnings = @()
         $edgeCmdletsAvailable = $false
         $edgeData = [pscustomobject]@{
-            AntiSpamUpdates          = $null
+            AntispamAgentsEnabled    = $null
             EdgeSubscriptions        = @()
             ContentFilterConfig      = $null
             RecipientFilterConfig    = $null
@@ -5504,15 +5504,6 @@ function Get-EDCAServerInventory {
             }
             catch {
                 $edgeEndpointWarnings += ('Get-ExchangeCertificate (Edge/Negotiate) failed: ' + $_.Exception.Message)
-            }
-
-            try {
-                $edgeData.AntiSpamUpdates = & $invokeEdge {
-                    Get-AntiSpamUpdates -ErrorAction Stop
-                }
-            }
-            catch {
-                $edgeEndpointWarnings += ('Get-AntiSpamUpdates (Edge/Negotiate) failed: ' + $_.Exception.Message)
             }
 
             try {
@@ -5647,6 +5638,10 @@ function Get-EDCAServerInventory {
                     $pickupDirectoryPath = $null
                     if ($edgeTransportService.PSObject.Properties.Name -contains 'PickupDirectoryPath' -and -not [string]::IsNullOrWhiteSpace([string]$edgeTransportService.PickupDirectoryPath)) {
                         $pickupDirectoryPath = [string]$edgeTransportService.PickupDirectoryPath
+                    }
+
+                    if ($edgeTransportService.PSObject.Properties.Name -contains 'AntispamAgentsEnabled') {
+                        $edgeData.AntispamAgentsEnabled = [bool]$edgeTransportService.AntispamAgentsEnabled
                     }
 
                     $inventory.Exchange.TransportRetryConfig = [pscustomobject]@{

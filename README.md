@@ -12,7 +12,8 @@ PowerShell-based tool to collect Exchange on-premises deployment data, evaluate 
 - Separate collect (`-Collect`) and report (`-Report`) phases, or both in a single run.
 - Optional remediation script generation for all failed controls.
 - `-Update` switch to download the latest Exchange build catalog from GitHub.
-- Report supports dark mode (`prefers-color-scheme`).
+- Option to hide skipped controls (eg Edge Transport specific controls when there is no Edge Transport server).
+- Report supports dark mode.
 
 ## Installation
 
