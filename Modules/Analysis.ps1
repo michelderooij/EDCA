@@ -2285,6 +2285,18 @@ function Test-EDCAControl {
             }
             'EDCA-DATA-002' {
                 $subjectLabel = 'Server'
+                # Edge Transport servers do not participate in OAuth or hybrid authentication;
+                # skip this control when the collection contains only Edge servers.
+                $mailboxServersForData002 = @($CollectionData.Servers | Where-Object {
+                        ($_.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $_.Exchange -and
+                        ($_.Exchange.PSObject.Properties.Name -contains 'IsExchangeServer') -and [bool]$_.Exchange.IsExchangeServer -and
+                        -not (($_.Exchange.PSObject.Properties.Name -contains 'IsEdge') -and [bool]$_.Exchange.IsEdge)
+                    })
+                if ($mailboxServersForData002.Count -eq 0) {
+                    $status = 'Skipped'
+                    $evidence = 'Edge Transport servers do not use OAuth authentication certificates — control not applicable.'
+                    break
+                }
                 # Evaluate org-level auth cert validity from Organization.AuthCertificate (Get-AuthConfig)
                 $orgCert = $null
                 if (($CollectionData.Organization.PSObject.Properties.Name -contains 'AuthCertificate') -and $null -ne $CollectionData.Organization.AuthCertificate) {
@@ -2321,13 +2333,23 @@ function Test-EDCAControl {
                         $evidence = ('Auth certificate {0} is valid; expires {1} ({2} days remaining).' -f [string]$orgCert.Thumbprint, [string]$orgCert.NotAfter, $(if ($null -ne $daysRemaining) { $daysRemaining } else { 'unknown' }))
                     }
                 }
-                # Per-server presence check: auth cert must be in each Exchange server's local certificate store
+                # Per-server presence check: auth cert must be in each Mailbox server's local certificate store.
+                # Edge Transport servers do not use OAuth auth certificates — emit Skipped for them.
                 $exchServers = @($CollectionData.Servers | Where-Object {
                         ($_.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $_.Exchange -and
-                        ($_.Exchange.PSObject.Properties.Name -contains 'IsExchangeServer') -and [bool]$_.Exchange.IsExchangeServer
+                        ($_.Exchange.PSObject.Properties.Name -contains 'IsExchangeServer') -and [bool]$_.Exchange.IsExchangeServer -and
+                        -not (($_.Exchange.PSObject.Properties.Name -contains 'IsEdge') -and [bool]$_.Exchange.IsEdge)
                     })
-                if ($exchServers.Count -gt 0) {
+                $edgeServersForData002 = @($CollectionData.Servers | Where-Object {
+                        ($_.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $_.Exchange -and
+                        ($_.Exchange.PSObject.Properties.Name -contains 'IsExchangeServer') -and [bool]$_.Exchange.IsExchangeServer -and
+                        ($_.Exchange.PSObject.Properties.Name -contains 'IsEdge') -and [bool]$_.Exchange.IsEdge
+                    })
+                if ($exchServers.Count -gt 0 -or $edgeServersForData002.Count -gt 0) {
                     $domainServerResults = @()
+                    foreach ($edgeSrv in $edgeServersForData002) {
+                        $domainServerResults += [pscustomobject]@{ Server = ([string]$edgeSrv.Server -split '\.')[0]; Status = 'Skipped'; Evidence = 'Edge Transport server — OAuth authentication certificates are not used on Edge.' }
+                    }
                     foreach ($srv in $exchServers) {
                         $srvName = [string]$srv.Server
                         $srvCert = $null
@@ -2370,8 +2392,8 @@ function Test-EDCAControl {
                 if (($CollectionData.PSObject.Properties.Name -contains 'Organization') -and $null -ne $CollectionData.Organization -and
                     ($CollectionData.Organization.PSObject.Properties.Name -contains 'CustomerFeedbackEnabled')) {
                     $enabled = $CollectionData.Organization.CustomerFeedbackEnabled -eq $true
-                    $cfDesc = if (-not $enabled) { 'non-compliant (must be False)' } else { 'compliant (disabled)' }
-                    $status = if (-not $enabled) { 'Fail' } else { 'Pass' }
+                    $cfDesc = if ($enabled) { 'non-compliant (must be False)' } else { 'compliant (False)' }
+                    $status = if ($enabled) { 'Fail' } else { 'Pass' }
                     $evidence = ('CustomerFeedbackEnabled={0} — {1}.' -f $CollectionData.Organization.CustomerFeedbackEnabled, $cfDesc)
                 }
                 else {
@@ -7030,6 +7052,11 @@ function Test-EDCAControl {
                 }
             }
             'EDCA-GOV-012' {
+                if ($isEdge) {
+                    $status = 'Skipped'
+                    $evidence = 'Edge Transport server — POP3, IMAP4 and UM services are not installed on Edge.'
+                    break
+                }
                 $services = @()
                 if (($server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $server.Exchange -and
                     ($server.Exchange.PSObject.Properties.Name -contains 'ExchangeServices')) {
