@@ -57,7 +57,7 @@ List every framework that mandates or explicitly recommends this control. Use on
 already present in `controls.json`.
 
 ```
-"ANSSI" | "Best Practice" | "BSI" | "CIS" | "CISA" | "DISA" | "ENISA"
+"ANSSI" | "Best Practice" | "BSI" | "CIS" | "CISA" | "DISA" | "NIS2"
 ```
 
 Include `"Best Practice"` for every control that represents sound Exchange hardening regardless of
@@ -144,7 +144,8 @@ Do not include PowerShell in this field — that belongs in `scriptTemplate`.
 
 Structure every script template in two clearly labelled sections using `# === DIAGNOSTICS ===`
 and `# === REMEDIATION ===`. The diagnostics section MUST run read-only and MUST always be present.
-The remediation section MUST be commented out by default.
+The remediation section MUST be commented out by default. It should demonstrate how to implement the
+control for the organization, one database, one server or one domain.
 
 ```powershell
 # === DIAGNOSTICS ===

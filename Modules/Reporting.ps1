@@ -247,7 +247,9 @@ function New-EDCAHtmlReport {
                 '{' + $parts + '}'
             })
         $trendJson = ('[' + ($trendPoints -join ',') + ']') -replace '"', '&quot;'
-        $trendCardHtml = ('<div class="score-card trend-card" data-trend="{0}"><canvas class="trend-canvas" width="288" height="160"></canvas><p class="card-label">Total Compliance Trend</p></div>' -f $trendJson)
+        if ($trendPoints.Count -ge 2) {
+            $trendCardHtml = ('<div class="score-card trend-card" data-trend="{0}"><canvas class="trend-canvas" width="288" height="160"></canvas><p class="card-label">Total Compliance Trend</p></div>' -f $trendJson)
+        }
     }
 
     $findingGroups = @{}
@@ -290,7 +292,7 @@ function New-EDCAHtmlReport {
                 $remediationParts += ('<p>{0}</p>' -f $remediationDescription)
             }
             if (-not [string]::IsNullOrWhiteSpace($remediationScript)) {
-                $remediationParts += ('<pre><code>{0}</code></pre>' -f $remediationScript)
+                $remediationParts += ('<div class="pre-wrapper"><button class="copy-btn" title="Copy to clipboard" aria-label="Copy script to clipboard">Copy</button><pre><code>{0}</code></pre></div>' -f $remediationScript)
             }
             if ($remediationParts.Count -gt 0) {
                 $remediationHtml = $remediationParts -join ''
@@ -340,8 +342,8 @@ function New-EDCAHtmlReport {
             '<h2>{6}: {7}</h2>' +
             '<p class="modal-meta"><strong>Category:</strong> {8} | <strong>Severity:</strong> {9} | <strong>Frameworks:</strong> {3}</p>' +
             '<div class="finding-description">{16}</div>' +
-            '<h3>Evidence</h3>' +
-            '<table class="evidence-table"><thead><tr><th>{15}</th><th>Status</th><th>Evidence</th></tr></thead><tbody>{11}</tbody></table>' +
+            '<div class="evidence-section"><h3>Evidence</h3>' +
+            '<table class="evidence-table"><thead><tr><th>{15}</th><th>Status</th><th>Evidence</th></tr></thead><tbody>{11}</tbody></table></div>' +
             '<h3>Remediation</h3>{12}' +
             $(if (-not [string]::IsNullOrWhiteSpace($considerationsHtml)) { '<h3>Considerations</h3>{14}' } else { '' }) +
             '<h3>References</h3>{13}' +
@@ -413,6 +415,7 @@ function New-EDCAHtmlReport {
     }
 
     $metadata = $CollectionData.Metadata
+    $reportGeneratedAt = Get-Date -Format 'o'
 
     # Build environment notices (Edge servers, unsupported Exchange versions)
     $noticesHtml = New-Object System.Text.StringBuilder
@@ -615,6 +618,10 @@ function New-EDCAHtmlReport {
         td.evidence-cell { font-family: Consolas, 'Courier New', monospace; font-size: 12px; white-space: pre-wrap; word-break: break-all; }
         pre { margin: 8px 0 0; padding: 10px 14px; background: var(--pre-bg); border: 1px solid var(--pre-border); border-radius: 6px; overflow-x: auto; }
         pre code { font-family: Consolas, 'Courier New', monospace; font-size: 12px; white-space: pre; }
+        .pre-wrapper { position: relative; }
+        .copy-btn { position: absolute; top: 16px; right: 8px; padding: 3px 10px; font-size: 11px; font-family: inherit; background: var(--th-bg); border: 1px solid var(--pre-border); border-radius: 4px; cursor: pointer; color: var(--fg); opacity: 0.7; transition: opacity 0.15s; }
+        .copy-btn:hover { opacity: 1; }
+        .copy-btn.copied { color: #16a34a; border-color: #16a34a; opacity: 1; }
         .evidence-table tr.status-pass td    { background: var(--row-bg-p); }
         .evidence-table tr.status-fail td    { background: var(--row-bg-f); }
         .evidence-table tr.status-unknown td { background: var(--row-bg-u); }
@@ -651,6 +658,13 @@ function New-EDCAHtmlReport {
             details.category-group .finding-row { display: flex !important; box-shadow: none !important; transform: none !important; cursor: default !important; break-inside: avoid; }
             .score-card { box-shadow: none !important; cursor: default !important; }
             a[href]::after { content: none; }
+            .modal-data { display: block !important; margin: 2px 0 6px 0; border-left: 3px solid #cbd5e1; padding-left: 10px; }
+            .modal-data > * { display: none !important; }
+            .modal-data > .evidence-section { display: block !important; }
+            .evidence-section h3 { display: block !important; font-size: 12px; margin: 2px 0 4px; border-top: none; padding-top: 0; color: #334155; }
+            .evidence-table { font-size: 11px; width: 100%; border-collapse: collapse; }
+            .evidence-table th, .evidence-table td { padding: 4px 6px; border-bottom: 1px solid #e2e8f0; }
+            td.evidence-cell { white-space: pre-wrap; word-break: break-word; font-family: Consolas, 'Courier New', monospace; }
         }
     </style>
 </head>
@@ -658,10 +672,15 @@ function New-EDCAHtmlReport {
     <header>
         <div>
             <h1>EDCA: Exchange Deployment &amp; Compliance Assessment $($metadata.ToolVersion)</h1>
-            <p>Generated: $($metadata.CollectionTimestamp) | Executed by: $($metadata.ExecutedBy)</p>
+            <p>Data collected: $($metadata.CollectionTimestamp) | Report generated: $reportGeneratedAt | Executed by: $($metadata.ExecutedBy)</p>
         </div>
         <div class="dark-toggle no-print">
             <button class="print-btn" onclick="window.print()" title="Print or save as PDF">&#128438;&nbsp;Print&nbsp;/&nbsp;PDF</button>
+            <span class="dark-toggle-label">Show skipped</span>
+            <label class="toggle-switch" title="Toggle show skipped controls">
+                <input type="checkbox" id="skipToggle" checked />
+                <span class="toggle-track"></span>
+            </label>
             <span class="dark-toggle-label">Dark mode</span>
             <label class="toggle-switch" title="Toggle dark mode">
                 <input type="checkbox" id="darkToggle" />
@@ -1041,6 +1060,7 @@ function New-EDCAHtmlReport {
             var categoryFilter  = document.getElementById('categoryFilter');
             var targetFilter    = document.getElementById('targetFilter');
             var searchFilter    = document.getElementById('searchFilter');
+            var skipToggle      = document.getElementById('skipToggle');
             var groups = document.querySelectorAll('details.category-group');
 
             function getAggStatus(statuses) {
@@ -1063,6 +1083,7 @@ function New-EDCAHtmlReport {
                 return '<span class="rag-icon rag-warn" title="Warning">&#9888;</span>';
             }
             function applyFilters() {
+                var hideSkipped = skipToggle ? !skipToggle.checked : false;
                 var searchText = searchFilter ? searchFilter.value.toLowerCase().trim() : '';
                 for (var g = 0; g < groups.length; g++) {
                     var group = groups[g];
@@ -1074,7 +1095,12 @@ function New-EDCAHtmlReport {
 
                     for (var i = 0; i < rows.length; i++) {
                         var row = rows[i];
-                        var statusMatch    = statusFilter.value === 'All'   || row.getAttribute('data-status') === statusFilter.value;
+                        var rowStatus = row.getAttribute('data-status') || '';
+                        if (hideSkipped && rowStatus === 'Skipped') {
+                            row.style.display = 'none';
+                            continue;
+                        }
+                        var statusMatch    = statusFilter.value === 'All'   || rowStatus === statusFilter.value;
                         var frameworkText  = row.getAttribute('data-framework') || '';
                         var frameworkMatch = frameworkFilter.value === 'All' || frameworkText.indexOf(frameworkFilter.value) >= 0;
                         var rowId    = (row.getAttribute('data-id')    || '').toLowerCase();
@@ -1094,12 +1120,13 @@ function New-EDCAHtmlReport {
                         row.style.display = rowVisible ? '' : 'none';
                         if (rowVisible) {
                             visibleCount++;
-                            visibleStatuses.push(row.getAttribute('data-status') || 'Unknown');
+                            visibleStatuses.push(rowStatus || 'Unknown');
                         }
                     }
 
                     var countEl = group.querySelector('.category-count');
-                    if (countEl) { countEl.textContent = '(' + visibleCount + ' controls)'; }
+                    var nonSkippedCount = visibleStatuses.filter(function(s) { return s !== 'Skipped'; }).length;
+                    if (countEl) { countEl.textContent = '(' + nonSkippedCount + ' controls)'; }
                     group.style.display = (categoryMatch && visibleCount > 0) ? '' : 'none';
 
                     if (visibleCount > 0) {
@@ -1125,6 +1152,16 @@ function New-EDCAHtmlReport {
             categoryFilter.addEventListener('change', applyFilters);
             if (targetFilter) { targetFilter.addEventListener('change', applyFilters); }
             if (searchFilter) { searchFilter.addEventListener('input', applyFilters); }
+            if (skipToggle) {
+                try {
+                    var savedSkip = localStorage.getItem('edca-show-skipped');
+                    if (savedSkip === '0') { skipToggle.checked = false; }
+                } catch (e) {}
+                skipToggle.addEventListener('change', function () {
+                    try { localStorage.setItem('edca-show-skipped', skipToggle.checked ? '1' : '0'); } catch (e) {}
+                    applyFilters();
+                });
+            }
             var clearBtn = document.getElementById('searchClear');
             if (searchFilter && clearBtn) {
                 searchFilter.addEventListener('input', function() { clearBtn.style.display = searchFilter.value ? '' : 'none'; });
@@ -1146,6 +1183,11 @@ function New-EDCAHtmlReport {
                 rows[j].setAttribute('data-print-orig', rows[j].style.display);
                 if (rows[j].style.display !== 'none') {
                     rows[j].style.display = 'flex';
+                    var modalId = rows[j].getAttribute('data-modal');
+                    if (modalId) {
+                        var modalEl = document.getElementById(modalId);
+                        if (modalEl) { modalEl.removeAttribute('hidden'); }
+                    }
                 }
             }
         });
@@ -1158,14 +1200,50 @@ function New-EDCAHtmlReport {
             for (var j = 0; j < rows.length; j++) {
                 rows[j].style.display = rows[j].getAttribute('data-print-orig') || '';
             }
+            var modals = document.querySelectorAll('.modal-data');
+            for (var k = 0; k < modals.length; k++) { modals[k].setAttribute('hidden', ''); }
             var groups = document.querySelectorAll('details.category-group');
-            for (var k = 0; k < groups.length; k++) {
-                var visRows = groups[k].querySelectorAll('.finding-row');
+            for (var m = 0; m < groups.length; m++) {
+                var visRows = groups[m].querySelectorAll('.finding-row');
                 var hasVisible = false;
-                for (var m = 0; m < visRows.length; m++) {
-                    if (visRows[m].style.display !== 'none') { hasVisible = true; break; }
+                for (var n = 0; n < visRows.length; n++) {
+                    if (visRows[n].style.display !== 'none') { hasVisible = true; break; }
                 }
-                groups[k].style.display = hasVisible ? '' : 'none';
+                groups[m].style.display = hasVisible ? '' : 'none';
+            }
+        });
+        /* ── Copy-to-clipboard for remediation script blocks ── */
+        document.addEventListener('click', function (e) {
+            var btn = e.target.closest ? e.target.closest('.copy-btn') : (e.target.className === 'copy-btn' ? e.target : null);
+            if (!btn) { return; }
+            var code = btn.parentElement.querySelector('code');
+            if (!code) { return; }
+            var text = code.innerText || code.textContent || '';
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(function () {
+                    btn.textContent = 'Copied!';
+                    btn.classList.add('copied');
+                    setTimeout(function () { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
+                }, function () {
+                    btn.textContent = 'Failed';
+                    setTimeout(function () { btn.textContent = 'Copy'; }, 2000);
+                });
+            } else {
+                try {
+                    var ta = document.createElement('textarea');
+                    ta.value = text;
+                    ta.style.position = 'fixed'; ta.style.opacity = '0';
+                    document.body.appendChild(ta);
+                    ta.focus(); ta.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(ta);
+                    btn.textContent = 'Copied!';
+                    btn.classList.add('copied');
+                    setTimeout(function () { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
+                } catch (ex) {
+                    btn.textContent = 'Failed';
+                    setTimeout(function () { btn.textContent = 'Copy'; }, 2000);
+                }
             }
         });
     </script>

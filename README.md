@@ -7,6 +7,7 @@ PowerShell-based tool to collect Exchange on-premises deployment data, evaluate 
 - Supports Exchange 2016, Exchange 2019, and Exchange SE (Subscription Edition).
 - Evaluates controls against seven compliance frameworks: [Best Practice](#frameworks), [ANSSI](#frameworks) 🇫🇷, [BSI](#frameworks) 🇩🇪, [CIS](#frameworks) 🇺🇸, [CISA](#frameworks) 🇺🇸, [DISA](#frameworks) 🇺🇸, and [NIS2](#frameworks) 🇪🇺.
 - Interactive HTML report with per-framework scores, colour-coded findings, search, and filters.
+- Evidence is included when printing or saving the report to PDF (browser print → Save as PDF).
 - Collect data from all discovered Exchange servers, or a specific set via `-Servers`.
 - Separate collect (`-Collect`) and report (`-Report`) phases, or both in a single run.
 - Optional remediation script generation for all failed controls.
@@ -32,7 +33,7 @@ No installation required. EDCA is a self-contained PowerShell script.
 - When `-Servers` is not specified, Exchange servers are auto-discovered via Active Directory (the "Exchange Servers" security group). EDCA must be able to reach a domain controller.
 - EDCA uses remoting sessions to the Exchange servers through http (80).
 - EDCA uses LDAPS to Domain Controllers with the Global Catalog role (3269), and CIM uses WS-MAN (5985) to read CPU details.
-- To collect data from Edge Transport servers, run EDCA using -Local and move its server JSON file for analyzing.
+- To collect data from Edge Transport servers, see [Edge Transport Servers](#edge-transport-servers) below.
 
 ## Required Permissions
 
@@ -75,6 +76,38 @@ From the `EDCA` folder:
 
 ```
 
+## Edge Transport Servers
+
+Edge Transport servers are not domain-joined and therefore cannot be reached by EDCA running on a Mailbox server. To assess an Edge Transport server, run EDCA locally on the Edge server itself and then bring the collected data file back to a Mailbox server for analysis and reporting.
+
+**Step 1 — Collect on the Edge Transport server**
+
+Log on to the Edge Transport server and run EDCA with `-Collect` and `-Local`:
+
+```powershell
+.\EDCA.ps1 -Collect -Local
+```
+
+This writes a `<fqdn>_<timestamp>.json` file to the `Data` folder.
+
+**Step 2 — Copy the data file to a Mailbox server**
+
+Copy the JSON file produced in Step 1 to the `Data` folder of the EDCA installation on a Mailbox server (or wherever you run analysis).
+
+**Step 3 — Run analysis and generate the report**
+
+On the Mailbox server, run the normal collect-and-report flow (or just `-Report` if you already have a Mailbox-server collection). EDCA will discover all JSON files in `Data` and include the Edge server in the analysis:
+
+```powershell
+# Collect from Mailbox servers and report, including the copied Edge data file
+.\EDCA.ps1
+
+# Or, if Mailbox-server data is already collected, just generate the report
+.\EDCA.ps1 -Report
+```
+
+Edge-specific controls (anti-spam agents, recipient validation, blank-sender blocking, send connector TLS, protocol logging, and SMTP certificate assignment) are only assessed for servers whose data is present. The report marks Edge servers with an **EDGE** badge and lists any Edge servers that were detected in the organisation topology but not collected as an environment notice.
+
 ## Output
 
 Collection and Analysis files are written to `Data`:
@@ -114,8 +147,11 @@ EDCA evaluates controls against the following compliance frameworks. Each contro
 
 ## Notes
 
-- Controls with `verify: false` are documented but excluded from scoring.
-- Some controls can be manual remediation only.
+- Compliance trend widget only shows in reports when there are 2 or more data points.
+- Some controls appear to overlap (e.g., SEC-034 and TLS-044–047), but they come from different frameworks
+  and have different scopes. TLS-044–047 map to Best Practice and DISA, while SEC-034 maps to DISA and BSI.
+  Some frameworks also define role-specific controls (e.g., Edge Transport). As a result, the topics may overlap,
+  but the control definitions do not—so they aren’t merged.
 
 ## Changelog
 

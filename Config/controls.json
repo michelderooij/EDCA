@@ -48,8 +48,7 @@
     },
     "considerations": "Certificate renewal on an Exchange server requires updating the certificate on all Services (IIS, SMTP, IMAP, POP3) and removing the expired certificate. If using a third-party CA, plan lead time for certificate issuance (typically 1–5 business days). Internal clients may show SSL warnings until the new certificate is fully propagated via Directory Services.",
     "roles": [
-      "Mailbox",
-      "Edge"
+      "Mailbox"
     ]
   },
   {
@@ -130,8 +129,7 @@
     },
     "considerations": "The internal transport certificate is used for Exchange-to-Exchange SMTP TLS. Replacing it requires the certificate to be propagated to all Exchange servers in the organization before activation. A brief interruption to inter-server TLS may occur during certificate rollover.",
     "roles": [
-      "Mailbox",
-      "Edge"
+      "Mailbox"
     ]
   },
   {
@@ -956,7 +954,7 @@
     "remediation": {
       "automatable": true,
       "description": "Set IssueWarningQuota on each mailbox database to a defined quota value.",
-      "scriptTemplate": "# Set issue-warning quota on all mailbox databases (adjust size as needed).\nGet-MailboxDatabase | Set-MailboxDatabase -IssueWarningQuota 1.9GB -UseDatabaseQuotaDefaults $true"
+      "scriptTemplate": "# Set issue-warning quota on a specific mailbox database (adjust name and size as needed).\n# To target a specific database: replace 'DatabaseName' with the actual database name.\nSet-MailboxDatabase -Identity 'DatabaseName' -IssueWarningQuota 1.9GB -UseDatabaseQuotaDefaults $true"
     },
     "considerations": "The appropriate quota size depends on mailbox storage capacity. Ensure that the configured value aligns with your organisation's mailbox retention and storage policies.",
     "roles": [
@@ -989,7 +987,7 @@
     "remediation": {
       "automatable": true,
       "description": "Set ProhibitSendReceiveQuota on each mailbox database to a defined quota value.",
-      "scriptTemplate": "# Set prohibit-send-receive quota on all mailbox databases (adjust size as needed).\nGet-MailboxDatabase | Set-MailboxDatabase -ProhibitSendReceiveQuota 2GB"
+      "scriptTemplate": "# Set prohibit-send-receive quota on a specific mailbox database (adjust name and size as needed).\n# To target a specific database: replace 'DatabaseName' with the actual database name.\nSet-MailboxDatabase -Identity 'DatabaseName' -ProhibitSendReceiveQuota 2GB"
     },
     "considerations": "Ensure the prohibit-send-receive quota is set higher than the prohibit-send quota and the issue-warning quota. Coordinate with your storage and capacity planning team before adjusting.",
     "roles": [
@@ -1022,7 +1020,7 @@
     "remediation": {
       "automatable": true,
       "description": "Set ProhibitSendQuota on each mailbox database to a defined quota value.",
-      "scriptTemplate": "# Set prohibit-send quota on all mailbox databases (adjust size as needed).\nGet-MailboxDatabase | Set-MailboxDatabase -ProhibitSendQuota 1.95GB"
+      "scriptTemplate": "# Set prohibit-send quota on a specific mailbox database (adjust name and size as needed).\n# To target a specific database: replace 'DatabaseName' with the actual database name.\nSet-MailboxDatabase -Identity 'DatabaseName' -ProhibitSendQuota 1.95GB"
     },
     "considerations": "Set this value between the issue-warning quota and the prohibit-send-receive quota. Review impacts on users with large mailboxes before applying.",
     "roles": [
@@ -1599,9 +1597,9 @@
   {
     "id": "EDCA-IAC-010",
     "title": "Administrative access to EAC and remote PowerShell is restricted",
-    "description": "Administrative access to the Exchange Admin Center (EAC) and remote PowerShell MUST be restricted to authorized management workstations and paths. This control requires manual verification of connector-level or network-level restrictions. (DISA STIG V-259698; CISA AA21-062A uses advisory language for this control.)",
-    "verify": false,
-    "subject": "Server",
+    "description": "Administrative access to the Exchange Admin Center (EAC) and remote PowerShell MUST be restricted to authorized management workstations and paths. This control evaluates two automated checks: (1) whether Client Access Rules are configured that explicitly restrict access to the RemotePowerShell or ExchangeAdminCenter protocol, and (2) whether any non-Exchange-administrative users (users without Exchange RBAC role group membership) have RemotePowerShellEnabled set to $true on their Exchange user object. (DISA STIG V-259698; CISA AA21-062A)",
+    "verify": true,
+    "subject": "Organization",
     "category": "Identity and Access Control",
     "severity": "High",
     "severityWeight": 8,
@@ -1642,8 +1640,8 @@
     ],
     "remediation": {
       "automatable": false,
-      "description": "Apply Client Access Rules and host/network firewall restrictions so only dedicated administrative workstations can reach EAC and remote PowerShell endpoints.",
-      "scriptTemplate": "# Diagnose: Check Client Access Rules restricting EAC and Remote PowerShell access\nGet-ClientAccessRule | Select-Object Name, Action, AnyOfProtocols, AnyOfClientIPAddressesOrRanges, ExceptAnyOfClientIPAddressesOrRanges, Priority, Enabled | Sort-Object Priority | Format-Table -AutoSize\n# No rules returned means access is unrestricted. Add rules to limit by IP range and protocol."
+      "description": "Create Client Access Rules to restrict EAC and remote PowerShell access to authorized source IP ranges, and disable RemotePowerShellEnabled for all users who are not Exchange administrators.",
+      "scriptTemplate": "# --- Check 1: Client Access Rules ---\n# Review existing rules; look for rules covering RemotePowerShell and ExchangeAdminCenter protocols.\nGet-ClientAccessRule | Select-Object Name, Action, AnyOfProtocols, AnyOfClientIPAddressesOrRanges, Priority, Enabled | Sort-Object Priority | Format-Table -AutoSize\n\n# Create a rule to allow only trusted management IP ranges for remote PowerShell and EAC\n# (replace 10.0.0.0/8 with your actual management IP range)\nNew-ClientAccessRule -Name 'Allow PS and EAC from management range' -Action AllowAccess -AnyOfProtocols RemotePowerShell, ExchangeAdminCenter -AnyOfClientIPAddressesOrRanges 10.0.0.0/8 -Priority 1\nNew-ClientAccessRule -Name 'Block PS and EAC from all other sources' -Action DenyAccess -AnyOfProtocols RemotePowerShell, ExchangeAdminCenter -AnyOfClientIPAddressesOrRanges 0.0.0.0-255.255.255.255 -Priority 2\n\n# --- Check 2: Non-Exchange-admin users with RemotePowerShellEnabled ---\n# Find Exchange RBAC role group members (Exchange admins):\n$adminSams = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)\nGet-RoleGroup | ForEach-Object {\n    Get-RoleGroupMember -Identity $_.Name -ErrorAction SilentlyContinue |\n        ForEach-Object { $null = $adminSams.Add($_.SamAccountName) }\n}\n\n# Find non-admin users with RemotePowerShellEnabled = $true and disable it:\nGet-User -Filter {RemotePowerShellEnabled -eq $true} -ResultSize Unlimited |\n    Where-Object { -not $adminSams.Contains($_.SamAccountName) } |\n    ForEach-Object {\n        Write-Host \"Disabling RemotePowerShellEnabled for $($_.Name) ($($_.SamAccountName))\"\n        Set-User -Identity $_.Identity -RemotePowerShellEnabled $false\n    }"
     },
     "considerations": "Restricting EAC and remote PowerShell access to specific client access rules may lock out administrators working from unregistered IP addresses. Ensure VPN or jump server access is available for administrative operations. Changes to Client Access Rules take effect immediately and can lock out the current session.",
     "roles": [
@@ -2425,7 +2423,7 @@
     "remediation": {
       "automatable": true,
       "description": "Enable transport connectivity logging.",
-      "scriptTemplate": "Set-TransportService -Identity <ServerName> -ConnectivityLogEnabled $true"
+      "scriptTemplate": "Set-TransportService -Identity $env:COMPUTERNAME -ConnectivityLogEnabled $true"
     },
     "considerations": "Transport connectivity logging generates log files that can grow rapidly on high-traffic servers. Ensure the connectivity log volume has adequate capacity and that log cleanup is configured. Connectivity logs may be required for support investigations into mail flow issues.",
     "roles": [
@@ -2471,7 +2469,7 @@
     "remediation": {
       "automatable": true,
       "description": "Enable message tracking logging on transport service.",
-      "scriptTemplate": "Set-TransportService -Identity <ServerName> -MessageTrackingLogEnabled $true"
+      "scriptTemplate": "Set-TransportService -Identity $env:COMPUTERNAME -MessageTrackingLogEnabled $true"
     },
     "considerations": "Message tracking logs contain metadata about every message processed by Transport. On high-traffic servers these logs can consume substantial disk space. Ensure log rotation and disk capacity are appropriate. Message tracking logs may contain sensitive information about internal communication patterns.",
     "roles": [
@@ -2513,7 +2511,7 @@
     "remediation": {
       "automatable": true,
       "description": "Disable message tracking subject logging.",
-      "scriptTemplate": "Set-TransportService -Identity <ServerName> -MessageTrackingLogSubjectLoggingEnabled $false"
+      "scriptTemplate": "Set-TransportService -Identity $env:COMPUTERNAME -MessageTrackingLogSubjectLoggingEnabled $false"
     },
     "considerations": "Enabling message subject logging can expose sensitive information in log files. This setting should be disabled in security-sensitive environments. Forensic investigations may require temporary enabling of subject logging with appropriate data governance controls in place.",
     "roles": [
@@ -2557,7 +2555,7 @@
     "remediation": {
       "automatable": true,
       "description": "Set ProtocolLoggingLevel to Verbose on all receive connectors.",
-      "scriptTemplate": "# Enable verbose protocol logging on all receive connectors.\nGet-ReceiveConnector | Set-ReceiveConnector -ProtocolLoggingLevel Verbose"
+      "scriptTemplate": "# Enable verbose protocol logging on all receive connectors of this server.\nGet-ReceiveConnector -Server $env:COMPUTERNAME | Set-ReceiveConnector -ProtocolLoggingLevel Verbose"
     },
     "considerations": "Verbose protocol logging generates significant disk I/O on high-volume servers. Ensure that adequate disk space and a log rotation / archival policy are in place. Review log paths via Get-TransportService.",
     "roles": [
@@ -3500,7 +3498,7 @@
     "remediation": {
       "automatable": true,
       "description": "Set DeletedItemRetention to at least 14 days on every mailbox database.",
-      "scriptTemplate": "# Set deleted item retention to 14 days on all mailbox databases.\nGet-MailboxDatabase | Set-MailboxDatabase -DeletedItemRetention 14.00:00:00"
+      "scriptTemplate": "# Set deleted item retention to 14 days on a specific mailbox database.\n# To target a specific database: replace 'DatabaseName' with the actual database name.\nSet-MailboxDatabase -Identity 'DatabaseName' -DeletedItemRetention 14.00:00:00"
     },
     "considerations": "Increasing the retention period will consume additional storage in the Recoverable Items folder. Review mailbox database storage capacity before extending the retention period significantly beyond the recommended minimum.",
     "roles": [
@@ -3533,7 +3531,7 @@
     "remediation": {
       "automatable": true,
       "description": "Set MailboxRetention to at least 30 days on every mailbox database.",
-      "scriptTemplate": "# Set deleted mailbox retention to 30 days on all mailbox databases.\nGet-MailboxDatabase | Set-MailboxDatabase -MailboxRetention 30.00:00:00"
+      "scriptTemplate": "# Set deleted mailbox retention to 30 days on a specific mailbox database.\n# To target a specific database: replace 'DatabaseName' with the actual database name.\nSet-MailboxDatabase -Identity 'DatabaseName' -MailboxRetention 30.00:00:00"
     },
     "considerations": "Soft-deleted mailboxes consume database storage until permanently purged. Check available storage prior to extending the retention period.",
     "roles": [
@@ -3571,7 +3569,7 @@
     "remediation": {
       "automatable": true,
       "description": "Enable the RetainDeletedItemsUntilBackup flag on every mailbox database.",
-      "scriptTemplate": "# Ensure mailbox database items are not permanently deleted before backup.\nGet-MailboxDatabase | Set-MailboxDatabase -RetainDeletedItemsUntilBackup $true"
+      "scriptTemplate": "# Ensure mailbox database items are not permanently deleted before backup.\n# To target a specific database: replace 'DatabaseName' with the actual database name.\nSet-MailboxDatabase -Identity 'DatabaseName' -RetainDeletedItemsUntilBackup $true"
     },
     "considerations": "Enabling this setting requires a functioning and regularly executed backup solution. Without a backup program, Exchange will defer purging indefinitely and the Recoverable Items folder may grow without bound, consuming storage.",
     "roles": [
@@ -3603,7 +3601,7 @@
     "remediation": {
       "automatable": true,
       "description": "Disable circular logging on all mailbox databases.",
-      "scriptTemplate": "Get-MailboxDatabase | Set-MailboxDatabase -CircularLoggingEnabled $false"
+      "scriptTemplate": "# Disable circular logging on a specific mailbox database.\n# To target a specific database: replace 'DatabaseName' with the actual database name.\nSet-MailboxDatabase -Identity 'DatabaseName' -CircularLoggingEnabled $false"
     },
     "considerations": "Disabling circular logging requires a dedicated storage allocation for transaction logs. Ensure log volumes have adequate capacity and log backup processes are in place. For DAG members, circular logging changes require a database dismount and remount.",
     "roles": [
@@ -4174,7 +4172,7 @@
     "remediation": {
       "automatable": false,
       "description": "Disable Credential Guard via Windows Defender Credential Guard Group Policy or by setting LsaCfgFlags to 0 under HKLM\\SYSTEM\\CurrentControlSet\\Control\\Lsa and EnableVirtualizationBasedSecurity to 0 under HKLM\\SYSTEM\\CurrentControlSet\\Control\\DeviceGuard. A reboot is required.",
-      "scriptTemplate": "# Manual remediation recommended: disable Credential Guard (for example set LsaCfgFlags to 0 and DeviceGuard CredentialGuard policy to disabled) and reboot the server."
+      "scriptTemplate": "# Diagnose: Check whether Credential Guard / VBS is currently enabled\n$lsa = Get-ItemProperty 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Lsa' -Name LsaCfgFlags -ErrorAction SilentlyContinue\n$dg  = Get-ItemProperty 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\DeviceGuard' -Name EnableVirtualizationBasedSecurity -ErrorAction SilentlyContinue\n\"LsaCfgFlags: $(if ($null -ne $lsa) { $lsa.LsaCfgFlags } else { 'not set' }) (0=disabled, 1=enabled with UEFI lock, 2=enabled without lock)\"\n\"EnableVirtualizationBasedSecurity: $(if ($null -ne $dg) { $dg.EnableVirtualizationBasedSecurity } else { 'not set' }) (0=disabled, 1=enabled)\"\n\n# Fix: disable Credential Guard. A reboot is required after making these changes.\n# Option 1: via registry (requires reboot)\nSet-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Lsa' -Name LsaCfgFlags -Type DWord -Value 0\nSet-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\DeviceGuard' -Name EnableVirtualizationBasedSecurity -Type DWord -Value 0\nWrite-Host 'Credential Guard registry settings cleared. Reboot required to complete deactivation.'\n\n# Option 2: via Group Policy (preferred for domain members)\n# Computer Configuration > Administrative Templates > System > Device Guard\n#   Turn On Virtualization Based Security = Disabled"
     },
     "considerations": "Credential Guard is not supported on Exchange servers because it can interfere with Exchange service authentication. This control documents the required state (disabled). Do not enable Credential Guard on Exchange hosts without explicit Microsoft support guidance.\n\nANSSI and BSI both recommend Credential Guard on member servers handling privileged credentials (ANSSI AD admin guide 2023; BSI SYS.1.2.3.A8). Exchange servers are an explicit exception to this recommendation due to Microsoft's unsupported-configuration statement. Document this exception in your organization's risk register and reference this control as the formal exception basis.",
     "roles": [
@@ -4368,7 +4366,7 @@
     "remediation": {
       "automatable": true,
       "description": "Disable LLMNR using DNS client policy registry key.",
-      "scriptTemplate": "New-Item -Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows NT\\DNSClient' -Force | Out-Null; Set-ItemProperty -Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows NT\\DNSClient' -Name EnableMulticast -Type DWord -Value 0"
+      "scriptTemplate": "# Group Policy equivalent:\n# Computer Configuration > Administrative Templates > Network > DNS Client\n#   Turn off Multicast Name Resolution = Enabled\n#\nNew-Item -Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows NT\\DNSClient' -Force | Out-Null; Set-ItemProperty -Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows NT\\DNSClient' -Name EnableMulticast -Type DWord -Value 0"
     },
     "considerations": "Disabling LLMNR requires a Group Policy change. This affects all Windows name resolution on the network segment, not just Exchange. LLMNR is commonly exploited in NTLM relay attack scenarios (e.g., Responder). Disabling LLMNR is low-risk for environments with properly configured DNS.",
     "roles": [
@@ -4565,7 +4563,7 @@
     "remediation": {
       "automatable": true,
       "description": "Set local machine execution policy to RemoteSigned.",
-      "scriptTemplate": "Set-ExecutionPolicy -Scope LocalMachine -ExecutionPolicy RemoteSigned -Force"
+      "scriptTemplate": "# Group Policy equivalent:\n# Computer Configuration > Administrative Templates > Windows Components > Windows PowerShell\n#   Turn on Script Execution = Enabled (Allow only signed scripts / Allow local scripts and remote signed scripts)\n#\nSet-ExecutionPolicy -Scope LocalMachine -ExecutionPolicy RemoteSigned -Force"
     },
     "considerations": "Changing the PowerShell execution policy to AllSigned or RemoteSigned will prevent unsigned scripts from running. Audit all scripts used for Exchange management and automation before enforcing a restrictive policy. Scripts used by monitoring tools or automation systems may fail if not properly signed.",
     "roles": [
@@ -4614,7 +4612,7 @@
     "remediation": {
       "automatable": true,
       "description": "Disable SMBv1 using the SMB server configuration cmdlet and remove the Windows optional feature.",
-      "scriptTemplate": "Set-SmbServerConfiguration -EnableSMB1Protocol $false -Force\nDisable-WindowsOptionalFeature -Online -FeatureName SMB1Protocol -NoRestart"
+      "scriptTemplate": "# Group Policy equivalent (requires MS Security Guide ADMX templates):\n# Computer Configuration > Administrative Templates > MS Security Guide\n#   Configure SMBv1 Server = Disabled\n#   Configure SMBv1 client driver = Enabled (Disable driver)\n#\nSet-SmbServerConfiguration -EnableSMB1Protocol $false -Force\nDisable-WindowsOptionalFeature -Online -FeatureName SMB1Protocol -NoRestart"
     },
     "considerations": "Disabling SMBv1 will prevent file sharing with Windows XP and Windows Server 2003 clients or servers. In modern environments this is typically safe. Verify there are no legacy systems (e.g., old printers, NAS devices, or monitoring appliances) on the network that require SMBv1 before disabling.",
     "roles": [
@@ -4709,7 +4707,7 @@
     "remediation": {
       "automatable": true,
       "description": "Enable all Windows Firewall profiles.",
-      "scriptTemplate": "Set-NetFirewallProfile -Profile Domain,Private,Public -Enabled True"
+      "scriptTemplate": "# Group Policy equivalent:\n# Computer Configuration > Windows Settings > Security Settings\n#   Windows Defender Firewall with Advanced Security\n#   Domain / Private / Public Profile > Firewall state = On\n#\nSet-NetFirewallProfile -Profile Domain,Private,Public -Enabled True"
     },
     "considerations": "The Windows Firewall must include all Exchange-required inbound and outbound port rules before enabling. Missing rules will block SMTP transport, client access, or management traffic. Review Exchange port requirements for all installed roles before enabling the firewall. Monitor event logs for blocked connections after enforcement.",
     "roles": [
@@ -4752,7 +4750,7 @@
     "remediation": {
       "automatable": true,
       "description": "Enable Defender real-time monitoring.",
-      "scriptTemplate": "Set-MpPreference -DisableRealtimeMonitoring $false"
+      "scriptTemplate": "# Group Policy equivalent:\n# Computer Configuration > Administrative Templates > Windows Components > Microsoft Defender Antivirus > Real-time Protection\n#   Turn off real-time protection = Disabled  (Disabled policy = real-time protection ON)\n#\nSet-MpPreference -DisableRealtimeMonitoring $false"
     },
     "considerations": "Microsoft Defender real-time protection on Exchange servers must be configured with correct Exchange-specific exclusions to avoid false positives and performance degradation. Enabling real-time protection without the correct exclusions can cause database corruption or transport stalls. Verify all Microsoft-recommended exclusions are in place before enabling.",
     "roles": [
@@ -4964,14 +4962,13 @@
     },
     "considerations": "Clearing the pickup directory disables the file-based mail injection mechanism. Ensure no legitimate applications or scripts rely on this path before making the change.",
     "roles": [
-      "Mailbox",
-      "Edge"
+      "Mailbox"
     ]
   },
   {
     "id": "EDCA-SEC-034",
     "title": "Exchange anti-spam filtering is installed, enabled, and configured",
-    "description": "Exchange MUST have anti-spam filtering installed, enabled, and configured. On Mailbox servers, the Content Filter Agent, Sender Id Agent, and Sender Reputation Filter Agent are not installed by default and must be added by running the Install-AntiSpamAgents.ps1 script included with Exchange. On Edge Transport servers these agents are present from initial installation. All three agents must be present and enabled.",
+    "description": "Exchange MUST have anti-spam filtering installed, enabled, and configured. Four transport agents are required: Content Filter Agent (controlled via Get-/Set-ContentFilterConfig), Sender Filter Agent (Get-/Set-SenderFilterConfig), Sender Id Agent (Get-/Set-SenderIdConfig), and Protocol Analysis Agent (Get-/Set-SenderReputationConfig). On Mailbox servers these agents are not installed by default and must be added by running the Install-AntiSpamAgents.ps1 script included with Exchange. On Edge Transport servers all four agents are present from initial installation. Each agent must be present, enabled at the transport layer (Enable-TransportAgent), and have filtering enabled in its corresponding configuration.",
     "verify": true,
     "subject": "Server",
     "category": "Platform Security",
@@ -5005,8 +5002,8 @@
     ],
     "remediation": {
       "automatable": false,
-      "description": "On Mailbox servers, run the Install-AntiSpamAgents.ps1 script provided with Exchange to install the anti-spam transport agents, then restart the Microsoft Exchange Transport service. Enable each required agent individually using Enable-TransportAgent. Configure agent settings as needed - for example, use Set-TransportConfig -InternalSMTPServers to specify internal SMTP relay servers that should bypass spam filtering.",
-      "scriptTemplate": "# Check current anti-spam transport agent state\nGet-TransportAgent | Where-Object { $_.Identity -in 'Content Filter Agent', 'Sender Id Agent', 'Sender Reputation Filter Agent' } | Select-Object Identity, Enabled\n\n# Install anti-spam agents on a Mailbox server (not required on Edge Transport — agents are present by default)\n# Run Install-AntiSpamAgents.ps1 from the Exchange Management Shell on the Mailbox server\n\n# Restart the transport service after installation\nRestart-Service MSExchangeTransport\n\n# Enable each required anti-spam agent\nEnable-TransportAgent -Identity 'Content Filter Agent'\nEnable-TransportAgent -Identity 'Sender Id Agent'\nEnable-TransportAgent -Identity 'Sender Reputation Filter Agent'\n\n# Example: specify internal SMTP relay servers that should bypass spam filtering\n# Set-TransportConfig -InternalSMTPServers @{Add = '10.0.0.1', '10.0.0.2'}"
+      "description": "On Mailbox servers, run the Install-AntiSpamAgents.ps1 script provided with Exchange to install the anti-spam transport agents, then restart the Microsoft Exchange Transport service. Enable each agent using Enable-TransportAgent and verify filtering is enabled using the corresponding configuration cmdlet: Set-ContentFilterConfig -Enabled $true, Set-SenderFilterConfig -Enabled $true, Set-SenderIdConfig -Enabled $true, Set-SenderReputationConfig -Enabled $true. On Edge Transport servers the agents are installed by default; only the enabled state needs verification.",
+      "scriptTemplate": "# Check transport agent state\nGet-TransportAgent | Where-Object { $_.Identity -in 'Content Filter Agent', 'Sender Filter Agent', 'Sender Id Agent', 'Protocol Analysis Agent' } | Select-Object Identity, Enabled\n\n# Check config-level enabled state for each agent\nGet-ContentFilterConfig    | Select-Object Enabled\nGet-SenderFilterConfig     | Select-Object Enabled\nGet-SenderIdConfig         | Select-Object Enabled\nGet-SenderReputationConfig | Select-Object Enabled\n\n# Install anti-spam agents on a Mailbox server (not required on Edge Transport — agents are present by default)\n# Run Install-AntiSpamAgents.ps1 from the Exchange Management Shell on the Mailbox server\n\n# Restart the transport service after installation\nRestart-Service MSExchangeTransport\n\n# Enable each required anti-spam agent at the transport layer\nEnable-TransportAgent -Identity 'Content Filter Agent'\nEnable-TransportAgent -Identity 'Sender Filter Agent'\nEnable-TransportAgent -Identity 'Sender Id Agent'\nEnable-TransportAgent -Identity 'Protocol Analysis Agent'\n\n# Enable filtering at the configuration level\nSet-ContentFilterConfig    -Enabled $true\nSet-SenderFilterConfig     -Enabled $true\nSet-SenderIdConfig         -Enabled $true\nSet-SenderReputationConfig -Enabled $true\n\n# Example: specify internal SMTP relay servers that should bypass spam filtering\n# Set-TransportConfig -InternalSMTPServers @{Add = '10.0.0.1', '10.0.0.2'}"
     },
     "considerations": "Anti-spam agents are not installed by default on Mailbox servers. In hybrid deployments using EOP or Defender for Office 365 for cloud-based spam filtering, on-premises anti-spam may be intentionally disabled. Document the anti-spam technology in use and ensure it meets DISA requirements if these agents are not used.",
     "roles": [
@@ -5075,44 +5072,6 @@
       "scriptTemplate": "# Diagnose: Identify the Exchange install drive and list top-level directories not part of Exchange or Windows.\n$exchDrive = Split-Path $exinstall -Qualifier\nGet-ChildItem $exchDrive -Directory -ErrorAction SilentlyContinue |\n    Where-Object { $_.Name -notin @('Exchange', 'ExchangeSetupLogs', 'Program Files', 'Program Files (x86)', 'Windows', 'Users', 'PerfLogs', 'inetpub') } |\n    Select-Object FullName\n# Unexpected directories on the Exchange volume may indicate other applications are co-located."
     },
     "considerations": "Migrating Exchange to a different volume is a complex operation that may require reinstallation. In many environments this is a planning concern addressed at deployment time. Document deviations with a risk acceptance if remediation is not feasible.",
-    "roles": [
-      "Mailbox",
-      "Edge"
-    ]
-  },
-  {
-    "id": "EDCA-SEC-037",
-    "title": "Exchange SMTP automated banner response does not reveal server details",
-    "description": "The Exchange SMTP automated banner response MUST NOT reveal server details. The SMTP 220 banner presented to connecting mail servers must not disclose the Exchange version, server name, or operating system details. Exposing this information assists attackers in identifying vulnerable server versions.",
-    "verify": true,
-    "subject": "Server",
-    "category": "Platform Security",
-    "severity": "Medium",
-    "severityWeight": 6,
-    "frameworks": [
-      "DISA",
-      "BSI"
-    ],
-    "references": [
-      {
-        "name": "DISA STIG EX19-MB-000232: The Exchange SMTP automated banner response must not reveal server details (V-259707)",
-        "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259707"
-      },
-      {
-        "name": "Set-ReceiveConnector cmdlet",
-        "url": "https://learn.microsoft.com/powershell/module/exchange/set-receiveconnector"
-      },
-      {
-        "name": "BSI APP.5.2.A9 — Sichere Konfiguration von Exchange-Servern",
-        "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/06_APP_Anwendungen/APP_5_2_Microsoft_Exchange_und_Outlook_Edition_2023.pdf?__blob=publicationFile"
-      }
-    ],
-    "remediation": {
-      "automatable": true,
-      "description": "Set a generic SMTP banner on all internet-facing receive connectors on each server to avoid disclosing server details. Internet-facing connectors are identified by PermissionGroups containing AnonymousUsers and AuthMechanism of Tls or None. The banner must begin with '220' per RFC 5321. A value such as '220 Ready.' reveals no version, hostname, or product information.",
-      "scriptTemplate": "# Set a non-revealing SMTP banner on internet-facing receive connectors of this server.\n# Internet-facing connectors: PermissionGroups includes AnonymousUsers AND AuthMechanism is Tls or None.\n# Adjust the banner text to match your organisation's policy; it must start with '220'.\n$serverName = $env:COMPUTERNAME\n$connectors = Get-ReceiveConnector -Server $serverName | Where-Object {\n    ($_.PermissionGroups -band [Microsoft.Exchange.Data.PermissionGroups]::AnonymousUsers) -and\n    ($_.AuthMechanism -eq [Microsoft.Exchange.Data.AuthMechanisms]::Tls -or\n     $_.AuthMechanism -eq [Microsoft.Exchange.Data.AuthMechanisms]::None)\n}\nif ($connectors.Count -eq 0) {\n    Write-Warning \"No internet-facing receive connectors found on $serverName.\"\n} else {\n    # Diagnose: show current banners\n    $connectors | Select-Object Identity, Banner\n    # Fix: set a generic banner on each\n    foreach ($connector in $connectors) {\n        Set-ReceiveConnector -Identity $connector.Identity -Banner '220 Ready.'\n        Write-Host \"Banner updated on $($connector.Identity).\"\n    }\n}"
-    },
-    "considerations": "Changing the SMTP banner is a low-risk change with no impact on mail flow functionality. Ensure the replacement banner format begins with \"220\" to comply with RFC 5321. Some monitoring solutions parse SMTP banners for version tracking -- update them accordingly.",
     "roles": [
       "Mailbox",
       "Edge"
@@ -5276,7 +5235,7 @@
     "remediation": {
       "automatable": false,
       "description": "Deploy Windows LAPS (Windows Server 2019+) or legacy Microsoft LAPS. For Windows LAPS: ensure the Active Directory schema is updated and configure LAPS policy via Group Policy (Computer Configuration > Administrative Templates > System > LAPS). For legacy LAPS: install the LAPS MSI and configure via LAPS Group Policy extension.",
-      "scriptTemplate": "# Check if Windows LAPS attribute is present (Windows Server 2019+)\ntry {\n    $attr = Get-ADComputer -Identity $env:COMPUTERNAME -Properties 'msLAPS-Password','msLAPS-PasswordExpirationTime' -ErrorAction Stop\n    if ($null -ne $attr.'msLAPS-Password') {\n        \"Windows LAPS: attribute msLAPS-Password is populated\"\n    } else {\n        \"Windows LAPS: msLAPS-Password attribute exists but is empty - LAPS may not yet have generated a password\"\n    }\n} catch {\n    \"Windows LAPS: msLAPS-Password attribute not found - LAPS may not be configured or schema not extended\"\n}\n\n# Check for legacy LAPS (ms-Mcs-AdmPwd attribute)\ntry {\n    $legacyAttr = Get-ADComputer -Identity $env:COMPUTERNAME -Properties 'ms-Mcs-AdmPwd' -ErrorAction Stop\n    if ($null -ne $legacyAttr.'ms-Mcs-AdmPwd') {\n        \"Legacy LAPS: ms-Mcs-AdmPwd attribute is populated\"\n    }\n} catch {\n    \"Legacy LAPS: ms-Mcs-AdmPwd attribute not present\"\n}"
+      "scriptTemplate": "# Group Policy equivalent:\n# Computer Configuration > Administrative Templates > System > LAPS\n#   Enable local admin password management = Enabled\n#   (For legacy LAPS: Computer Configuration > Administrative Templates > LAPS)\n#\n# Check if Windows LAPS attribute is present (Windows Server 2019+)\ntry {\n    $attr = Get-ADComputer -Identity $env:COMPUTERNAME -Properties 'msLAPS-Password','msLAPS-PasswordExpirationTime' -ErrorAction Stop\n    if ($null -ne $attr.'msLAPS-Password') {\n        \"Windows LAPS: attribute msLAPS-Password is populated\"\n    } else {\n        \"Windows LAPS: msLAPS-Password attribute exists but is empty - LAPS may not yet have generated a password\"\n    }\n} catch {\n    \"Windows LAPS: msLAPS-Password attribute not found - LAPS may not be configured or schema not extended\"\n}\n\n# Check for legacy LAPS (ms-Mcs-AdmPwd attribute)\ntry {\n    $legacyAttr = Get-ADComputer -Identity $env:COMPUTERNAME -Properties 'ms-Mcs-AdmPwd' -ErrorAction Stop\n    if ($null -ne $legacyAttr.'ms-Mcs-AdmPwd') {\n        \"Legacy LAPS: ms-Mcs-AdmPwd attribute is populated\"\n    }\n} catch {\n    \"Legacy LAPS: ms-Mcs-AdmPwd attribute not present\"\n}"
     },
     "considerations": "LAPS manages the local administrator account (built-in SID S-1-5-21-*-500 or a named account) and requires Active Directory schema extensions. In environments that use Windows Server 2019 and later, prefer Windows LAPS over legacy LAPS as it is built into the OS and supports Azure AD and enhanced encryption. If the Exchange server has a custom local administrator account name (not 'Administrator'), configure LAPS to target that account name explicitly. LAPS password storage in AD requires appropriate ACLs to prevent unauthorized read access to the msLAPS-Password attribute.",
     "roles": [
@@ -5318,7 +5277,7 @@
     "remediation": {
       "automatable": true,
       "description": "Disable NetBIOS over TCP/IP on all network adapters by setting the NetbiosOptions registry value to 2 (disabled) under each interface GUID key in HKLM\\SYSTEM\\CurrentControlSet\\Services\\NetBT\\Parameters\\Interfaces. Alternatively, configure via Group Policy using a startup script or use the Network Adapter advanced properties in the GUI.",
-      "scriptTemplate": "# Check current NetBIOS over TCP/IP setting per interface\n$interfacesPath = 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\NetBT\\Parameters\\Interfaces'\nGet-ChildItem $interfacesPath | ForEach-Object {\n    $val = (Get-ItemProperty $_.PSPath -Name NetbiosOptions -ErrorAction SilentlyContinue).NetbiosOptions\n    $status = switch ($val) { 0 { 'Default (use DHCP)' } 1 { 'Enabled' } 2 { 'Disabled' } default { \"Unknown ($val)\" } }\n    [PSCustomObject]@{ Interface = $_.PSChildName; NetbiosOptions = $val; Status = $status }\n} | Format-Table -AutoSize\n\n# Disable NetBIOS on all interfaces (set to 2 = disabled)\nGet-ChildItem $interfacesPath | ForEach-Object {\n    Set-ItemProperty -Path $_.PSPath -Name NetbiosOptions -Type DWord -Value 2\n    Write-Host \"Disabled NetBIOS on interface: $($_.PSChildName)\"\n}\nWrite-Host 'Done. Changes take effect immediately (no reboot required).'"
+      "scriptTemplate": "# Group Policy equivalent:\n# Computer Configuration > Preferences > Windows Settings > Registry\n#   Key: HKLM\\SYSTEM\\CurrentControlSet\\Services\\NetBT\\Parameters\\Interfaces\\Tcpip_{GUID}\n#   Value: NetbiosOptions = 2 (DWORD) — Disabled\n#\n# Check current NetBIOS over TCP/IP setting per interface\n$interfacesPath = 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\NetBT\\Parameters\\Interfaces'\nGet-ChildItem $interfacesPath | ForEach-Object {\n    $val = (Get-ItemProperty $_.PSPath -Name NetbiosOptions -ErrorAction SilentlyContinue).NetbiosOptions\n    $status = switch ($val) { 0 { 'Default (use DHCP)' } 1 { 'Enabled' } 2 { 'Disabled' } default { \"Unknown ($val)\" } }\n    [PSCustomObject]@{ Interface = $_.PSChildName; NetbiosOptions = $val; Status = $status }\n} | Format-Table -AutoSize\n\n# Disable NetBIOS on all interfaces (set to 2 = disabled)\nGet-ChildItem $interfacesPath | ForEach-Object {\n    Set-ItemProperty -Path $_.PSPath -Name NetbiosOptions -Type DWord -Value 2\n    Write-Host \"Disabled NetBIOS on interface: $($_.PSChildName)\"\n}\nWrite-Host 'Done. Changes take effect immediately (no reboot required).'"
     },
     "considerations": "Disabling NetBIOS over TCP/IP on Exchange servers is safe in modern Active Directory environments where DNS provides all name resolution. Verify that no legacy applications, backup agents, or monitoring tools rely on NetBIOS name resolution before disabling. In environments with very old Windows clients (pre-Windows 2000) or legacy SMB-dependent systems, NetBIOS may still be required on specific segments. If the server hosts any application that broadcasts NetBIOS names (e.g., legacy file sharing over NBT), connectivity to those shares from NetBIOS-dependent clients will be lost. After disabling, monitor for any connectivity failures, particularly from older SMTP relay devices that use NetBIOS for host lookup.",
     "roles": [
@@ -5365,7 +5324,7 @@
     "remediation": {
       "automatable": true,
       "description": "Set RequireSecuritySignature=1 for both LanmanServer (SMB server) and LanmanWorkstation (SMB client) via registry or Group Policy (Security Options: 'Microsoft network server: Digitally sign communications (always)' and 'Microsoft network client: Digitally sign communications (always)').",
-      "scriptTemplate": "# Check SMB server signing (LanmanServer)\n$serverPath = 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\LanmanServer\\Parameters'\n$serverReq = (Get-ItemProperty $serverPath -Name RequireSecuritySignature -ErrorAction SilentlyContinue).RequireSecuritySignature\n\"SMB Server RequireSecuritySignature: $(if ($null -eq $serverReq) { 'not set (default: 0 - not required)' } else { $serverReq })\"\n\n# Check SMB client signing (LanmanWorkstation)\n$clientPath = 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\LanmanWorkstation\\Parameters'\n$clientReq = (Get-ItemProperty $clientPath -Name RequireSecuritySignature -ErrorAction SilentlyContinue).RequireSecuritySignature\n\"SMB Client RequireSecuritySignature: $(if ($null -eq $clientReq) { 'not set (default: 0 - not required)' } else { $clientReq })\"\n\n# Require SMB signing on server and client (1 = required)\nSet-ItemProperty -Path $serverPath -Name RequireSecuritySignature -Type DWord -Value 1\nSet-ItemProperty -Path $clientPath -Name RequireSecuritySignature -Type DWord -Value 1\nWrite-Host 'SMB signing required on server and client. No restart required; applies to new connections.'"
+      "scriptTemplate": "# Group Policy equivalent:\n# Computer Configuration > Windows Settings > Security Settings > Local Policies > Security Options\n#   Microsoft network server: Digitally sign communications (always) = Enabled\n#   Microsoft network client: Digitally sign communications (always) = Enabled\n#\n# Check SMB server signing (LanmanServer)\n$serverPath = 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\LanmanServer\\Parameters'\n$serverReq = (Get-ItemProperty $serverPath -Name RequireSecuritySignature -ErrorAction SilentlyContinue).RequireSecuritySignature\n\"SMB Server RequireSecuritySignature: $(if ($null -eq $serverReq) { 'not set (default: 0 - not required)' } else { $serverReq })\"\n\n# Check SMB client signing (LanmanWorkstation)\n$clientPath = 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\LanmanWorkstation\\Parameters'\n$clientReq = (Get-ItemProperty $clientPath -Name RequireSecuritySignature -ErrorAction SilentlyContinue).RequireSecuritySignature\n\"SMB Client RequireSecuritySignature: $(if ($null -eq $clientReq) { 'not set (default: 0 - not required)' } else { $clientReq })\"\n\n# Require SMB signing on server and client (1 = required)\nSet-ItemProperty -Path $serverPath -Name RequireSecuritySignature -Type DWord -Value 1\nSet-ItemProperty -Path $clientPath -Name RequireSecuritySignature -Type DWord -Value 1\nWrite-Host 'SMB signing required on server and client. No restart required; applies to new connections.'"
     },
     "considerations": "Requiring SMB signing affects all SMB connections on the Exchange server: DAG log file replication, file share witness connections, administrative share access, and SYSVOL/NETLOGON traversal. All supported Windows SMB clients negotiate signing automatically — modern Windows versions (Vista and later) all support SMB signing. Requiring signing on the SMB client (LanmanWorkstation) means this Exchange server will refuse to connect to SMB targets that do not offer signing; verify that all SMB targets (file share witnesses, backup targets) support signing before enforcing the client setting. This control is complementary to EDCA-SEC-023 (SMBv1 disabled) — SMBv1 does not support mandatory signing and should already be disabled.",
     "roles": [
@@ -5374,7 +5333,7 @@
     ]
   },
   {
-    "id": "EDCA-SEC-044",
+    "id": "EDCA-SEC-037",
     "title": "LDAP client signing is set to require signing",
     "description": "The LDAP client on the Exchange server MUST be configured to require signing (LdapClientIntegrity=2) for all LDAP connections to Active Directory domain controllers. Without LDAP signing, Exchange LDAP queries to AD are transmitted without cryptographic integrity protection and are susceptible to man-in-the-middle interception and LDAP relay attacks. Exchange performs extensive LDAP queries for recipient resolution, GAL lookups, send connector validation, and distribution group expansion, all of which traverse the AD LDAP channel. ANSSI requires LDAP signing to be set to Require on all member servers.",
     "verify": true,
@@ -5407,7 +5366,7 @@
     "remediation": {
       "automatable": true,
       "description": "Set LdapClientIntegrity to 2 (Require signing) under HKLM\\SYSTEM\\CurrentControlSet\\Services\\LDAP via Group Policy (Computer Configuration > Windows Settings > Security Settings > Local Policies > Security Options: 'Network security: LDAP client signing requirements' → 'Require signing') or directly via registry. Values: 0 = None, 1 = Negotiate signing, 2 = Require signing.",
-      "scriptTemplate": "# Check current LDAP client signing setting\n$ldapPath = 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\LDAP'\n$val = (Get-ItemProperty $ldapPath -Name LdapClientIntegrity -ErrorAction SilentlyContinue).LdapClientIntegrity\n$status = switch ($val) {\n    0       { 'None - unsigned LDAP allowed (non-compliant)' }\n    1       { 'Negotiate signing' }\n    2       { 'Require signing (compliant)' }\n    $null   { 'Not set - defaults to Negotiate (1)' }\n    default { \"Unknown ($val)\" }\n}\n\"LdapClientIntegrity: $(if ($null -eq $val) { 'not set' } else { $val }) - $status\"\n\n# Set LDAP client to require signing (2)\nSet-ItemProperty -Path $ldapPath -Name LdapClientIntegrity -Type DWord -Value 2\nWrite-Host 'LDAP client signing set to Require (2). No restart required.'"
+      "scriptTemplate": "# Group Policy equivalent:\n# Computer Configuration > Windows Settings > Security Settings > Local Policies > Security Options\n#   Network security: LDAP client signing requirements = Require signing\n#\n# Check current LDAP client signing setting\n$ldapPath = 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\LDAP'\n$val = (Get-ItemProperty $ldapPath -Name LdapClientIntegrity -ErrorAction SilentlyContinue).LdapClientIntegrity\n$status = switch ($val) {\n    0       { 'None - unsigned LDAP allowed (non-compliant)' }\n    1       { 'Negotiate signing' }\n    2       { 'Require signing (compliant)' }\n    $null   { 'Not set - defaults to Negotiate (1)' }\n    default { \"Unknown ($val)\" }\n}\n\"LdapClientIntegrity: $(if ($null -eq $val) { 'not set' } else { $val }) - $status\"\n\n# Set LDAP client to require signing (2)\nSet-ItemProperty -Path $ldapPath -Name LdapClientIntegrity -Type DWord -Value 2\nWrite-Host 'LDAP client signing set to Require (2). No restart required.'"
     },
     "considerations": "Setting LdapClientIntegrity=2 requires that all outbound LDAP connections from this server use signed LDAP. Active Directory domain controllers on Windows Server 2008 and later support LDAP signing universally. If LDAPS (port 636 with TLS) is already in use for Exchange LDAP queries, LDAPS provides both integrity and confidentiality, making LdapClientIntegrity complementary for any remaining plaintext LDAP (port 389) connections. After setting LdapClientIntegrity=2, monitor for LDAP error 81 (LDAP_SERVER_DOWN) or authentication failures in the Exchange application log that may indicate a domain controller refusing unsigned LDAP. If any non-Windows LDAP server is queried from this Exchange server, verify it supports LDAP signing (SASL integrity protection) before enforcing.",
     "roles": [
@@ -5470,7 +5429,7 @@
     "remediation": {
       "automatable": false,
       "description": "Use Set-TransportService to set MaxPerDomainOutboundConnections to 40 or higher and MessageRetryInterval to 5 minutes or less to prevent mail queue buildup during delivery retries.",
-      "scriptTemplate": "Set-TransportService -Identity (hostname) -MaxPerDomainOutboundConnections 40 -MessageRetryInterval 00:05:00"
+      "scriptTemplate": "Set-TransportService -Identity $env:COMPUTERNAME -MaxPerDomainOutboundConnections 40 -MessageRetryInterval 00:05:00"
     },
     "considerations": "Adjusting transport retry configuration can affect how quickly Exchange requeues messages after a transient failure. Changes to retry intervals impact end-user mail delivery experience during disruptions. Follow Microsoft guidance for retry values - overly aggressive retries increase load on target servers.",
     "roles": [
@@ -6516,7 +6475,7 @@
   {
     "id": "EDCA-TLS-031",
     "title": "Edge anti-spam agents are enabled",
-    "description": "The Edge Transport server MUST have content filtering, recipient filtering, sender filtering, and connection filtering agents enabled. Disabled anti-spam agents allow spam, phishing, and malicious mail to pass to internal mail servers without inspection.",
+    "description": "The Edge Transport server MUST have content filtering, recipient filtering, sender filtering, and connection filtering agents enabled. The Connection Filtering agent is enabled or disabled independently via Enable-TransportAgent / Disable-TransportAgent, not via a *-ConnectionFilterConfig cmdlet. Disabled anti-spam agents allow spam, phishing, and malicious mail to pass to internal mail servers without inspection.",
     "verify": true,
     "subject": "Server",
     "category": "Transport Security",
@@ -6547,8 +6506,8 @@
     ],
     "remediation": {
       "automatable": false,
-      "description": "Enable the relevant agent with Set-ContentFilterConfig -Enabled $true, Set-RecipientFilterConfig -Enabled $true, Set-SenderFilterConfig -Enabled $true, or Set-ConnectionFilterConfig -Enabled $true.",
-      "scriptTemplate": "Get-ContentFilterConfig | Select-Object Enabled\nGet-RecipientFilterConfig | Select-Object Enabled\nGet-SenderFilterConfig | Select-Object Enabled\nGet-ConnectionFilterConfig | Select-Object Enabled"
+      "description": "Enable the relevant agent(s). For content, recipient, and sender filtering use Set-ContentFilterConfig -Enabled $true, Set-RecipientFilterConfig -Enabled $true, or Set-SenderFilterConfig -Enabled $true. For connection filtering, enable the Connection Filtering transport agent with Enable-TransportAgent 'Connection Filtering Agent' then restart the transport service.",
+      "scriptTemplate": "Get-ContentFilterConfig | Select-Object Enabled\nGet-RecipientFilterConfig | Select-Object Enabled\nGet-SenderFilterConfig | Select-Object Enabled\nGet-TransportAgent -Identity 'Connection Filtering Agent' | Select-Object Identity,Enabled\n# To enable connection filtering:\n# Enable-TransportAgent 'Connection Filtering Agent'\n# Restart-Service MSExchangeTransport"
     },
     "considerations": "Enabling or tuning anti-spam agents may temporarily affect mail flow if the thresholds are misconfigured. Test in a staging environment when possible.",
     "roles": [
@@ -6853,7 +6812,7 @@
     "remediation": {
       "automatable": false,
       "description": "Ensure AuthMechanism on internal Receive connectors includes Tls. Set-ReceiveConnector -Identity <name> -AuthMechanism Tls -RequireTLS $true.",
-      "scriptTemplate": "Get-ReceiveConnector | Select-Object Identity, AuthMechanism, RequireTLS, Bindings"
+      "scriptTemplate": "# Diagnose: identify internal Receive connectors on this Edge server.\n# Internal connectors are identified by ExchangeServer in AuthMechanism (set by EdgeSync during subscription).\n$serverName = $env:COMPUTERNAME\n$internalRc = Get-ReceiveConnector -Server $serverName | Where-Object {\n    [string]$_.AuthMechanism -match '\\bExchangeServer\\b'\n}\n$internalRc | Select-Object Identity, AuthMechanism, RequireTLS, Bindings\n\n# Fix: require TLS on each internal Receive connector that does not already enforce it.\nforeach ($rc in ($internalRc | Where-Object { -not $_.RequireTLS })) {\n    Set-ReceiveConnector -Identity $rc.Identity -RequireTLS $true\n    Write-Host \"RequireTLS enabled on $($rc.Identity).\"\n}"
     },
     "considerations": "The internal Receive connector on an Edge server is used by Mailbox servers to relay outbound mail to the Edge for internet delivery. Requiring TLS on this connector means Mailbox servers must present a valid certificate. The default Exchange transport certificate satisfies this requirement.",
     "roles": [
@@ -6886,7 +6845,7 @@
     "remediation": {
       "automatable": false,
       "description": "Remove AnonymousUsers from the PermissionGroups on internal Receive connectors.",
-      "scriptTemplate": "Get-ReceiveConnector | Select-Object Identity, PermissionGroups, Bindings"
+      "scriptTemplate": "# Diagnose: identify internal Receive connectors on this Edge server.\n# Internal connectors are identified by ExchangeServer in AuthMechanism (set by EdgeSync during subscription).\n$serverName = $env:COMPUTERNAME\n$internalRc = Get-ReceiveConnector -Server $serverName | Where-Object {\n    [string]$_.AuthMechanism -match '\\bExchangeServer\\b'\n}\n$internalRc | Select-Object Identity, PermissionGroups, AuthMechanism, Bindings\n\n# Fix: remove AnonymousUsers permission group from each internal connector that permits it.\nforeach ($rc in ($internalRc | Where-Object { [string]$_.PermissionGroups -match '\\bAnonymousUsers\\b' })) {\n    Set-ReceiveConnector -Identity $rc.Identity -PermissionGroups ($rc.PermissionGroups -band (-bnot [Microsoft.Exchange.Data.PermissionGroups]::AnonymousUsers))\n    Write-Host \"AnonymousUsers removed from $($rc.Identity).\"\n}"
     },
     "considerations": "Internal Receive connectors used by Exchange Mailbox servers should use ExchangeServers or ExchangeLegacyServers permission groups, not AnonymousUsers. Removing anonymous access from a connector that is currently used for anonymous relay will immediately block that mail flow. Audit relay sources before making changes.",
     "roles": [
@@ -6896,7 +6855,7 @@
   {
     "id": "EDCA-TLS-041",
     "title": "SMTP banner must not reveal server version details",
-    "description": "Edge Transport Receive connectors MUST present a generic SMTP banner that does not disclose server identity or version information. The default Exchange banner includes the server hostname, enabling attackers to fingerprint the software version and target known vulnerabilities.",
+    "description": "All Receive connectors on both Mailbox and Edge Transport servers MUST present a generic SMTP banner that does not disclose server identity, version, or operating system information. The default Exchange banner includes the server hostname, enabling attackers to fingerprint the software version and target known vulnerabilities. Internet-facing connectors are identified by PermissionGroups containing AnonymousUsers and AuthMechanism of Tls or None. An empty banner causes Exchange to emit the default identity-revealing greeting and is therefore treated as non-compliant.",
     "verify": true,
     "subject": "Server",
     "category": "Transport Security",
@@ -6904,25 +6863,35 @@
     "severityWeight": 6,
     "frameworks": [
       "Best Practice",
-      "DISA"
+      "DISA",
+      "BSI"
     ],
     "references": [
       {
-        "name": "Microsoft — Set-ReceiveConnector cmdlet (Banner parameter)",
+        "name": "DISA STIG EX19-ED-000119: The Exchange SMTP automated banner response must not reveal server details (V-259638)",
+        "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_edge_server/2024-12-06/finding/V-259638"
+      },
+      {
+        "name": "DISA STIG EX19-MB-000232: The Exchange SMTP automated banner response must not reveal server details (V-259707)",
+        "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259707"
+      },
+      {
+        "name": "Set-ReceiveConnector cmdlet",
         "url": "https://learn.microsoft.com/powershell/module/exchange/set-receiveconnector"
       },
       {
-        "name": "DISA STIG EX19-ED-000119: The Exchange SMTP automated banner response must not reveal server details (V-259638)",
-        "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_edge_server/2024-12-06/finding/V-259638"
+        "name": "BSI APP.5.2.A9 — Sichere Konfiguration von Exchange-Servern",
+        "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/06_APP_Anwendungen/APP_5_2_Microsoft_Exchange_und_Outlook_Edition_2023.pdf?__blob=publicationFile"
       }
     ],
     "remediation": {
       "automatable": true,
-      "description": "Set the Banner property on all Receive connectors to '220 SMTP Server Ready' to suppress server identity disclosure.",
-      "scriptTemplate": "Get-ReceiveConnector | Select-Object Identity, Banner\n# To remediate:\n# Get-ReceiveConnector | Set-ReceiveConnector -Banner '220 SMTP Server Ready'"
+      "description": "Set a generic SMTP banner on all internet-facing Receive connectors on the server to avoid disclosing server details. Internet-facing connectors are identified by PermissionGroups containing AnonymousUsers and AuthMechanism of Tls or None. The banner must begin with '220' per RFC 5321. A value such as '220 Ready.' reveals no version, hostname, or product information. An empty banner results in Exchange using the default identity-revealing greeting and must be replaced.",
+      "scriptTemplate": "# Set a non-revealing SMTP banner on internet-facing Receive connectors of this server.\n# Internet-facing connectors: PermissionGroups includes AnonymousUsers AND AuthMechanism includes Tls or is None.\n# Adjust the banner text to match your organisation's policy; it must start with '220'.\n$serverName = $env:COMPUTERNAME\n$allConnectors = Get-ReceiveConnector -Server $serverName\n$internetFacing = @($allConnectors | Where-Object {\n    ([string]$_.PermissionGroups -match '\\bAnonymousUsers\\b') -and\n    ([string]$_.AuthMechanism -match '\\bTls\\b' -or [string]$_.AuthMechanism -eq 'None')\n})\nif ($internetFacing.Count -eq 0) {\n    Write-Warning \"No internet-facing Receive connectors found on $serverName.\"\n} else {\n    # Diagnose: show current banners\n    $internetFacing | Select-Object Identity, Banner\n    # Fix: set a generic banner on each connector with an empty or revealing banner\n    foreach ($connector in $internetFacing) {\n        Set-ReceiveConnector -Identity $connector.Identity -Banner '220 Ready.'\n        Write-Host \"Banner updated on $($connector.Identity).\"\n    }\n}"
     },
-    "considerations": "Changing the SMTP banner is low-risk and has no impact on mail delivery. The '220' status code is required by RFC 5321; the greeting text after it is arbitrary. Ensure the banner starts with '220 ' to remain RFC-compliant.",
+    "considerations": "Changing the SMTP banner is low-risk with no impact on mail delivery. The '220' status code is required by RFC 5321; the greeting text after it is arbitrary. Ensure the banner starts with '220 ' to remain RFC-compliant. An empty Banner field causes Exchange to fall back to the default identity-revealing greeting, so always set an explicit value. Some monitoring solutions parse SMTP banners for version tracking — update them accordingly.",
     "roles": [
+      "Mailbox",
       "Edge"
     ]
   },

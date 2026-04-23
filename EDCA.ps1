@@ -2,7 +2,7 @@
 .SYNOPSIS
     EDCA — Exchange Deployment & Compliance Assessment.
 
-    Version: 0.8 Preview
+    Version: 0.9 Preview
     Author:  Michel de Rooij
     Source:  https://github.com/michelderooij/EDCA
     Website: https://eightwone.com
@@ -127,7 +127,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-$EDCAVersion = 'v0.8 Preview'
+$EDCAVersion = 'v0.9 Preview'
 
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 
@@ -269,6 +269,37 @@ if ($doCollect) {
     Write-Verbose ('Organization JSON exported: {0}' -f $orgJsonOut)
 
     Write-EDCALog -Message ('Collection complete: {0} server JSON file(s) and 1 organization JSON file written to {1}' -f ($exportedFiles.Count - 1), $resolvedDataPath)
+
+    # Identify Edge servers that were not fully collected (Exchange cmdlet phase was skipped because
+    # EDCA was not run locally on the Edge server). Emit a visible advisory so the operator knows
+    # to run EDCA on each Edge server and include the resulting file in the Data folder.
+    $edgeServersNotCollected = [System.Collections.Generic.List[string]]::new()
+    foreach ($serverRecord in @($collectionData.Servers)) {
+        if ($serverRecord.PSObject.Properties.Name -contains 'CollectionError') { continue }
+        $exInfo = if ($serverRecord.PSObject.Properties.Name -contains 'Exchange') { $serverRecord.Exchange } else { $null }
+        if ($null -eq $exInfo) { continue }
+        $recordIsEdge = ($exInfo.PSObject.Properties.Name -contains 'IsEdge') -and [bool]$exInfo.IsEdge
+        $hasCmdlets = ($exInfo.PSObject.Properties.Name -contains 'ExchangeCmdletsAvailable') -and [bool]$exInfo.ExchangeCmdletsAvailable
+        if ($recordIsEdge -and -not $hasCmdlets) {
+            $edgeServerName = if ($serverRecord.PSObject.Properties.Name -contains 'Server') { [string]$serverRecord.Server } else { 'unknown' }
+            $edgeServersNotCollected.Add($edgeServerName)
+        }
+    }
+
+    if ($edgeServersNotCollected.Count -gt 0) {
+        Write-Warning '--------------------------------------------------------------------------------'
+        Write-Warning ('The following Edge Transport server(s) were discovered but could not be collected:')
+        foreach ($edgeName in $edgeServersNotCollected) {
+            Write-Warning ('- {0}' -f $edgeName)
+        }
+        Write-Warning 'To include complete Edge server data in the assessment:'
+        Write-Warning '  1. Copy EDCA to each Edge Transport server locally'
+        Write-Warning '  2. On the Edge Transport server, run: .\EDCA.ps1 -Collect -Local'
+        Write-Warning ('  3. Copy the results in Data\<ServerName>_*.json file to {0}' -f $resolvedDataPath)
+        Write-Warning '  4. Re-run -Report (or -Collect -Report) which should pick up the added JSON with Edge Transport data'
+        Write-Warning '--------------------------------------------------------------------------------'
+    }
+
     if ($doCollect -and -not $doReport) {
         Write-EDCALog -Message 'Execution completed.'
         return
