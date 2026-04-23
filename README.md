@@ -1,4 +1,4 @@
-# ![EDCA](Docs/EDCA_logo.png) Exchange Deployment & Compliance Assessment
+# ![EDCA](Docs/EDCA_logo_100x100.png) Exchange Deployment & Compliance Assessment
 
 PowerShell-based tool to collect Exchange on-premises deployment data, evaluate it against best-practices and well-known compliance controls, and produce an interactive HTML report. Supported are Exchange 2016, Exchange 2019, and Exchange SE.
 
