@@ -7659,7 +7659,7 @@ function Test-EDCAControl {
             'EDCA-TLS-041' {
                 # Collect internet-facing receive connectors from the appropriate data source:
                 # - Mailbox role: $server.Exchange.ReceiveConnectors (internet-facing = AnonymousUsers + Tls/None AuthMechanism)
-                # - Edge role:    $server.Exchange.EdgeData.ReceiveConnectors (internet-facing = no ExchangeServer in AuthMechanism)
+                # - Edge role:    $server.Exchange.EdgeData.ReceiveConnectors (internet-facing = AnonymousUsers + Tls/None AuthMechanism)
                 $internetFacing = @()
                 $isEdge = ($server.PSObject.Properties.Name -contains 'Exchange') -and
                 $null -ne $server.Exchange -and
@@ -7668,10 +7668,13 @@ function Test-EDCAControl {
 
                 if ($isEdge) {
                     $allRc = @($server.Exchange.EdgeData.ReceiveConnectors)
-                    # Internet-facing connectors do NOT have ExchangeServer in AuthMechanism
+                    # Internet-facing connectors allow anonymous users with Tls or None AuthMechanism.
+                    # Note: AuthMechanism may be a deserialized object, so use -match instead of -eq for 'None'.
                     $internetFacing = @($allRc | Where-Object {
+                            ($_.PSObject.Properties.Name -contains 'PermissionGroups') -and
+                            [string]$_.PermissionGroups -match '\bAnonymousUsers\b' -and
                             ($_.PSObject.Properties.Name -contains 'AuthMechanism') -and
-                            [string]$_.AuthMechanism -notmatch '\bExchangeServer\b'
+                            ([string]$_.AuthMechanism -match '\bTls\b' -or [string]$_.AuthMechanism -match '\bNone\b')
                         })
                 }
                 elseif (($server.PSObject.Properties.Name -contains 'Exchange') -and

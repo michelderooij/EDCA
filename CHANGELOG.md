@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.91 Preview
+- **EDCA-TLS-041** (SMTP banner — Edge server false Pass): fixed a false Pass result on Edge Transport servers.
+- Added sample Report and Remediation script to Docs
+
 ## v0.9 Preview
 - **Standalone Edge auto-detection**: when running `-Collect` without `-Servers` on a standalone Edge Transport server that cannot reach Active Directory, EDCA now automatically falls back to collecting from the local server (`$env:COMPUTERNAME`) instead of terminating with an AD connectivity error. A warning is printed and logged so the override is visible in the output. If Exchange is not installed locally and AD is unreachable, the original error is still thrown.
 - **EDCA-RES-001** (Required Exchange services running): fixed "Test-ServiceHealth via endpoint failed: The syntax is not supported by this runspace" warning on Mailbox and Edge servers. The `Select-Object` call passed a calculated property script block to the remote Exchange PSSession endpoint, which runs in ConstrainedLanguage mode and does not allow script blocks in calculated properties. Fixed by using plain property selection (`Select-Object -Property Role, RequiredServicesRunning, ServicesNotRunning`) and relying on normal WinRM deserialization; Analysis.ps1 already iterates `ServicesNotRunning` with `[string]$_` so no downstream change is needed.
