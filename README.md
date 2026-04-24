@@ -34,10 +34,10 @@ Note: A PowerShell module version is planned for the near future after the first
 - Execution under an account that has Exchange and AD administrative access as required.
 - Neither Exchange Management Shell nor Active Directory module is required on the system.
 - When `-Servers` is not specified, Exchange servers are auto-discovered via Active Directory (the "Exchange Servers" security group). EDCA must be able to reach a domain controller.
-- EDCA uses remoting sessions to the Exchange servers through http (80).
+- EDCA uses remoting sessions to the Exchange servers through http (80) and .
 - EDCA uses LDAPS to Domain Controllers with the Global Catalog role (3269), and CIM uses WS-MAN (5985) to read CPU details.
 - To collect data from Edge Transport servers, see [Edge Transport Servers](#edge-transport-servers) below.
-- **When running EDCA on an Exchange Mailbox server itself**, the PowerShell session must be **elevated (Run as Administrator)**. EDCA connects to the local Exchange PowerShell endpoint (`http://<server>/PowerShell`) via WinRM even for the local server. UAC token filtering causes this loopback connection to fail with *Access is denied* in a non-elevated session.
+- **When running EDCA on an Exchange Mailbox server**, your PowerShell session must be **elevated** (Run as Administrator). EDCA connects via Exchange Remote PowerShell over port 80; UACtoken filtering will block this for non-elevated sessions.
 
 ## Required Permissions
 
