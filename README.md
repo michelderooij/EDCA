@@ -1,6 +1,6 @@
 # ![EDCA](Docs/EDCA_logo_100x100.png) Exchange Deployment & Compliance Assessment
 
-PowerShell-based tool to collect Exchange on-premises deployment data, evaluate it against best-practices and well-known compliance controls, and produce an interactive HTML report ([sample](report_sample.html)). Supported are Exchange 2016, Exchange 2019, and Exchange SE.
+PowerShell-based tool to collect Exchange on-premises deployment data, evaluate it against best-practices and well-known compliance controls, and produce an interactive HTML report ([sample](https://michelderooij.github.io/EDCA/report_sample.html)). Supported are Exchange 2016, Exchange 2019, and Exchange SE.
 
 ## Key Features
 
@@ -25,6 +25,8 @@ No installation required. EDCA is a self-contained PowerShell script.
    Get-ChildItem -Path .\EDCA -Recurse -File | Unblock-File
    ```
 3. Run `.\EDCA.ps1` from the `EDCA` folder.
+
+Note: A PowerShell module version is planned for the near future after the first round of feedback.
 
 ## Requirements
 
