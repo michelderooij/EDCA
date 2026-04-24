@@ -1,6 +1,6 @@
 # ![EDCA](Docs/EDCA_logo_100x100.png) Exchange Deployment & Compliance Assessment
 
-PowerShell-based tool to collect Exchange on-premises deployment data, evaluate it against best-practices and well-known compliance controls, and produce an interactive HTML report ([sample](Docs/report_sample.html)). Supported are Exchange 2016, Exchange 2019, and Exchange SE.
+PowerShell-based tool to collect Exchange on-premises deployment data, evaluate it against best-practices and well-known compliance controls, and produce an interactive HTML report ([sample](report_sample.html)). Supported are Exchange 2016, Exchange 2019, and Exchange SE.
 
 ## Key Features
 
@@ -10,7 +10,7 @@ PowerShell-based tool to collect Exchange on-premises deployment data, evaluate 
 - Evidence is included when printing or saving the report to PDF (browser print → Save as PDF).
 - Collect data from all discovered Exchange servers, or a specific set via `-Servers`.
 - Separate collect (`-Collect`) and report (`-Report`) phases, or both in a single run.
-- (Optional) Sample remediation script generation for all failed controls ([sample](Docs/remediation_sample.ps1)).
+- (Optional) Sample remediation script generation for all failed controls ([sample](remediation_sample.ps1)).
 - `-Update` switch to download the latest Exchange build catalog from GitHub.
 - Option to hide skipped controls (eg Edge Transport specific controls when there is no Edge Transport server).
 - Report supports dark mode.
