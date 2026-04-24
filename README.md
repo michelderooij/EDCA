@@ -37,6 +37,7 @@ Note: A PowerShell module version is planned for the near future after the first
 - EDCA uses remoting sessions to the Exchange servers through http (80).
 - EDCA uses LDAPS to Domain Controllers with the Global Catalog role (3269), and CIM uses WS-MAN (5985) to read CPU details.
 - To collect data from Edge Transport servers, see [Edge Transport Servers](#edge-transport-servers) below.
+- **When running EDCA on an Exchange Mailbox server itself**, the PowerShell session must be **elevated (Run as Administrator)**. EDCA connects to the local Exchange PowerShell endpoint (`http://<server>/PowerShell`) via WinRM even for the local server. UAC token filtering causes this loopback connection to fail with *Access is denied* in a non-elevated session.
 
 ## Required Permissions
 

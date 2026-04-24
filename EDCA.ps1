@@ -203,6 +203,13 @@ $selectedOrgId = $null
 
 if ($doCollect) {
     Write-EDCALog -Message 'Starting collection mode.'
+    $isElevated = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+    if (-not $isElevated) {
+        $exchangeSetupKey = 'HKLM:\SOFTWARE\Microsoft\ExchangeServer\v15\Setup'
+        if (Test-Path -Path $exchangeSetupKey) {
+            Write-EDCALog -Level 'WARN' -Message ('Running in a non-elevated PowerShell session on Exchange server {0}. Connecting to the local Exchange PowerShell endpoint requires elevation. Re-run EDCA as Administrator to avoid ''Access is denied'' errors when collecting from the local server.' -f $env:COMPUTERNAME)
+        }
+    }
     if ($Local) {
         $Servers = @($env:COMPUTERNAME) + @($Servers)
         Write-Verbose ('Local switch set; added {0} to target list.' -f $env:COMPUTERNAME)
