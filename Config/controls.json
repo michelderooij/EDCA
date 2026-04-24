@@ -2,7 +2,7 @@
   {
     "id": "EDCA-DATA-001",
     "title": "No expired Exchange certificates",
-    "description": "All Exchange service certificates MUST be valid and within their expiry date. Expired certificates cause TLS negotiation failures, breaking client connectivity, mail flow, and hybrid authentication.",
+    "description": "Exchange service certificates are used to establish TLS-encrypted connections for client access (HTTPS/OWA), SMTP transport, and hybrid authentication — each requiring a valid, trusted certificate to negotiate sessions successfully. All Exchange service certificates MUST be valid and within their expiry date. Expired certificates cause TLS negotiation failures, breaking client connectivity, mail flow, and hybrid authentication.",
     "verify": true,
     "subject": "Server",
     "category": "Data Security",
@@ -54,7 +54,7 @@
   {
     "id": "EDCA-DATA-002",
     "title": "Auth certificate baseline",
-    "description": "The Exchange OAuth authentication certificate MUST be present in the Exchange certificate store and MUST have at least 30 days remaining before expiry. An expired or missing auth certificate breaks OAuth and hybrid authentication flows.",
+    "description": "The Exchange OAuth authentication certificate is a self-signed certificate used by Exchange Server to sign and validate OAuth tokens for hybrid features such as free/busy lookups, cross-premises calendar delegation, and Exchange Online Archive routing. The Exchange OAuth authentication certificate MUST be present in the Exchange certificate store and MUST have at least 30 days remaining before expiry. An expired or missing auth certificate breaks OAuth and hybrid authentication flows.",
     "verify": false,
     "subject": "Organization",
     "category": "Data Security",
@@ -92,7 +92,7 @@
   {
     "id": "EDCA-DATA-003",
     "title": "Internal transport certificate baseline",
-    "description": "The Exchange internal transport certificate MUST be present in LocalMachine\\My and MUST have at least 30 days remaining before expiry. An expired internal transport certificate breaks server-to-server mail delivery.",
+    "description": "The Exchange internal transport certificate is a self-signed certificate automatically provisioned on each Mailbox server and used exclusively to authenticate and encrypt SMTP sessions between Exchange servers within the same organization. The Exchange internal transport certificate MUST be present in LocalMachine\\My and MUST have at least 30 days remaining before expiry. An expired internal transport certificate breaks server-to-server mail delivery.",
     "verify": false,
     "subject": "Server",
     "category": "Data Security",
@@ -135,7 +135,7 @@
   {
     "id": "EDCA-DATA-004",
     "title": "Serialized data signing baseline",
-    "description": "Exchange serialized data signing (EnableSerializationDataSigning registry value) MUST be enabled. Serialized data signing prevents deserialization-based attacks against Exchange endpoint processing.",
+    "description": "Serialized data signing is an Exchange security feature that cryptographically signs serialized PowerShell and RPC payloads exchanged between Exchange components, preventing attackers from injecting malicious deserialized objects into internal service communication. Exchange serialized data signing (EnableSerializationDataSigning registry value) MUST be enabled. Serialized data signing prevents deserialization-based attacks against Exchange endpoint processing.",
     "verify": false,
     "subject": "Server",
     "category": "Data Security",
@@ -356,7 +356,7 @@
   {
     "id": "EDCA-DATA-008",
     "title": "Trusted root certificates baseline",
-    "description": "The DisableRootAutoUpdate registry policy MUST NOT be set to 1. When set to 1, the Windows trusted root certificate store cannot update automatically, causing certificate validation failures for TLS and OAuth.",
+    "description": "The Windows trusted root certificate store automatic update mechanism keeps the set of trusted root CAs current by downloading updates from Windows Update, ensuring that certificates issued by new or updated CAs are trusted for TLS and code signing. The DisableRootAutoUpdate registry policy MUST NOT be set to 1. When set to 1, the Windows trusted root certificate store cannot update automatically, causing certificate validation failures for TLS and OAuth.",
     "verify": false,
     "subject": "Server",
     "category": "Data Security",
@@ -390,7 +390,7 @@
   {
     "id": "EDCA-DATA-009",
     "title": "IIS HSTS configuration baseline for Exchange sites",
-    "description": "Validate IIS HSTS posture on Exchange-related websites, including unsupported usage on Exchange Back End, redirectHttpToHttps risk, and minimum max-age guidance.",
+    "description": "HTTP Strict Transport Security (HSTS) is a web security policy mechanism delivered via an HTTP response header that instructs browsers to connect to a site exclusively over HTTPS for a specified duration, preventing protocol-downgrade and cookie-hijacking attacks. Validate IIS HSTS posture on Exchange-related websites, including unsupported usage on Exchange Back End, redirectHttpToHttps risk, and minimum max-age guidance.",
     "verify": true,
     "subject": "Server",
     "category": "Data Security",
@@ -437,7 +437,7 @@
   {
     "id": "EDCA-DATA-010",
     "title": "TLS insecure renegotiation values hardened",
-    "description": "Each Exchange server MUST have SCHANNEL insecure renegotiation disabled for both client and server roles. Permitting insecure renegotiation allows a man-in-the-middle attacker to inject data into an established TLS session (CVE-2009-3555).",
+    "description": "TLS renegotiation is a feature that allows the parameters of an established TLS session to be updated mid-connection; insecure renegotiation (without the RFC 5746 renegotiation_info extension) allows an attacker to splice a new handshake into an active session. Each Exchange server MUST have SCHANNEL insecure renegotiation disabled for both client and server roles. Permitting insecure renegotiation allows a man-in-the-middle attacker to inject data into an established TLS session (CVE-2009-3555).",
     "verify": true,
     "subject": "Server",
     "category": "Data Security",
@@ -645,7 +645,7 @@
   {
     "id": "EDCA-DATA-014",
     "title": "S/MIME is enabled for Outlook Web App",
-    "description": "The SMimeEnabled property on OWA virtual directories SHOULD be True. Enabling S/MIME in OWA allows users to send and receive digitally signed and encrypted messages through the browser, supporting end-to-end email security. The CIS benchmark requires S/MIME to be enabled for OWA.",
+    "description": "The SMimeEnabled property on OWA virtual directories SHOULD be True. Enabling S/MIME in OWA allows users to send and receive digitally signed and encrypted messages through the browser, supporting end-to-end email security.",
     "verify": true,
     "subject": "Server",
     "category": "Data Security",
@@ -683,7 +683,7 @@
   {
     "id": "EDCA-DATA-015",
     "title": "RPC client access connections require encryption",
-    "description": "The EncryptionRequired property on the RPC client access service MUST be set to True. Requiring encryption for MAPI/RPC connections protects mailbox data in transit from clients connecting via legacy Outlook profiles. The CIS benchmark requires client MAPI encryption to be enforced.",
+    "description": "The EncryptionRequired property on the RPC client access service MUST be set to True. Requiring encryption for MAPI/RPC connections protects mailbox data in transit from clients connecting via legacy Outlook profiles.",
     "verify": true,
     "subject": "Server",
     "category": "Data Security",
@@ -920,7 +920,7 @@
   {
     "id": "EDCA-GOV-003",
     "title": "EEMS baseline",
-    "description": "The Exchange Emergency Mitigation Service (MSExchangeMitigation) MUST be Running with Automatic start mode and mitigations enabled. EEMS enables Microsoft to deliver emergency mitigations for critical Exchange vulnerabilities. CISA recommends enabling the Microsoft Exchange Emergency Mitigation Service.",
+    "description": "The Exchange Emergency Mitigation Service (EEMS) is a Windows service that automatically downloads and applies temporary security mitigations from Microsoft for critical Exchange Server vulnerabilities, enabling rapid response before a full Cumulative Update is available. The Exchange Emergency Mitigation Service (MSExchangeMitigation) MUST be Running with Automatic start mode and mitigations enabled. EEMS enables Microsoft to deliver emergency mitigations for critical Exchange vulnerabilities.",
     "verify": false,
     "subject": "Server",
     "category": "Governance",
@@ -958,7 +958,7 @@
   {
     "id": "EDCA-GOV-004",
     "title": "Exchange Hybrid Application baseline",
-    "description": "The Exchange Hybrid Application MUST be correctly configured to support hybrid coexistence between on-premises Exchange and Exchange Online. Microsoft is transitioning hybrid connectivity from Exchange Web Services (EWS) to Microsoft Graph API, requiring a dedicated Hybrid Application registration created by the ConfigureExchangeHybridApplication tool. Without a correctly configured Hybrid Application, hybrid mail flow, free/busy lookups, and cross-premises mailbox moves will fail. EDCA validates AuthServer and IntraOrganizationConnector configuration to detect missing or misconfigured hybrid application entries.",
+    "description": "The Exchange Hybrid Application is a dedicated Microsoft Entra ID app registration that provides Exchange on-premises with a modern, least-privilege identity for authenticating to Microsoft 365 services, replacing the legacy shared first-party app used in older hybrid configurations. The Exchange Hybrid Application MUST be correctly configured to support hybrid coexistence between on-premises Exchange and Exchange Online. Microsoft is transitioning hybrid connectivity from Exchange Web Services (EWS) to Microsoft Graph API, requiring a dedicated Hybrid Application registration created by the ConfigureExchangeHybridApplication tool. Without a correctly configured Hybrid Application, hybrid mail flow, free/busy lookups, and cross-premises mailbox moves will fail. EDCA validates AuthServer and IntraOrganizationConnector configuration to detect missing or misconfigured hybrid application entries.",
     "verify": false,
     "subject": "Organization",
     "category": "Governance",
@@ -986,7 +986,7 @@
   {
     "id": "EDCA-GOV-005",
     "title": "Mailbox database issue-warning quota is configured",
-    "description": "The IssueWarningQuota property of each mailbox database SHOULD be set to a specific value rather than Unlimited. Configuring a warning threshold ensures users are notified before their mailbox reaches capacity, reducing the risk of mail delivery failures. The CIS benchmark requires this quota to be configured.",
+    "description": "The IssueWarningQuota property of each mailbox database SHOULD be set to a specific value rather than Unlimited. Configuring a warning threshold ensures users are notified before their mailbox reaches capacity, reducing the risk of mail delivery failures.",
     "verify": true,
     "subject": "Database",
     "category": "Governance",
@@ -1019,7 +1019,7 @@
   {
     "id": "EDCA-GOV-006",
     "title": "Mailbox database prohibit-send-receive quota is configured",
-    "description": "The ProhibitSendReceiveQuota property of each mailbox database SHOULD be set to a specific value rather than Unlimited. Configuring this hard limit prevents oversized mailboxes from consuming unrestricted storage. The CIS benchmark requires this quota to be configured.",
+    "description": "The ProhibitSendReceiveQuota property of each mailbox database SHOULD be set to a specific value rather than Unlimited. Configuring this hard limit prevents oversized mailboxes from consuming unrestricted storage.",
     "verify": true,
     "subject": "Database",
     "category": "Governance",
@@ -1052,7 +1052,7 @@
   {
     "id": "EDCA-GOV-007",
     "title": "Mailbox database prohibit-send quota is configured",
-    "description": "The ProhibitSendQuota property of each mailbox database SHOULD be set to a specific value rather than Unlimited. Configuring this limit prevents users from sending new mail when their mailbox is near capacity. The CIS benchmark requires this quota to be configured.",
+    "description": "The ProhibitSendQuota property of each mailbox database SHOULD be set to a specific value rather than Unlimited. Configuring this limit prevents users from sending new mail when their mailbox is near capacity.",
     "verify": true,
     "subject": "Database",
     "category": "Governance",
@@ -1085,7 +1085,7 @@
   {
     "id": "EDCA-GOV-008",
     "title": "Exchange Send Fatal Errors to Microsoft is disabled",
-    "description": "Exchange Send Fatal Errors to Microsoft MUST be disabled. The error reporting feature transmits diagnostic data to Microsoft, which may include server configuration and operational details. This must be disabled on DoD/government networks where external data transmission must be controlled.",
+    "description": "The Exchange error reporting feature automatically transmits crash dump data and diagnostic telemetry to Microsoft when Exchange encounters fatal service errors, to assist with product quality analysis and support case diagnostics. Exchange Send Fatal Errors to Microsoft MUST be disabled. The error reporting feature transmits diagnostic data to Microsoft, which may include server configuration and operational details. This must be disabled on DoD/government networks where external data transmission must be controlled.",
     "verify": true,
     "subject": "Server",
     "category": "Governance",
@@ -1122,7 +1122,7 @@
   {
     "id": "EDCA-GOV-009",
     "title": "Exchange Customer Experience Improvement Program (CEIP) is disabled",
-    "description": "Exchange MUST NOT send customer experience reports to Microsoft. The Customer Experience Improvement Program (CEIP) transmits usage data to Microsoft, which may violate network data-flow restrictions on DoD/government systems. CEIP must be disabled.",
+    "description": "The Customer Experience Improvement Program (CEIP) is an optional Exchange telemetry feature that periodically collects and transmits anonymized usage statistics — such as feature invocation frequency and configuration data — to Microsoft for product improvement purposes. Exchange MUST NOT send customer experience reports to Microsoft. The Customer Experience Improvement Program (CEIP) transmits usage data to Microsoft, which may violate network data-flow restrictions on DoD/government systems. CEIP must be disabled.",
     "verify": true,
     "subject": "Organization",
     "category": "Governance",
@@ -1186,7 +1186,7 @@
   {
     "id": "EDCA-GOV-011",
     "title": "Exchange software baseline is documented and monitored for unauthorized changes",
-    "description": "An Exchange software baseline copy MUST exist, and Exchange software MUST be monitored for unauthorized changes. A software baseline enables rapid detection of unauthorized modifications to Exchange binaries, configuration files, or DLLs. File integrity monitoring must be in place to alert on deviations from the baseline.",
+    "description": "An Exchange software baseline is a documented reference snapshot of the installed Exchange binaries, DLLs, and configuration files at a known-good state, used to detect unauthorized modifications through file integrity comparison. An Exchange software baseline copy MUST exist, and Exchange software MUST be monitored for unauthorized changes. A software baseline enables rapid detection of unauthorized modifications to Exchange binaries, configuration files, or DLLs. File integrity monitoring must be in place to alert on deviations from the baseline.",
     "verify": true,
     "subject": "Server",
     "category": "Governance",
@@ -1223,7 +1223,7 @@
   {
     "id": "EDCA-GOV-012",
     "title": "Exchange services are documented and unnecessary services are disabled",
-    "description": "Exchange services MUST be documented, and unnecessary services MUST be removed or disabled. Only services required for the installed Exchange server role and configured features must be active. Unnecessary services expand the attack surface and must be disabled to minimize exposure.",
+    "description": "Exchange Server installs a set of Windows services corresponding to its enabled roles and features; documenting the required service baseline and disabling unnecessary services minimizes the attack surface exposed by the server. Exchange services MUST be documented, and unnecessary services MUST be removed or disabled. Only services required for the installed Exchange server role and configured features must be active. Unnecessary services expand the attack surface and must be disabled to minimize exposure.",
     "verify": true,
     "subject": "Server",
     "category": "Governance",
@@ -1306,7 +1306,7 @@
   {
     "id": "EDCA-IAC-002",
     "title": "Exchange computer membership baseline",
-    "description": "The Exchange server computer account MUST be a member of the Exchange Servers and Exchange Trusted Subsystem Active Directory security groups. Missing group membership causes permission failures across Exchange management operations.",
+    "description": "Exchange relies on specific Active Directory security groups — Exchange Servers and Exchange Trusted Subsystem — to grant each server's computer account the permissions it needs to read configuration, process mail, and manage recipient objects across the organization. The Exchange server computer account MUST be a member of the Exchange Servers and Exchange Trusted Subsystem Active Directory security groups. Missing group membership causes permission failures across Exchange management operations.",
     "verify": false,
     "subject": "Server",
     "category": "Identity and Access Control",
@@ -1334,7 +1334,7 @@
   {
     "id": "EDCA-IAC-003",
     "title": "NTLMv2 authentication enforcement baseline",
-    "description": "LAN Manager authentication level and NTLM minimum session security MUST be configured together to enforce NTLMv2 only and refuse LM/NTLM. LmCompatibilityLevel MUST be set to 5 (Send NTLMv2 response only; refuse LM & NTLM). NtlmMinClientSec and NtlmMinServerSec MUST be set to 537395200 (require NTLMv2 session security and 128-bit encryption). Applicability: Exchange 2016/2019/SE with modern clients. Exception: validated legacy interoperability requirements must be risk accepted.",
+    "description": "The Windows LAN Manager authentication level and NTLM minimum session security settings control which variants of the NTLM challenge-response protocol are permitted for network authentication, ranging from the broken LM protocol through NTLMv1 to the current NTLMv2. LAN Manager authentication level and NTLM minimum session security MUST be configured together to enforce NTLMv2 only and refuse LM/NTLM. LmCompatibilityLevel MUST be set to 5 (Send NTLMv2 response only; refuse LM & NTLM). NtlmMinClientSec and NtlmMinServerSec MUST be set to 537395200 (require NTLMv2 session security and 128-bit encryption). Applicability: Exchange 2016/2019/SE with modern clients. Exception: validated legacy interoperability requirements must be risk accepted.",
     "verify": true,
     "subject": "Server",
     "category": "Identity and Access Control",
@@ -1450,7 +1450,7 @@
   {
     "id": "EDCA-IAC-005",
     "title": "RDP requires Network Level Authentication",
-    "description": "Each Exchange server MUST require Network Level Authentication (NLA) for all Remote Desktop connections. NLA authenticates users before establishing a full desktop session, reducing the RDP attack surface.",
+    "description": "Network Level Authentication (NLA) is an RDP security feature that requires users to authenticate with valid credentials before the Remote Desktop server allocates a full desktop session, moving authentication to the network layer before a session is established. Each Exchange server MUST require Network Level Authentication (NLA) for all Remote Desktop connections. NLA authenticates users before establishing a full desktop session, reducing the RDP attack surface.",
     "verify": true,
     "subject": "Server",
     "category": "Identity and Access Control",
@@ -1502,7 +1502,7 @@
   {
     "id": "EDCA-IAC-006",
     "title": "WDigest UseLogonCredential disabled",
-    "description": "Each Exchange server MUST have WDigest credential caching disabled (UseLogonCredential set to 0). WDigest authentication stores clear-text credentials in LSASS memory, enabling credential theft via memory dump.",
+    "description": "WDigest is a legacy Windows authentication protocol that, when the UseLogonCredential registry value is set to 1, causes Windows to cache the user's plaintext password in LSASS memory to support HTTP Digest and SASL authentication challenges. Each Exchange server MUST have WDigest credential caching disabled (UseLogonCredential set to 0). WDigest authentication stores clear-text credentials in LSASS memory, enabling credential theft via memory dump.",
     "verify": true,
     "subject": "Server",
     "category": "Identity and Access Control",
@@ -1553,7 +1553,7 @@
   {
     "id": "EDCA-IAC-007",
     "title": "Alternate Service Account (ASA) usage follows Kerberos best practice",
-    "description": "Detect whether an Alternate Service Account credential is configured for Client Access Kerberos and validate baseline hygiene for credential rollover and server consistency.",
+    "description": "The Kerberos Alternate Service Account (ASA) is a shared service account credential deployed on all Exchange Client Access servers to enable Kerberos authentication for clients connecting through a load balancer, where individual server SPNs cannot be used. Detect whether an Alternate Service Account credential is configured for Client Access Kerberos and validate baseline hygiene for credential rollover and server consistency.",
     "verify": true,
     "subject": "Server",
     "category": "Identity and Access Control",
@@ -1736,7 +1736,7 @@
   {
     "id": "EDCA-IAC-011",
     "title": "Dedicated hybrid app is used by EvoSTS AuthServer",
-    "description": "When hybrid OAuth configuration is detected, the EvoSTS AuthServer MUST use the dedicated Exchange hybrid application app ID and MUST NOT use the shared Exchange Online first-party app ID 00000002-0000-0ff1-ce00-000000000000.",
+    "description": "The EvoSTS AuthServer is the Exchange on-premises OAuth authorization server entry that points to Microsoft Entra ID as the token issuer, enabling Exchange to validate OAuth tokens issued by Entra ID for hybrid mail flow and free/busy operations. When hybrid OAuth configuration is detected, the EvoSTS AuthServer MUST use the dedicated Exchange hybrid application app ID and MUST NOT use the shared Exchange Online first-party app ID 00000002-0000-0ff1-ce00-000000000000.",
     "verify": true,
     "subject": "Organization",
     "category": "Identity and Access Control",
@@ -1773,7 +1773,7 @@
   {
     "id": "EDCA-IAC-012",
     "title": "Windows Integrated Authentication (NTLM/Negotiate) is present on Exchange virtual directories",
-    "description": "NTLM and Negotiate (Windows Integrated Authentication) MUST remain present in the authentication methods of Exchange virtual directories (MAPI, OWA, ECP, EWS, Autodiscover). Removing these is an unsupported configuration that breaks internal client connectivity for Outlook, Autodiscover, and web services clients.",
+    "description": "Windows Integrated Authentication (WIA) — comprising NTLM and Negotiate/Kerberos — is the IIS authentication method that allows domain-joined clients to authenticate silently using their Windows session credentials without prompting for a username and password. NTLM and Negotiate (Windows Integrated Authentication) MUST remain present in the authentication methods of Exchange virtual directories (MAPI, OWA, ECP, EWS, Autodiscover). Removing these is an unsupported configuration that breaks internal client connectivity for Outlook, Autodiscover, and web services clients.",
     "verify": true,
     "subject": "Server",
     "category": "Identity and Access Control",
@@ -1818,7 +1818,7 @@
   {
     "id": "EDCA-IAC-013",
     "title": "OWA forms-based authentication is configured per version requirements",
-    "description": "Exchange MUST have forms-based authentication (FBA) configured as defined for the installed Exchange version on OWA virtual directories. For Exchange 2019 and Exchange SE, FBA must be ENABLED so that users authenticate through a secure logon form rather than relying on browser-level Basic or Integrated Windows Authentication. Exception: Exchange 2016 requires FBA to be DISABLED; Integrated Windows Authentication or another approved method must be used instead.",
+    "description": "Forms-based authentication (FBA) is the IIS/Exchange authentication method that presents users with an HTML login page (the OWA sign-in form) to collect credentials, replacing browser-native Basic or Integrated Windows Authentication prompts with a customizable Exchange-managed form. Exchange MUST have forms-based authentication (FBA) configured as defined for the installed Exchange version on OWA virtual directories. For Exchange 2019 and Exchange SE, FBA must be ENABLED so that users authenticate through a secure logon form rather than relying on browser-level Basic or Integrated Windows Authentication. Exception: Exchange 2016 requires FBA to be DISABLED; Integrated Windows Authentication or another approved method must be used instead.",
     "verify": true,
     "subject": "Server",
     "category": "Identity and Access Control",
@@ -2217,7 +2217,7 @@
   {
     "id": "EDCA-IAC-026",
     "title": "Kerberos AES encryption is enforced; RC4 and DES are disabled",
-    "description": "The Exchange server's Kerberos supported encryption types MUST be restricted to AES128-CTS-HMAC-SHA1-96 and AES256-CTS-HMAC-SHA1-96 (SupportedEncryptionTypes=24). RC4-HMAC and DES encryption types must be disabled. RC4-based Kerberos tickets are vulnerable to offline brute-force and Kerberoasting attacks because RC4 session keys are derived from NT password hashes, enabling hash-equivalent attacks against service accounts. ANSSI prohibits RC4 and DES Kerberos encryption on all member servers. The registry value 24 (binary 11000) enables AES128 (bit 3, value 8) and AES256 (bit 4, value 16) only.",
+    "description": "The Windows Kerberos supported encryption types registry setting controls which cipher algorithms the Kerberos client and server on this machine will offer and accept when requesting or issuing service tickets, ranging from legacy DES and RC4 to modern AES variants. The Exchange server's Kerberos supported encryption types MUST be restricted to AES128-CTS-HMAC-SHA1-96 and AES256-CTS-HMAC-SHA1-96 (SupportedEncryptionTypes=24). RC4-HMAC and DES encryption types must be disabled. RC4-based Kerberos tickets are vulnerable to offline brute-force and Kerberoasting attacks because RC4 session keys are derived from NT password hashes, enabling hash-equivalent attacks against service accounts. ANSSI prohibits RC4 and DES Kerberos encryption on all member servers. The registry value 24 (binary 11000) enables AES128 (bit 3, value 8) and AES256 (bit 4, value 16) only.",
     "verify": true,
     "subject": "Server",
     "category": "Identity and Access Control",
@@ -2264,7 +2264,7 @@
   {
     "id": "EDCA-IAC-027",
     "title": "Exchange computer accounts do not have unconstrained Kerberos delegation",
-    "description": "Exchange server computer accounts in Active Directory SHOULD NOT have the TRUSTED_FOR_DELEGATION flag set in userAccountControl (bit 19, value 0x80000). Unconstrained Kerberos delegation permits the Exchange server to impersonate any authenticated user against any Kerberos service in the domain. If an Exchange server with unconstrained delegation is compromised, all Kerberos TGTs presented to it can be captured and replayed, enabling full domain compromise via Pass-the-Ticket attacks. ANSSI prohibits unconstrained delegation on member servers. Exchange 2016, 2019, and Exchange SE do not require unconstrained delegation for any current functionality.",
+    "description": "Unconstrained Kerberos delegation is an Active Directory computer account attribute (TRUSTED_FOR_DELEGATION) that permits the server to receive and cache Kerberos Ticket Granting Tickets (TGTs) from any authenticating user and reuse them to impersonate those users against any service in the domain. Exchange server computer accounts in Active Directory SHOULD NOT have the TRUSTED_FOR_DELEGATION flag set in userAccountControl (bit 19, value 0x80000). Unconstrained Kerberos delegation permits the Exchange server to impersonate any authenticated user against any Kerberos service in the domain. If an Exchange server with unconstrained delegation is compromised, all Kerberos TGTs presented to it can be captured and replayed, enabling full domain compromise via Pass-the-Ticket attacks. ANSSI prohibits unconstrained delegation on member servers. Exchange 2016, 2019, and Exchange SE do not require unconstrained delegation for any current functionality.",
     "verify": true,
     "subject": "Server",
     "category": "Identity and Access Control",
@@ -2300,7 +2300,7 @@
   {
     "id": "EDCA-IAC-028",
     "title": "Domain object DACL WriteDACL ACEs carry the Inherit-Only flag",
-    "description": "The two Access Control Entries (ACEs) granted to the Exchange Windows Permissions (EWP) group on the Active Directory domain root object MUST either carry the Inherit-Only (IO) propagation flag or be absent from the DACL entirely. When an ACE is present without the Inherit-Only flag, the WriteDACL right applies to the domain object itself rather than only to descendant user and inetOrgPerson objects. Any principal in the EWP group can exploit this to write Ds-Replication-Get-Changes-All extended rights onto the domain object and perform a DCSync attack, yielding all domain password hashes and Kerberos keys. On Exchange 2016 and later, the corresponding Allow ACE that grants EWP WriteDACL on the AdminSDHolder object for the Group inherited object type MUST also be removed. The fix requires running Setup /PrepareAD followed by Setup /PrepareDomain in every domain of the forest after installing the qualifying cumulative update. Note: the Exchange WriteDACL ACEs carry ObjectType = all-zeros and the target class GUID (User or inetOrgPerson) in the InheritedObjectType field.",
+    "description": "During Exchange installation, Setup grants the Exchange Windows Permissions (EWP) security group WriteDACL rights on the Active Directory domain root object so that Exchange can modify permissions on user and inetOrgPerson objects; if not scoped with the Inherit-Only flag, this right also applies to the domain object itself. The two Access Control Entries (ACEs) granted to the Exchange Windows Permissions (EWP) group on the Active Directory domain root object MUST either carry the Inherit-Only (IO) propagation flag or be absent from the DACL entirely. When an ACE is present without the Inherit-Only flag, the WriteDACL right applies to the domain object itself rather than only to descendant user and inetOrgPerson objects. Any principal in the EWP group can exploit this to write Ds-Replication-Get-Changes-All extended rights onto the domain object and perform a DCSync attack, yielding all domain password hashes and Kerberos keys. On Exchange 2016 and later, the corresponding Allow ACE that grants EWP WriteDACL on the AdminSDHolder object for the Group inherited object type MUST also be removed. The fix requires running Setup /PrepareAD followed by Setup /PrepareDomain in every domain of the forest after installing the qualifying cumulative update. Note: the Exchange WriteDACL ACEs carry ObjectType = all-zeros and the target class GUID (User or inetOrgPerson) in the InheritedObjectType field.",
     "verify": true,
     "subject": "Organization",
     "category": "Identity and Access Control",
@@ -2333,7 +2333,7 @@
   {
     "id": "EDCA-MON-001",
     "title": "Admin audit logging enabled and configured",
-    "description": "Admin audit logging (AdminAuditLogEnabled) MUST be enabled for the Exchange organization and audit record parameters MUST be set. The audit log configuration must specify the minimum cmdlet parameters to be audited, minimum log age, and a defined log path to ensure a complete audit trail. Ensures all Exchange cmdlet executions are recorded, supporting accountability and incident response.",
+    "description": "Exchange administrator audit logging records every Exchange Management Shell cmdlet execution — including the cmdlet name, parameters, caller identity, and timestamp — to a dedicated arbitration mailbox, providing a complete audit trail of all administrative changes. Admin audit logging (AdminAuditLogEnabled) MUST be enabled for the Exchange organization and audit record parameters MUST be set. The audit log configuration must specify the minimum cmdlet parameters to be audited, minimum log age, and a defined log path to ensure a complete audit trail. Ensures all Exchange cmdlet executions are recorded, supporting accountability and incident response.",
     "verify": true,
     "subject": "Organization",
     "category": "Monitoring",
@@ -2407,7 +2407,7 @@
   {
     "id": "EDCA-MON-002",
     "title": "PowerShell Script Block Logging enabled",
-    "description": "Each Exchange server MUST have PowerShell Script Block Logging enabled. Script Block Logging captures PowerShell commands and scripts for detection and audit purposes. The CIS benchmark requires 'Turn on PowerShell Script Block Logging' to be set to 'Enabled'.",
+    "description": "PowerShell Script Block Logging is a Windows feature that writes the full text of every executed PowerShell script block — including dynamically generated and obfuscated code — to the Windows event log (Microsoft-Windows-PowerShell/Operational), enabling detection of malicious PowerShell activity. Each Exchange server MUST have PowerShell Script Block Logging enabled. Script Block Logging captures PowerShell commands and scripts for detection and audit purposes.",
     "verify": true,
     "subject": "Server",
     "category": "Monitoring",
@@ -2488,7 +2488,7 @@
   {
     "id": "EDCA-MON-004",
     "title": "Transport connectivity logging is enabled",
-    "description": "Each Exchange server MUST have transport connectivity logging enabled. Connectivity logs record SMTP connection details for both outbound send and inbound receive, supporting troubleshooting and audit trail requirements.",
+    "description": "Exchange transport connectivity logging records the sequence of SMTP connection events (connect, authenticate, TLS negotiation, disconnect) for every inbound and outbound mail flow session handled by the Transport service, separate from the per-message protocol log. Each Exchange server MUST have transport connectivity logging enabled. Connectivity logs record SMTP connection details for both outbound send and inbound receive, supporting troubleshooting and audit trail requirements.",
     "verify": true,
     "subject": "Server",
     "category": "Monitoring",
@@ -2534,7 +2534,7 @@
   {
     "id": "EDCA-MON-005",
     "title": "Transport message tracking logging is enabled",
-    "description": "Each Exchange server MUST have transport message tracking logging enabled. Message tracking logs record per-message routing events and support incident response, compliance, and delivery troubleshooting.",
+    "description": "Exchange message tracking is a per-message audit log that records every routing decision, delivery attempt, and status event for messages processed by the Transport service, enabling administrators to trace the path of any message through the Exchange organization. Each Exchange server MUST have transport message tracking logging enabled. Message tracking logs record per-message routing events and support incident response, compliance, and delivery troubleshooting.",
     "verify": true,
     "subject": "Server",
     "category": "Monitoring",
@@ -2580,7 +2580,7 @@
   {
     "id": "EDCA-MON-006",
     "title": "Transport message subject logging is disabled",
-    "description": "Each Exchange server MUST have message tracking subject logging disabled. Storing message subjects in transport logs may expose sensitive information; subject logging is disabled by default and must remain so.",
+    "description": "Message tracking subject logging is an optional Exchange transport feature that, when enabled, appends the email subject line to message tracking log entries alongside the standard sender, recipient, and routing metadata. Each Exchange server MUST have message tracking subject logging disabled. Storing message subjects in transport logs may expose sensitive information; subject logging is disabled by default and must remain so.",
     "verify": true,
     "subject": "Server",
     "category": "Monitoring",
@@ -2622,7 +2622,7 @@
   {
     "id": "EDCA-MON-007",
     "title": "Receive connector protocol logging is set to Verbose",
-    "description": "Each Exchange server MUST have ProtocolLoggingLevel set to Verbose on all receive connectors. Verbose SMTP transaction logging supports security investigations, compliance auditing, and post-incident forensics. The CIS benchmark requires Verbose logging on all receive connectors.",
+    "description": "Receive connector protocol logging records the full SMTP conversation — including EHLO, AUTH, MAIL FROM, RCPT TO, and DATA commands — for every inbound SMTP session accepted by a receive connector, providing a detailed transaction-level audit trail. Each Exchange server MUST have ProtocolLoggingLevel set to Verbose on all receive connectors. Verbose SMTP transaction logging supports security investigations, compliance auditing, and post-incident forensics.",
     "verify": true,
     "subject": "Server",
     "category": "Monitoring",
@@ -2666,7 +2666,7 @@
   {
     "id": "EDCA-MON-008",
     "title": "Send connector protocol logging is set to Verbose",
-    "description": "Each Exchange server MUST have ProtocolLoggingLevel set to Verbose on all send connectors. Verbose SMTP transaction logging captures outbound mail flow details for all outbound connections. The CIS benchmark requires Verbose logging on all send connectors to support security investigations and compliance auditing.",
+    "description": "Send connector protocol logging records the full SMTP conversation for every outbound mail delivery attempt made through a send connector, capturing the complete SMTP exchange between the Exchange Transport service and the remote receiving server. Each Exchange server MUST have ProtocolLoggingLevel set to Verbose on all send connectors. Verbose SMTP transaction logging captures outbound mail flow details for all outbound connections.",
     "verify": true,
     "subject": "Organization",
     "category": "Monitoring",
@@ -2699,7 +2699,7 @@
   {
     "id": "EDCA-MON-009",
     "title": "Exchange transport queue monitoring is configured",
-    "description": "Exchange transport back pressure configuration MUST be present and active. Back pressure in Exchange monitors disk space utilization to protect transport service availability - queue growth is disk-bounded, not message-count-bounded. Message retention in queues is time-bounded by message priority: normal-priority messages expire after NormalPriorityMessageExpirationTimeout (default: 2 days) and critical-priority messages expire after CriticalPriorityMessageExpirationTimeout (default: 4 hours). Critical messages are time-limited, not size-limited. Transport flood protection relies entirely on back pressure: if the back pressure thresholds are breached, Exchange defers inbound connections to prevent disk exhaustion. Configuration is stored in $ExInstall\\Bin\\EdgeTransport.exe.config under the appSettings section.",
+    "description": "Exchange transport back pressure is a built-in resource monitoring mechanism in the Transport service that tracks server resource consumption — primarily disk space on the queue database volume — and automatically throttles or defers inbound SMTP connections when resources approach exhaustion. Exchange transport back pressure configuration MUST be present and active. Back pressure in Exchange monitors disk space utilization to protect transport service availability - queue growth is disk-bounded, not message-count-bounded. Message retention in queues is time-bounded by message priority: normal-priority messages expire after NormalPriorityMessageExpirationTimeout (default: 2 days) and critical-priority messages expire after CriticalPriorityMessageExpirationTimeout (default: 4 hours). Critical messages are time-limited, not size-limited. Transport flood protection relies entirely on back pressure: if the back pressure thresholds are breached, Exchange defers inbound connections to prevent disk exhaustion. Configuration is stored in $ExInstall\\Bin\\EdgeTransport.exe.config under the appSettings section.",
     "verify": false,
     "subject": "Server",
     "category": "Monitoring",
@@ -2814,7 +2814,7 @@
   {
     "id": "EDCA-MON-012",
     "title": "Exchange diagnostic event log levels are set to Lowest",
-    "description": "All Exchange diagnostic event log categories MUST be configured at the Lowest logging level. Setting diagnostic categories above Lowest causes excessive logging which can fill disk space and degrade server performance. The DISA Exchange STIG requires all Get-EventLogLevel categories to be set to Lowest.",
+    "description": "Exchange diagnostic event logging is a per-component verbosity setting (configured via Set-EventLogLevel) that controls how much detail each Exchange service writes to the Windows Application event log, with levels ranging from Lowest through Highest. All Exchange diagnostic event log categories MUST be configured at the Lowest logging level. Setting diagnostic categories above Lowest causes excessive logging which can fill disk space and degrade server performance.",
     "verify": true,
     "subject": "Server",
     "category": "Monitoring",
@@ -2950,7 +2950,7 @@
   {
     "id": "EDCA-PERF-001",
     "title": "CTS processor affinity baseline",
-    "description": "CtsProcessorAffinityPercentage MUST be set to 0 (Exchange baseline). Any value above 0 restricts Exchange search/CTS to a subset of processors, degrading search performance and indexing throughput.",
+    "description": "The CtsProcessorAffinityPercentage registry setting controls what percentage of server processors are allocated to the Exchange Content Transport Search (CTS) worker processes, allowing administrators to restrict search indexing to a CPU subset at the cost of indexing throughput. CtsProcessorAffinityPercentage MUST be set to 0 (Exchange baseline). Any value above 0 restricts Exchange search/CTS to a subset of processors, degrading search performance and indexing throughput.",
     "verify": false,
     "subject": "Server",
     "category": "Performance",
@@ -3012,7 +3012,7 @@
   {
     "id": "EDCA-PERF-003",
     "title": "Hyper-Threading/SMT not enabled",
-    "description": "Hyper-Threading (SMT) MUST be disabled: logical processor count MUST equal physical core count. Exchange does not support Hyper-Threading and its presence can degrade performance.",
+    "description": "Hyper-Threading (Intel) and Simultaneous Multi-Threading (AMD) are CPU features that present each physical core as two logical processors to the operating system, allowing two threads to share a single core's execution resources simultaneously. Hyper-Threading (SMT) MUST be disabled: logical processor count MUST equal physical core count. Exchange does not support Hyper-Threading and its presence can degrade performance.",
     "verify": true,
     "subject": "Server",
     "category": "Performance",
@@ -3041,7 +3041,7 @@
   {
     "id": "EDCA-PERF-004",
     "title": "NodeRunner memory limit baseline",
-    "description": "NodeRunner process memory limit (memoryLimitMegabytes in noderunner.exe.config) MUST be set to 0. Non-zero values restrict Exchange search memory allocation and can cause search index failures.",
+    "description": "NodeRunner.exe is the Exchange Search content indexing worker process responsible for parsing and indexing mailbox content; its memory allocation is governed by the memoryLimitMegabytes setting in noderunner.exe.config. NodeRunner process memory limit (memoryLimitMegabytes in noderunner.exe.config) MUST be set to 0. Non-zero values restrict Exchange search memory allocation and can cause search index failures.",
     "verify": false,
     "subject": "Server",
     "category": "Performance",
@@ -3069,7 +3069,7 @@
   {
     "id": "EDCA-PERF-005",
     "title": "NUMA BIOS baseline",
-    "description": "BIOS/boot NUMA group size optimization MUST be set to 0 (flat/clustered NUMA). Non-zero values (node interleaving) degrade Exchange memory access performance across NUMA nodes.",
+    "description": "Non-Uniform Memory Access (NUMA) is a multi-processor memory architecture where each processor socket has local memory it can access faster than memory attached to other sockets; BIOS NUMA configuration determines how the operating system perceives and schedules across these memory domains. BIOS/boot NUMA group size optimization MUST be set to 0 (flat/clustered NUMA). Non-zero values (node interleaving) degrade Exchange memory access performance across NUMA nodes.",
     "verify": false,
     "subject": "Server",
     "category": "Performance",
@@ -3127,7 +3127,7 @@
   {
     "id": "EDCA-PERF-007",
     "title": "Receive Side Scaling (RSS) enabled",
-    "description": "Receive Side Scaling (RSS) MUST be enabled on active network adapters. RSS distributes network receive processing across multiple processor cores, improving throughput for Exchange workloads.",
+    "description": "Receive Side Scaling (RSS) is a network driver feature that distributes inbound network packet processing across multiple CPU cores using a hash of packet header fields, preventing a single core from becoming a bottleneck on high-throughput network interfaces. Receive Side Scaling (RSS) MUST be enabled on active network adapters. RSS distributes network receive processing across multiple processor cores, improving throughput for Exchange workloads.",
     "verify": true,
     "subject": "Server",
     "category": "Performance",
@@ -3185,7 +3185,7 @@
   {
     "id": "EDCA-PERF-009",
     "title": "Sleepy NIC baseline",
-    "description": "NIC power management sleep/power-down settings MUST be disabled on all active adapters. Adapter power-down under low traffic causes intermittent connectivity interruptions for Exchange clients.",
+    "description": "Windows network adapter power management allows the OS or device driver to reduce power to the NIC during periods of low traffic, which on server-class systems can cause the adapter to drop packets or briefly disconnect when transitioning from a low-power state. NIC power management sleep/power-down settings MUST be disabled on all active adapters. Adapter power-down under low traffic causes intermittent connectivity interruptions for Exchange clients.",
     "verify": false,
     "subject": "Server",
     "category": "Performance",
@@ -3214,7 +3214,7 @@
   {
     "id": "EDCA-PERF-010",
     "title": "TCP/IP settings baseline",
-    "description": "TCP KeepAliveTime registry value MUST be within the recommended exchange range of 900000 to 1800000 ms (15 to 30 minutes). Values outside this range (including the OS default 2-hour value) allow stale TCP connections to persist.",
+    "description": "The TCP KeepAliveTime registry setting controls how long an idle TCP connection is maintained before the OS sends keepalive probes to verify the remote endpoint is still reachable, determining when stale or dead connections are detected and released. TCP KeepAliveTime registry value MUST be within the recommended exchange range of 900000 to 1800000 ms (15 to 30 minutes). Values outside this range (including the OS default 2-hour value) allow stale TCP connections to persist.",
     "verify": false,
     "subject": "Server",
     "category": "Performance",
@@ -3243,7 +3243,7 @@
   {
     "id": "EDCA-PERF-011",
     "title": "VMXNET3 adapter health baseline (ESX)",
-    "description": "For VMware ESX-hosted Exchange servers using VMXNET3 virtual NICs, the PacketsReceivedDiscarded counter MUST be zero. A non-zero value indicates the guest OS is dropping inbound packets due to insufficient receive buffer space, which causes retransmits and degrades Exchange performance. The HealthChecker evaluation criteria are: Pass is no discards; Warning is 1–999 discards; Fail is 1000 or more discards (Fail). This counter is cumulative from the last reboot or NIC driver reset, so even a non-zero value that is not increasing warrants investigation. Two key VMXNET3 advanced driver properties govern receive buffer capacity: Small Rx Buffers (recommended maximum: 8192) and Rx Ring #1 Size (recommended maximum: 4096). Values below the recommended maximum increase the risk of buffer exhaustion under high-traffic bursts. In addition, the 'adaptive rx ring sizing' feature can cause random interface resets when it dynamically resizes the ring - disabling it is recommended if intermittent resets are observed. Note: this counter is a cumulative accumulation since last reboot or NIC driver reset, so even an idle adapter can report a non-zero value from historical activity.",
+    "description": "The VMXNET3 virtual network adapter is VMware's high-performance paravirtualized NIC driver for ESXi guests; its receive ring buffers and small receive buffer pools determine how many inbound packets can be queued before the guest OS is forced to discard them. For VMware ESX-hosted Exchange servers using VMXNET3 virtual NICs, the PacketsReceivedDiscarded counter MUST be zero. A non-zero value indicates the guest OS is dropping inbound packets due to insufficient receive buffer space, which causes retransmits and degrades Exchange performance. The HealthChecker evaluation criteria are: Pass is no discards; Warning is 1–999 discards; Fail is 1000 or more discards (Fail). This counter is cumulative from the last reboot or NIC driver reset, so even a non-zero value that is not increasing warrants investigation. Two key VMXNET3 advanced driver properties govern receive buffer capacity: Small Rx Buffers (recommended maximum: 8192) and Rx Ring #1 Size (recommended maximum: 4096). Values below the recommended maximum increase the risk of buffer exhaustion under high-traffic bursts. In addition, the 'adaptive rx ring sizing' feature can cause random interface resets when it dynamically resizes the ring - disabling it is recommended if intermittent resets are observed. Note: this counter is a cumulative accumulation since last reboot or NIC driver reset, so even an idle adapter can report a non-zero value from historical activity.",
     "verify": true,
     "subject": "Server",
     "category": "Performance",
@@ -3523,7 +3523,7 @@
   {
     "id": "EDCA-RES-002",
     "title": "Unified content cleanup baseline",
-    "description": "The Exchange UnifiedContent temporary store cleanup MUST be configured. Misconfigured cleanup causes progressive disk space accumulation in UnifiedContent folders under ExchangeTransport working directories.",
+    "description": "The UnifiedContent folder is the temporary staging area used by the Exchange transport pipeline to extract and inspect message content during anti-malware and transport rule processing. The Exchange UnifiedContent temporary store cleanup MUST be configured. Misconfigured cleanup causes progressive disk space accumulation in UnifiedContent folders under ExchangeTransport working directories.",
     "verify": false,
     "subject": "Server",
     "category": "Resilience",
@@ -3585,7 +3585,7 @@
   {
     "id": "EDCA-RES-004",
     "title": "Mailbox database deleted item retention is at least 14 days",
-    "description": "The DeletedItemRetention on each mailbox database controls how long deleted items are retained in the dumpster before permanent removal. The CIS benchmark recommends a minimum of 14 days so that accidentally deleted items can be recovered without requiring a backup restore.",
+    "description": "The Recoverable Items folder (also known as the dumpster) is the hidden mailbox folder where deleted items are staged after removal from the Deleted Items folder, providing a recovery window before permanent purge. The DeletedItemRetention on each mailbox database controls how long deleted items are retained in the dumpster before permanent removal. DeletedItemRetention MUST be set to a minimum of 14 days so that accidentally deleted items can be recovered without requiring a backup restore.",
     "verify": true,
     "subject": "Database",
     "category": "Resilience",
@@ -3618,7 +3618,7 @@
   {
     "id": "EDCA-RES-005",
     "title": "Mailbox database deleted mailbox retention is at least 30 days",
-    "description": "The MailboxRetention on each mailbox database controls how long a soft-deleted mailbox is retained after it is removed from Active Directory. The CIS benchmark recommends retaining deleted mailboxes for at least 30 days to support accidental deletion recovery without a full backup restore.",
+    "description": "A soft-deleted mailbox is a mailbox that has been removed from Active Directory but is temporarily retained in the mailbox database pending permanent purge. The MailboxRetention on each mailbox database controls how long a soft-deleted mailbox is retained. MailboxRetention MUST be set to a minimum of 30 days to support accidental deletion recovery without requiring a backup restore.",
     "verify": true,
     "subject": "Database",
     "category": "Resilience",
@@ -3651,7 +3651,7 @@
   {
     "id": "EDCA-RES-006",
     "title": "Mailbox database is not permanently deleted until it has been backed up",
-    "description": "The RetainDeletedItemsUntilBackup flag on a mailbox database instructs Exchange not to permanently purge deleted mailbox data until the database has been backed up. The CIS benchmark requires this to be enabled so that items purged from the Recoverable Items folder remain recoverable via backup until the backup cycle completes.",
+    "description": "The RetainDeletedItemsUntilBackup flag on a mailbox database instructs Exchange not to permanently purge deleted mailbox data until the database has been backed up. RetainDeletedItemsUntilBackup MUST be enabled so that items purged from the Recoverable Items folder remain recoverable via backup until the backup cycle completes.",
     "verify": true,
     "subject": "Database",
     "category": "Resilience",
@@ -3689,7 +3689,7 @@
   {
     "id": "EDCA-RES-007",
     "title": "Exchange circular logging is disabled",
-    "description": "Exchange circular logging MUST be disabled. Circular logging overwrites transaction log files, destroying data required for point-in-time recovery and full backup restore operations. Disabling circular logging ensures all transaction logs are retained until a successful backup has been completed.",
+    "description": "Exchange circular logging is a database engine mode that reuses transaction log files once their contents have been committed to the database, discarding older logs rather than retaining them for incremental backup and point-in-time recovery. Exchange circular logging MUST be disabled. Circular logging overwrites transaction log files, destroying data required for point-in-time recovery and full backup restore operations. Disabling circular logging ensures all transaction logs are retained until a successful backup has been completed.",
     "verify": true,
     "subject": "Database",
     "category": "Resilience",
@@ -3721,7 +3721,7 @@
   {
     "id": "EDCA-RES-008",
     "title": "Exchange mailbox databases reside on a dedicated partition",
-    "description": "Exchange Mailbox databases MUST reside on a dedicated partition. Locating mailbox database files on their own dedicated volume isolates them from OS files, Exchange application files, and log files. This prevents disk contention, contains the impact of volume exhaustion, and satisfies data isolation requirements for DISA compliance.",
+    "description": "Exchange Mailbox databases MUST reside on a dedicated partition. Locating mailbox database files on their own dedicated volume isolates them from OS files, Exchange application files, and log files. This prevents disk contention and contains the impact of volume exhaustion.",
     "verify": true,
     "subject": "Database",
     "category": "Resilience",
@@ -3785,7 +3785,7 @@
   {
     "id": "EDCA-RES-010",
     "title": "Exchange mailbox databases are in a highly available and redundant configuration",
-    "description": "Exchange MUST provide mailbox databases in a highly available and redundant configuration. Exchange Database Availability Groups (DAGs) provide continuous replication of mailbox database copies across multiple servers. At least one additional database copy must exist to satisfy DISA high-availability requirements and to protect against server failure data loss.",
+    "description": "A Database Availability Group (DAG) is an Exchange high-availability feature that maintains synchronous log-shipping copies of mailbox databases across two or more Mailbox servers, enabling automatic failover with minimal data loss when a server or storage failure occurs. Exchange MUST provide mailbox databases in a highly available and redundant configuration. Exchange Database Availability Groups (DAGs) provide continuous replication of mailbox database copies across multiple servers. At least one additional database copy must exist to protect against server failure and data loss.",
     "verify": true,
     "subject": "Database",
     "category": "Resilience",
@@ -3817,7 +3817,7 @@
   {
     "id": "EDCA-RES-011",
     "title": "Single Item Recovery enabled on user mailboxes",
-    "description": "Single Item Recovery (SingleItemRecoveryEnabled) MUST be enabled on all user mailboxes. When enabled, items permanently deleted from the Recoverable Items folder are retained for the deleted-item retention period, protecting against accidental or malicious deletion.",
+    "description": "Single Item Recovery is a per-mailbox Exchange feature that prevents items purged from the Recoverable Items folder (dumpster) from being permanently deleted, retaining them for the full deleted-item retention period so they can be restored by an administrator. Single Item Recovery (SingleItemRecoveryEnabled) MUST be enabled on all user mailboxes. When enabled, items permanently deleted from the Recoverable Items folder are retained for the deleted-item retention period, protecting against accidental or malicious deletion.",
     "verify": false,
     "subject": "Mailbox",
     "category": "Resilience",
@@ -3885,7 +3885,7 @@
   {
     "id": "EDCA-SEC-001",
     "title": "MAPI over HTTP is enabled",
-    "description": "MAPI over HTTP (MapiHttpEnabled) MUST be enabled on all Exchange servers. Required for Outlook 2013+ and Exchange 2016+ connectivity; MAPI/RPC over TCP is deprecated and no longer supported in modern configurations.",
+    "description": "MAPI over HTTP is the Exchange client connectivity protocol that encapsulates MAPI communication inside standard HTTPS sessions, replacing the legacy MAPI/RPC over TCP transport and enabling Outlook clients to traverse HTTP proxies and firewalls without special port requirements. MAPI over HTTP (MapiHttpEnabled) MUST be enabled on all Exchange servers. Required for Outlook 2013+ and Exchange 2016+ connectivity; MAPI/RPC over TCP is deprecated and no longer supported in modern configurations.",
     "verify": true,
     "subject": "Server",
     "category": "Platform Security",
@@ -4031,7 +4031,7 @@
   {
     "id": "EDCA-SEC-006",
     "title": "Setting overrides baseline",
-    "description": "Active Exchange setting overrides MUST NOT exist unless the override has been formally approved and documented. Active overrides can suppress critical security or functionality controls.",
+    "description": "Exchange setting overrides are runtime configuration entries created via New-SettingOverride that modify Exchange component behavior outside of standard cmdlet settings — typically applied by Microsoft Support or automated tooling to deliver targeted fixes without requiring a full Cumulative Update. Active Exchange setting overrides MUST NOT exist unless the override has been formally approved and documented. Active overrides can suppress critical security or functionality controls.",
     "verify": false,
     "subject": "Server",
     "category": "Platform Security",
@@ -4067,7 +4067,7 @@
   {
     "id": "EDCA-SEC-007",
     "title": "Visual C++ redistributable version baseline",
-    "description": "Visual C++ 2012 x64 and Visual C++ 2013 x64 redistributable runtimes MUST both be installed. Both are required by Exchange components; missing runtimes cause Exchange search and transport failures.",
+    "description": "The Microsoft Visual C++ Redistributable packages install shared runtime libraries (MSVCR*.dll, MSVCP*.dll) required by applications compiled with specific versions of Visual C++; Exchange Server components depend on both the 2012 and 2013 x64 versions for search indexing and transport processing. Visual C++ 2012 x64 and Visual C++ 2013 x64 redistributable runtimes MUST both be installed. Both are required by Exchange components; missing runtimes cause Exchange search and transport failures.",
     "verify": false,
     "subject": "Server",
     "category": "Platform Security",
@@ -4189,7 +4189,7 @@
   {
     "id": "EDCA-SEC-011",
     "title": "RPC minimum connection timeout baseline",
-    "description": "Exchange RPC minimum connection timeout (RpcMinConnectionTimeout registry value) MUST be non-negative. A value of 0 is treated as not configured; a negative value is an invalid setting.",
+    "description": "The RPC minimum connection timeout setting controls how long the Windows RPC runtime maintains idle RPC connections before closing them, directly affecting MAPI client session persistence and reconnect behavior under intermittent network conditions. Exchange RPC minimum connection timeout (RpcMinConnectionTimeout registry value) MUST be non-negative. A value of 0 is treated as not configured; a negative value is an invalid setting.",
     "verify": false,
     "subject": "Server",
     "category": "Platform Security",
@@ -4217,7 +4217,7 @@
   {
     "id": "EDCA-SEC-012",
     "title": "AMSI integration baseline",
-    "description": "At least one AMSI (Antimalware Scan Interface) provider MUST be registered and AMSI MUST NOT be disabled by Exchange setting override. AMSI enables real-time scanning of Exchange HTTP requests against antimalware engines. CISA recommends enabling AMSI integration to detect and block malicious scripts.",
+    "description": "The Antimalware Scan Interface (AMSI) is a Windows platform feature that allows Exchange IIS to pass the content of every HTTP request to a registered antimalware engine for real-time scanning before processing, enabling detection of malicious payloads in web requests. At least one AMSI (Antimalware Scan Interface) provider MUST be registered and AMSI MUST NOT be disabled by Exchange setting override. AMSI enables real-time scanning of Exchange HTTP requests against antimalware engines.",
     "verify": false,
     "subject": "Server",
     "category": "Platform Security",
@@ -4293,7 +4293,7 @@
   {
     "id": "EDCA-SEC-014",
     "title": "Extended Protection enabled on Exchange virtual directories",
-    "description": "Each Exchange server MUST have Extended Protection for Authentication (EPA) enabled on all Exchange IIS virtual directories where supported. CISA requires enabling Extended Protection for Authentication on all Exchange virtual directories.",
+    "description": "Extended Protection for Authentication (EPA) is an IIS security feature that binds authentication tokens to the TLS channel via a Channel Binding Token (CBT), preventing NTLM relay attacks that capture and replay credentials from one TLS session into another. Each Exchange server MUST have Extended Protection for Authentication (EPA) enabled on all Exchange IIS virtual directories where supported.",
     "verify": true,
     "subject": "Server",
     "category": "Platform Security",
@@ -4349,7 +4349,7 @@
   {
     "id": "EDCA-SEC-015",
     "title": "FIP-FS baseline",
-    "description": "FIP-FS engine version folders MUST NOT contain known-problematic version markers. Known-problematic FIP-FS engine versions cause Exchange transport queue failures and mail flow stoppage.",
+    "description": "FIP-FS (Forefront Identity Protection — File Scanning) is the Exchange transport content filtering engine that scans messages in the transport pipeline for malware and policy violations; its scan engine version is stored in numbered subdirectories under the Exchange FIP-FS installation path. FIP-FS engine version folders MUST NOT contain known-problematic version markers. Known-problematic FIP-FS engine versions cause Exchange transport queue failures and mail flow stoppage.",
     "verify": false,
     "subject": "Server",
     "category": "Platform Security",
@@ -4414,7 +4414,7 @@
   {
     "id": "EDCA-SEC-017",
     "title": "IPv6 enabled baseline",
-    "description": "IPv6 MUST NOT be fully disabled (DisabledComponents registry value MUST NOT be 255 = 0xFF). Exchange 2013 and later require IPv6 for internal communication; fully disabling IPv6 causes transport and directory failures.",
+    "description": "The DisabledComponents registry value under HKLM\\SYSTEM\\CurrentControlSet\\Services\\Tcpip6\\Parameters is a bitmask that controls which IPv6 components are active on Windows; a value of 0xFF (255) disables all IPv6 interfaces, tunnel adapters, and loopback, removing the IPv6 stack entirely. IPv6 MUST NOT be fully disabled (DisabledComponents registry value MUST NOT be 255 = 0xFF). Exchange 2013 and later require IPv6 for internal communication; fully disabling IPv6 causes transport and directory failures.",
     "verify": false,
     "subject": "Server",
     "category": "Platform Security",
@@ -4443,7 +4443,7 @@
   {
     "id": "EDCA-SEC-018",
     "title": "LLMNR disabled by policy",
-    "description": "Each Exchange server MUST have LLMNR (Link-Local Multicast Name Resolution) disabled. LLMNR enables spoofing and NTLM downgrade attacks against domain-joined hosts. The CIS benchmark requires the Group Policy setting 'Turn off multicast name resolution' (LLMNR) to be set to 'Enabled'.",
+    "description": "Link-Local Multicast Name Resolution (LLMNR) is a Windows name resolution protocol that uses multicast DNS-like queries on the local network segment to resolve hostnames when DNS fails; it is commonly exploited in NTLM relay attacks because it responds to any host name query on the subnet. Each Exchange server MUST have LLMNR (Link-Local Multicast Name Resolution) disabled. LLMNR enables spoofing and NTLM downgrade attacks against domain-joined hosts.",
     "verify": true,
     "subject": "Server",
     "category": "Platform Security",
@@ -4539,7 +4539,7 @@
   {
     "id": "EDCA-SEC-020",
     "title": "OWA Download Domains configured",
-    "description": "OWA Download Domains (ExternalDownloadHostName) MUST be configured. Without a separate download domain, OWA attachment rendering shares origin with ECP/OWA, creating cross-site scripting (XSS) attack surface. CISA recommends configuring OWA Download Domains to prevent NTLM relay attacks. When Hybrid Modern Authentication (HMA) is active, the OAuthIdentityCacheFixForDownloadDomains setting override must also be configured to ensure OWA HMA token caching functions with Download Domains.",
+    "description": "OWA Download Domains is an Exchange feature that serves attachment content from a separate HTTPS subdomain (the ExternalDownloadHostName) rather than the primary OWA origin, isolating attachment rendering from the OWA/ECP cookie and script origin to prevent cross-site scripting exploitation. OWA Download Domains (ExternalDownloadHostName) MUST be configured. Without a separate download domain, OWA attachment rendering shares origin with ECP/OWA, creating cross-site scripting (XSS) attack surface. When Hybrid Modern Authentication (HMA) is active, the OAuthIdentityCacheFixForDownloadDomains setting override must also be configured to ensure OWA HMA token caching functions with Download Domains.",
     "verify": true,
     "subject": "Server",
     "category": "Platform Security",
@@ -4871,7 +4871,7 @@
   {
     "id": "EDCA-SEC-027",
     "title": "IIS loaded modules are signed and trusted",
-    "description": "Detect unsigned or untrusted IIS modules that can represent security risk on Exchange hosts.",
+    "description": "IIS global modules are native or managed code components registered in the IIS global module list that intercept and process all HTTP requests on the server; on Exchange hosts, unexpected or unsigned modules may indicate tampering, web shell installation, or persistence by an attacker. Detect unsigned or untrusted IIS modules that can represent security risk on Exchange hosts.",
     "verify": true,
     "subject": "Server",
     "category": "Platform Security",
@@ -4928,7 +4928,7 @@
   {
     "id": "EDCA-SEC-029",
     "title": "MSMQ feature not installed on Exchange hosts",
-    "description": "Each Exchange server MUST have MSMQ-related Windows features removed. MSMQ is not required for Exchange 2016, 2019, or Exchange SE and increases the attack surface without operational benefit.",
+    "description": "Microsoft Message Queuing (MSMQ) is a Windows optional feature that provides asynchronous message-based communication between applications; it is not required by any Exchange Server component but is sometimes present due to legacy application deployments or automated server builds. Each Exchange server MUST have MSMQ-related Windows features removed. MSMQ is not required for Exchange 2016, 2019, or Exchange SE and increases the attack surface without operational benefit.",
     "verify": true,
     "subject": "Server",
     "category": "Platform Security",
@@ -4957,7 +4957,7 @@
   {
     "id": "EDCA-SEC-030",
     "title": "DisableAsyncNotification reset to baseline",
-    "description": "The DisableAsyncNotification registry value MUST be set to 0 on each Exchange server. A value of 1 was a temporary mitigation for a specific Exchange vulnerability and must be restored to 0 to avoid degraded push notification performance.",
+    "description": "The DisableAsyncNotification registry value under HKLM\\SOFTWARE\\Microsoft\\ExchangeServer\\v15 was introduced as a temporary workaround for a specific Exchange push notification issue and must be restored to its baseline value of 0 once the underlying issue is resolved. The DisableAsyncNotification registry value MUST be set to 0 on each Exchange server. A value of 1 was a temporary mitigation for a specific Exchange vulnerability and must be restored to 0 to avoid degraded push notification performance.",
     "verify": true,
     "subject": "Server",
     "category": "Platform Security",
@@ -4985,7 +4985,7 @@
   {
     "id": "EDCA-SEC-031",
     "title": "TokenCacheModule loaded status reviewed",
-    "description": "The IIS TokenCacheModule MUST be present on all Exchange servers running builds that include the August 2023 Security Update or later. Microsoft added TokenCacheModule to Exchange IIS configuration as the permanent remediation for CVE-2023-21709 (privilege escalation via elevation of service account) and CVE-2023-36434. Its presence on a fully-patched Exchange build is expected and correct. Absence of the module on a patched server indicates it was accidentally removed or the security update was rolled back, leaving the server exposed to both CVEs.",
+    "description": "The IIS TokenCacheModule is a native IIS module added to Exchange by the August 2023 Security Update as the permanent server-side remediation for CVE-2023-21709, replacing the temporary registry-based workaround by enforcing token validation at the IIS request pipeline level. The IIS TokenCacheModule MUST be present on all Exchange servers running builds that include the August 2023 Security Update or later. Microsoft added TokenCacheModule to Exchange IIS configuration as the permanent remediation for CVE-2023-21709 (privilege escalation via elevation of service account) and CVE-2023-36434. Its presence on a fully-patched Exchange build is expected and correct. Absence of the module on a patched server indicates it was accidentally removed or the security update was rolled back, leaving the server exposed to both CVEs.",
     "verify": true,
     "subject": "Server",
     "category": "Platform Security",
@@ -5013,7 +5013,7 @@
   {
     "id": "EDCA-SEC-032",
     "title": "P2 FROM header manipulation detection is not disabled",
-    "description": "The Exchange P2 FROM header manipulation detection MUST remain enabled and MUST NOT be suppressed through setting overrides. CISA recommends enabling P2 FROM header manipulation detection to reduce spoofing risk.",
+    "description": "Exchange P2 FROM header manipulation detection is a transport security feature that identifies messages where the RFC 5322 From header (P2, the visible sender) does not align with the SMTP envelope sender (P1), appending a disclaimer or rejecting the message to reduce display name spoofing. The Exchange P2 FROM header manipulation detection MUST remain enabled and MUST NOT be suppressed through setting overrides.",
     "verify": true,
     "subject": "Organization",
     "category": "Platform Security",
@@ -5045,7 +5045,7 @@
   {
     "id": "EDCA-SEC-033",
     "title": "Transport pickup directory path is not configured",
-    "description": "The PickupDirectoryPath property of the Transport service MUST be empty (not set). A configured pickup directory allows local processes to inject mail without authentication by dropping files into a folder. The CIS benchmark requires the pickup directory path to be cleared.",
+    "description": "The Exchange transport pickup directory is a filesystem folder that the Transport service monitors for specially formatted .EML files; any process with write access to the folder can inject messages into the transport pipeline without SMTP authentication by dropping files directly into it. The PickupDirectoryPath property of the Transport service MUST be empty (not set). A configured pickup directory allows local processes to inject mail without authentication by dropping files into a folder.",
     "verify": true,
     "subject": "Server",
     "category": "Platform Security",
@@ -5366,7 +5366,7 @@
   {
     "id": "EDCA-SEC-042",
     "title": "NetBIOS over TCP/IP is disabled on all network interfaces",
-    "description": "NetBIOS over TCP/IP (NetBT) MUST be disabled on all network interfaces on Exchange servers. NetBIOS name resolution is a legacy protocol that exposes servers to NBNS poisoning, NTLM relay via NBT-NS spoofing, and unnecessary broadcast-based service discovery. On domain-joined servers, DNS provides all required name resolution. ANSSI recommends disabling NetBIOS over TCP/IP on all member server interfaces as part of attack surface reduction.",
+    "description": "NetBIOS over TCP/IP (NetBT) is a legacy Windows networking service that enables NetBIOS name resolution and session services over TCP/IP networks; it is exploited in NTLM relay and poisoning attacks via NBT-NS broadcast responses and is not required on DNS-reliant domain-joined servers. NetBIOS over TCP/IP (NetBT) MUST be disabled on all network interfaces on Exchange servers. NetBIOS name resolution is a legacy protocol that exposes servers to NBNS poisoning, NTLM relay via NBT-NS spoofing, and unnecessary broadcast-based service discovery. On domain-joined servers, DNS provides all required name resolution. ANSSI recommends disabling NetBIOS over TCP/IP on all member server interfaces as part of attack surface reduction.",
     "verify": true,
     "subject": "Server",
     "category": "Platform Security",
@@ -5408,7 +5408,7 @@
   {
     "id": "EDCA-SEC-043",
     "title": "SMB packet signing is required on server and client",
-    "description": "SMB packet signing MUST be required (not merely enabled) on both the SMB server service (LanmanServer) and the SMB client service (LanmanWorkstation) on Exchange servers. Without mandatory SMB signing, an attacker performing a man-in-the-middle attack can intercept and modify SMB traffic including DAG log shipping, file share witness access, and SYSVOL/NETLOGON traversal, enabling NTLM relay attacks. ANSSI and the CIS Benchmark require SMB signing to be enforced. Setting RequireSecuritySignature=1 ensures that connections that cannot negotiate signing are rejected.",
+    "description": "SMB packet signing is a security feature of the Server Message Block protocol that cryptographically signs each SMB packet to guarantee integrity and origin, preventing man-in-the-middle attackers from intercepting or modifying SMB traffic such as DAG log replication, file share witness access, and SYSVOL traversal. SMB packet signing MUST be required (not merely enabled) on both the SMB server service (LanmanServer) and the SMB client service (LanmanWorkstation) on Exchange servers. Without mandatory SMB signing, an attacker performing a man-in-the-middle attack can intercept and modify SMB traffic including DAG log shipping, file share witness access, and SYSVOL/NETLOGON traversal, enabling NTLM relay attacks. ANSSI and the CIS Benchmark require SMB signing to be enforced. Setting RequireSecuritySignature=1 ensures that connections that cannot negotiate signing are rejected.",
     "verify": true,
     "subject": "Server",
     "category": "Platform Security",
@@ -5455,7 +5455,7 @@
   {
     "id": "EDCA-SEC-037",
     "title": "LDAP client signing is set to require signing",
-    "description": "The LDAP client on the Exchange server MUST be configured to require signing (LdapClientIntegrity=2) for all LDAP connections to Active Directory domain controllers. Without LDAP signing, Exchange LDAP queries to AD are transmitted without cryptographic integrity protection and are susceptible to man-in-the-middle interception and LDAP relay attacks. Exchange performs extensive LDAP queries for recipient resolution, GAL lookups, send connector validation, and distribution group expansion, all of which traverse the AD LDAP channel. ANSSI requires LDAP signing to be set to Require on all member servers.",
+    "description": "LDAP signing is a Windows security setting that requires the Kerberos or NTLM authentication layer to apply cryptographic integrity protection (signing) to every LDAP request and response, ensuring that LDAP traffic between Exchange and Active Directory cannot be tampered with in transit. The LDAP client on the Exchange server MUST be configured to require signing (LdapClientIntegrity=2) for all LDAP connections to Active Directory domain controllers. Without LDAP signing, Exchange LDAP queries to AD are transmitted without cryptographic integrity protection and are susceptible to man-in-the-middle interception and LDAP relay attacks. Exchange performs extensive LDAP queries for recipient resolution, GAL lookups, send connector validation, and distribution group expansion, all of which traverse the AD LDAP channel. ANSSI requires LDAP signing to be set to Require on all member servers.",
     "verify": true,
     "subject": "Server",
     "category": "Platform Security",
@@ -5497,7 +5497,7 @@
   {
     "id": "EDCA-TLS-001",
     "title": "Receive connector internal and external relay patterns are separated",
-    "description": "Receive connectors SHOULD follow clear internal versus external relay/authentication patterns and avoid broad anonymous relay exposure.",
+    "description": "Exchange receive connectors are the SMTP listener endpoints configured on each Mailbox or Edge server that define which source IP ranges may connect, which authentication methods are accepted, and what permission level the connecting host is granted. Receive connectors SHOULD follow clear internal versus external relay/authentication patterns and avoid broad anonymous relay exposure.",
     "verify": true,
     "subject": "Server",
     "category": "Transport Security",
@@ -5531,7 +5531,7 @@
   {
     "id": "EDCA-TLS-002",
     "title": "Transport retry configuration baseline",
-    "description": "Transport retry settings MUST meet recommended thresholds: MaxPerDomainOutboundConnections >= 40 and MessageRetryInterval <= 5 minutes. Below-minimum connection limits and long retry intervals cause mail delivery delays to high-volume domains.",
+    "description": "Exchange transport retry settings control how the Transport service queues and retries failed outbound SMTP delivery attempts, governing both the maximum number of simultaneous connections to any one remote domain and the interval between successive delivery retries for deferred messages. Transport retry settings MUST meet recommended thresholds: MaxPerDomainOutboundConnections >= 40 and MessageRetryInterval <= 5 minutes. Below-minimum connection limits and long retry intervals cause mail delivery delays to high-volume domains.",
     "verify": false,
     "subject": "Server",
     "category": "Transport Security",
@@ -5560,7 +5560,7 @@
   {
     "id": "EDCA-TLS-003",
     "title": "Hybrid send connector TLS integrity",
-    "description": "Validate hybrid/EXO send connector TLS settings (TlsAuthLevel, RequireTLS, TlsCertificateName, and TlsDomain) to reduce mail flow risk.",
+    "description": "The Exchange hybrid send connector is the outbound SMTP connector created by the Hybrid Configuration Wizard to route on-premises mail to Exchange Online; its TLS settings determine how the Exchange Transport service authenticates to and encrypts sessions with Microsoft 365 mail endpoints. Validate hybrid/EXO send connector TLS settings (TlsAuthLevel, RequireTLS, TlsCertificateName, and TlsDomain) to reduce mail flow risk.",
     "verify": true,
     "subject": "Organization",
     "category": "Transport Security",
@@ -5593,7 +5593,7 @@
   {
     "id": "EDCA-TLS-004",
     "title": "Automatic forwarding to all remote domains is disabled",
-    "description": "The AutoForwardEnabled property MUST be set to False on all remote domain entries, including the default domain entry ('*'). Enabling auto-forward on remote domains allows data exfiltration via client-side forwarding rules. The CIS benchmark requires AutoForwardEnabled to be set to False.",
+    "description": "The AutoForwardEnabled property on Exchange remote domains controls whether client-side inbox rules can automatically forward messages to recipients in that domain; when set to True on the default remote domain, any user's forwarding rule can silently redirect copies of all received messages to an external address without further restriction, creating a data exfiltration path. The AutoForwardEnabled property MUST be set to False on all remote domain entries, including the default domain entry ('*'). Enabling auto-forward on remote domains allows data exfiltration via client-side forwarding rules.",
     "verify": true,
     "subject": "Organization",
     "category": "Transport Security",
@@ -5639,7 +5639,7 @@
   {
     "id": "EDCA-TLS-005",
     "title": "Automatic replies to remote domains are disabled",
-    "description": "The AutoReplyEnabled property MUST be set to False on all remote domain entries. Sending automatic replies to external recipients discloses internal presence information and increases spam risk. The CIS benchmark requires AutoReplyEnabled to be set to False.",
+    "description": "The AutoReplyEnabled property on Exchange remote domains controls whether the Transport service will deliver client-configured automatic replies to recipients in that domain; when enabled for external domains it discloses employee absence periods, names, and alternate contact details to any external sender including spammers and reconnaissance actors. The AutoReplyEnabled property MUST be set to False on all remote domain entries. Sending automatic replies to external recipients discloses internal presence information and increases spam risk.",
     "verify": true,
     "subject": "Organization",
     "category": "Transport Security",
@@ -5677,7 +5677,7 @@
   {
     "id": "EDCA-TLS-006",
     "title": "Non-delivery reports to remote domains are disabled",
-    "description": "The NDREnabled property MUST be set to False on all remote domain entries. Sending Non-Delivery Reports to external senders exposes internal infrastructure details and contributes to backscatter spam. The CIS benchmark recommends disabling NDR delivery to external domains.",
+    "description": "Non-Delivery Reports (NDRs) are bounce messages that Exchange Transport generates when a message cannot be delivered; when enabled for external remote domains, these reports disclose internal mail routing infrastructure details to external parties and can be exploited to verify whether recipient addresses exist (directory harvest attack enablement). The NDREnabled property MUST be set to False on all remote domain entries. Sending Non-Delivery Reports to external senders exposes internal infrastructure details and contributes to backscatter spam.",
     "verify": true,
     "subject": "Organization",
     "category": "Transport Security",
@@ -5828,7 +5828,7 @@
   {
     "id": "EDCA-TLS-010",
     "title": "External send connector uses DNS routing",
-    "description": "The RequireDNSRouting property on the internet send connector (address space '*') MUST be set to True. Using DNS (MX record) routing ensures mail is delivered to recipient mail servers rather than relying on a smart host. The CIS benchmark requires DNS routing on the external send connector.",
+    "description": "DNS routing on an Exchange send connector means the Transport service performs MX record lookups to determine the destination SMTP server for each recipient domain rather than forwarding all mail to a configured smart host; this is the standard delivery path for internet-bound mail and is required for DANE-validated delivery to work correctly. The RequireDNSRouting property on the internet send connector (address space '*') MUST be set to True. Using DNS (MX record) routing ensures mail is delivered to recipient mail servers rather than relying on a smart host.",
     "verify": true,
     "subject": "Organization",
     "category": "Transport Security",
@@ -5866,7 +5866,7 @@
   {
     "id": "EDCA-TLS-011",
     "title": "External send connector does not ignore STARTTLS",
-    "description": "The IgnoreStartTLS property on the external send connector MUST be False. If set to True, Exchange will connect to remote SMTP servers in plaintext even when the server advertises STARTTLS, exposing mail content to interception. The CIS benchmark requires IgnoreStartTLS to be False on the external send connector.",
+    "description": "The IgnoreStartTLS property on an Exchange send connector suppresses the STARTTLS upgrade for all outbound sessions on that connector, causing Exchange to deliver mail in plaintext even when the remote server advertises TLS capability; disabling this protection exposes message content and metadata to interception by any party on the network path. The IgnoreStartTLS property on the external send connector MUST be False. If set to True, Exchange will connect to remote SMTP servers in plaintext even when the server advertises STARTTLS, exposing mail content to interception.",
     "verify": true,
     "subject": "Organization",
     "category": "Transport Security",
@@ -5987,7 +5987,7 @@
   {
     "id": "EDCA-TLS-014",
     "title": "External send connector has domain security enabled",
-    "description": "The DomainSecureEnabled property on the internet-facing send connector MUST be set to True. Domain security (mutual TLS) provides certificate-based authentication between mail servers, offering stronger guarantees than opportunistic TLS.",
+    "description": "Domain security (mutual TLS) is an Exchange feature that uses certificate-based authentication to cryptographically verify the identity of a remote mail server during SMTP session establishment, binding the session to a specific certificate subject rather than relying on opportunistic encryption alone. The DomainSecureEnabled property on the internet-facing send connector MUST be set to True. Domain security (mutual TLS) provides certificate-based authentication between mail servers, offering stronger guarantees than opportunistic TLS.",
     "verify": true,
     "subject": "Organization",
     "category": "Transport Security",
@@ -6036,7 +6036,7 @@
   {
     "id": "EDCA-TLS-015",
     "title": "Exchange Receive Connector maximum hop count is 60",
-    "description": "The Exchange Receive Connector Maximum Hop Count MUST be 60. The hop count limit controls the maximum number of times a message is allowed to be relayed before Exchange rejects it as looping. Setting this value lower could reject legitimate complex routing paths.",
+    "description": "The receive connector MaxHopCount property controls the maximum number of Received: headers that Exchange will accept on an inbound message before treating it as a routing loop and rejecting it with an NDR. The Exchange Receive Connector Maximum Hop Count MUST be 60. The hop count limit controls the maximum number of times a message is allowed to be relayed before Exchange rejects it as looping. Setting this value lower could reject legitimate complex routing paths.",
     "verify": true,
     "subject": "Server",
     "category": "Transport Security",
@@ -6069,7 +6069,7 @@
   {
     "id": "EDCA-TLS-016",
     "title": "Exchange transport service maximum outbound connections is 1000",
-    "description": "The Exchange transport service MaxOutboundConnections MUST be set to 1000. Limiting the total number of concurrent outbound connections on the transport service prevents resource exhaustion and reduces exposure during mail flood scenarios.",
+    "description": "The MaxOutboundConnections setting on the Exchange Transport service controls the total number of concurrent outbound SMTP connections that the Transport service may hold open simultaneously across all send connectors and destination domains; this cap prevents the transport worker from exhausting system socket resources during delivery storms or targeted flooding. The Exchange transport service MaxOutboundConnections MUST be set to 1000. Limiting the total number of concurrent outbound connections on the transport service prevents resource exhaustion and reduces exposure during mail flood scenarios.",
     "verify": true,
     "subject": "Server",
     "category": "Transport Security",
@@ -6102,7 +6102,7 @@
   {
     "id": "EDCA-TLS-017",
     "title": "Exchange outbound connection limit per domain is controlled",
-    "description": "The Exchange Outbound Connection Limit per Domain Count MUST be controlled. Restricting the number of simultaneous outbound connections to a single domain prevents a single remote domain from consuming all available transport resources and limits the impact of outbound delivery queues growing uncontrolled.",
+    "description": "The MaxPerDomainOutboundConnections setting limits the number of simultaneous outbound SMTP connections that can be established to any single remote domain, preventing one high-volume destination from monopolizing the transport service's connection pool and starving delivery to all other domains. The Exchange Outbound Connection Limit per Domain Count MUST be controlled. Restricting the number of simultaneous outbound connections to a single domain prevents a single remote domain from consuming all available transport resources and limits the impact of outbound delivery queues growing uncontrolled.",
     "verify": true,
     "subject": "Server",
     "category": "Transport Security",
@@ -6135,7 +6135,7 @@
   {
     "id": "EDCA-TLS-018",
     "title": "Exchange outbound connection timeout is 10 minutes or less",
-    "description": "The Exchange Outbound Connection Timeout MUST be 10 minutes or less. Outbound connection timeouts that are too long hold transport resources open while waiting for unresponsive remote servers. A 10-minute maximum ensures resources are released promptly and retry cycles are started in a timely manner.",
+    "description": "The outbound connection timeout (ConnectionInactivityTimeOut on send connectors) controls how long the Exchange Transport service will keep an idle outbound SMTP connection open before closing it; connections that remain open indefinitely consume transport worker threads and socket handles, degrading throughput and enabling slow-drip denial-of-service scenarios. The Exchange Outbound Connection Timeout MUST be 10 minutes or less. Outbound connection timeouts that are too long hold transport resources open while waiting for unresponsive remote servers. A 10-minute maximum ensures resources are released promptly and retry cycles are started in a timely manner.",
     "verify": true,
     "subject": "Organization",
     "category": "Transport Security",
@@ -6167,7 +6167,7 @@
   {
     "id": "EDCA-TLS-019",
     "title": "Exchange global recipient count limit is set",
-    "description": "The Exchange Global Recipient Count Limit MUST be set. A global recipient count limit on outbound messages restricts the maximum number of recipients per message and prevents abuse of the mail infrastructure for large-scale spam campaigns or accidental mass mailing.",
+    "description": "The Exchange global recipient count limit (MaxRecipientEnvelopeLimit) places an organization-wide cap on the number of envelope recipients that any single message may carry, regardless of connector-level or mailbox-level limits; this prevents abuse of the mail infrastructure for large-scale spam campaigns and limits the blast radius of accidental mass-mailing events. The Exchange Global Recipient Count Limit MUST be set. A global recipient count limit on outbound messages restricts the maximum number of recipients per message and prevents abuse of the mail infrastructure for large-scale spam campaigns or accidental mass mailing.",
     "verify": true,
     "subject": "Organization",
     "category": "Transport Security",
@@ -6199,7 +6199,7 @@
   {
     "id": "EDCA-TLS-020",
     "title": "Exchange receive connector connection timeout is limited",
-    "description": "The Exchange receive connector timeout MUST be limited. Excessively long receive connector timeouts hold transport service resources open and may enable slow-transmission denial-of-service attacks. Receive connectors must be configured with a defined connection timeout to release stalled inbound connections promptly.",
+    "description": "The receive connector ConnectionTimeout property controls the maximum duration of an inbound SMTP session before the Exchange Transport service forcibly closes the connection; without an enforced limit, slow-transmitting senders or intentionally slow clients can hold transport worker threads open indefinitely, enabling slow-transmission denial-of-service attacks. The Exchange receive connector timeout MUST be limited. Excessively long receive connector timeouts hold transport service resources open and may enable slow-transmission denial-of-service attacks. Receive connectors must be configured with a defined connection timeout to release stalled inbound connections promptly.",
     "verify": true,
     "subject": "Server",
     "category": "Transport Security",
@@ -6309,7 +6309,7 @@
   {
     "id": "EDCA-TLS-023",
     "title": "Accepted domains publish enforcing DMARC records",
-    "description": "Each accepted domain MUST publish a DMARC TXT record at _dmarc.<domain> with a policy of quarantine or reject.",
+    "description": "Domain-based Message Authentication, Reporting, and Conformance (DMARC) is a DNS-published email authentication policy that instructs receiving mail servers on how to handle messages that fail SPF and DKIM alignment checks, with actions ranging from monitoring (p=none) through quarantine to outright rejection (p=reject). Each accepted domain MUST publish a DMARC TXT record at _dmarc.<domain> with a policy of quarantine or reject.",
     "verify": true,
     "subject": "Organization",
     "category": "Transport Security",
@@ -6357,7 +6357,7 @@
   {
     "id": "EDCA-TLS-024",
     "title": "Accepted domains publish SMTP DANE TLSA for MX hosts",
-    "description": "Each MX host serving accepted domains MUST have SMTP DANE configured with TLSA records at _25._tcp.<mx-host>.",
+    "description": "SMTP DANE (DNS-based Authentication of Named Entities) is an email transport security standard that publishes TLS certificate fingerprints in DNSSEC-signed TLSA DNS records, enabling sending mail servers to cryptographically verify that the TLS certificate presented during SMTP delivery matches what was published in DNS rather than trusting the public CA hierarchy alone. Each MX host serving accepted domains MUST have SMTP DANE configured with TLSA records at _25._tcp.<mx-host>.",
     "verify": true,
     "subject": "Organization",
     "category": "Transport Security",
@@ -6395,7 +6395,7 @@
   {
     "id": "EDCA-TLS-025",
     "title": "Accepted domains publish valid MTA-STS policies",
-    "description": "Each accepted domain MUST publish a valid MTA-STS DNS TXT record and host a reachable HTTPS policy file with STSv1 syntax.",
+    "description": "MTA-STS (Mail Transfer Agent Strict Transport Security) allows a domain to publish a requirement that sending mail servers must use TLS when delivering to that domain and must validate the certificate; the policy is served over HTTPS and cached by senders so that future deliveries enforce TLS even if DNS is temporarily manipulated. Each accepted domain MUST publish a valid MTA-STS DNS TXT record and host a reachable HTTPS policy file with STSv1 syntax.",
     "verify": true,
     "subject": "Organization",
     "category": "Transport Security",
@@ -6438,7 +6438,7 @@
   {
     "id": "EDCA-TLS-026",
     "title": "Accepted domains publish valid SPF records",
-    "description": "Each accepted domain MUST publish one syntactically valid SPF TXT record (v=spf1) with a terminal all mechanism and within the 10-lookup limit.",
+    "description": "Sender Policy Framework (SPF) is a DNS-published email authentication mechanism that defines which IP addresses and mail servers are authorized to send email on behalf of a domain; receiving mail servers check the SPF record to determine whether the sending server's IP is permitted and can use the result to reject or mark messages that fail the check. Each accepted domain MUST publish one syntactically valid SPF TXT record (v=spf1) with a terminal all mechanism and within the 10-lookup limit.",
     "verify": true,
     "subject": "Organization",
     "category": "Transport Security",
@@ -6602,7 +6602,7 @@
   {
     "id": "EDCA-TLS-030",
     "title": "Edge subscription is active and valid",
-    "description": "The Edge Transport server MUST have at least one active Edge subscription synchronising routing and recipient data with the internal Exchange organisation. An Edge server without a valid subscription cannot perform recipient validation or update anti-spam data, and mail routing decisions are made without current directory data.",
+    "description": "An Edge subscription is an authenticated synchronization relationship between an Exchange Edge Transport server and a Mailbox server that replicates recipient, configuration, and anti-spam data from Active Directory to the Edge server's ADAM instance, allowing the Edge server to perform recipient validation and apply organization-specific transport rules without direct AD connectivity. The Edge Transport server MUST have at least one active Edge subscription synchronising routing and recipient data with the internal Exchange organisation. An Edge server without a valid subscription cannot perform recipient validation or update anti-spam data, and mail routing decisions are made without current directory data.",
     "verify": true,
     "subject": "Server",
     "category": "Transport Security",
@@ -6844,7 +6844,7 @@
   {
     "id": "EDCA-DATA-019",
     "title": "SchUseStrongCrypto is enabled for .NET Framework",
-    "description": ".NET Framework 4.x on each Exchange server MUST have SchUseStrongCrypto set to 1 in both the 64-bit and 32-bit (WoW6432Node) registry hives. Without this setting, .NET client code defaults to weak ciphers and older TLS versions for outbound connections, undermining TLS security enforced at the SCHANNEL layer.",
+    "description": "SchUseStrongCrypto is a .NET Framework registry setting that forces the .NET TLS client implementation to restrict negotiation to TLS 1.2 or later and to exclude weak cipher suites, overriding the framework's permissive defaults that allow legacy TLS versions and ciphers. .NET Framework 4.x on each Exchange server MUST have SchUseStrongCrypto set to 1 in both the 64-bit and 32-bit (WoW6432Node) registry hives. Without this setting, .NET client code defaults to weak ciphers and older TLS versions for outbound connections, undermining TLS security enforced at the SCHANNEL layer.",
     "verify": true,
     "subject": "Server",
     "category": "Data Security",
@@ -7152,7 +7152,7 @@
   {
     "id": "EDCA-TLS-045",
     "title": "Edge Sender Reputation filter is enabled",
-    "description": "The Edge Transport server MUST have the Sender Reputation filter enabled. Sender Reputation analyses connection behaviour to calculate a Sender Reputation Level (SRL) and block senders that exceed the threshold. Disabled Sender Reputation allows high-volume spam and relay sources to remain undetected.",
+    "description": "Sender Reputation is an Exchange Edge Transport anti-spam feature that builds a reputation score for each sending IP address based on observed message characteristics and blocks IPs that exceed a configurable Sender Reputation Level threshold; it operates independently of DNS-based blocklists by learning from the actual behavior of senders observed on this Edge server. The Edge Transport server MUST have the Sender Reputation filter enabled. Sender Reputation analyses connection behaviour to calculate a Sender Reputation Level (SRL) and block senders that exceed the threshold. Disabled Sender Reputation allows high-volume spam and relay sources to remain undetected.",
     "verify": true,
     "subject": "Server",
     "category": "Transport Security",
