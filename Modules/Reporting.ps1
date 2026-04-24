@@ -184,11 +184,11 @@ function New-EDCAHtmlReport {
 
     # Build framework filter dropdown options from scores actually present in this report.
     $frameworkLabelMap = @{}
-    $frameworkOptions = New-Object System.Text.StringBuilder
+    $frameworkCheckboxes = New-Object System.Text.StringBuilder
     foreach ($score in $AnalysisData.Scores) {
         if ($score.Framework -eq 'All') { continue }
         $label = if ($frameworkLabelMap.ContainsKey($score.Framework)) { $frameworkLabelMap[$score.Framework] } else { $score.Framework }
-        $null = $frameworkOptions.AppendLine(('                    <option value="{0}">{1}</option>' -f $score.Framework, $label))
+        $null = $frameworkCheckboxes.AppendLine(('                        <label class="ms-item"><input type="checkbox" value="{0}"> {1}</label>' -f $score.Framework, $label))
     }
 
     $scoreCards = New-Object System.Text.StringBuilder
@@ -231,7 +231,7 @@ function New-EDCAHtmlReport {
                     else {
                         $ts = [datetime]::Parse($rawTs)
                     }
-                    $dateLabel = $ts.ToString('d MMM yyyy')
+                    $dateLabel = $ts.ToString('d MMM yyyy HH:mm')
                 }
                 catch { $dateLabel = '' }
                 $parts = '"d":"' + $dateLabel + '"'
@@ -582,6 +582,16 @@ function New-EDCAHtmlReport {
         .clear-btn:hover { opacity: 0.85; }
         .clear-btn:focus-visible { outline: 2px solid #60a5fa; border-radius: 3px; }
         select:focus { outline: 2px solid #3b82f6; }
+        /* Multi-select dropdowns */
+        .ms-wrap { position: relative; display: inline-block; }
+        .ms-btn { padding: 8px 12px; border-radius: 8px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--fg); font-size: 14px; cursor: pointer; text-align: left; white-space: nowrap; min-width: 140px; }
+        .ms-btn::after { content: ' \25BE'; }
+        .ms-panel { display: none; position: absolute; top: calc(100% + 4px); left: 0; z-index: 200; background: var(--input-bg); border: 1px solid var(--input-border); border-radius: 8px; padding: 6px 0; min-width: 180px; max-height: 240px; overflow-y: auto; box-shadow: 0 6px 18px rgba(0,0,0,.15); }
+        .ms-wrap.open .ms-panel { display: block; }
+        .ms-item { display: flex; align-items: center; gap: 8px; padding: 6px 12px; cursor: pointer; font-size: 14px; white-space: nowrap; }
+        .ms-item:hover { background: var(--hover-bg); }
+        .ms-item input[type="checkbox"] { cursor: pointer; }
+        .ms-sep { border: none; border-top: 1px solid var(--td-border); margin: 4px 0; }
         /* Category groups */
         details.category-group { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; margin-bottom: 12px; overflow: hidden; }
         details.category-group > summary { cursor: pointer; list-style: none; padding: 12px 16px; display: flex; gap: 10px; align-items: center; font-weight: 700; user-select: none; }
@@ -707,36 +717,52 @@ function New-EDCAHtmlReport {
                     <input type="text" class="search-box" id="searchFilter" placeholder="Search by ID, title or description" aria-label="Search findings" />
                     <button class="clear-btn" id="searchClear" aria-label="Clear search" title="Clear search" style="display:none">&#x2715;</button>
                 </div>
-                <select id="statusFilter">
-                    <option value="All">All RAG States</option>
-                    <option value="Pass">&#10004; Passed</option>
-                    <option value="Fail">&#10006; Risk</option>
-                    <option value="Unknown">&#9888; Warning</option>
-                    <option value="Skipped">&#8856; Skipped</option>
-                </select>
-                <select id="frameworkFilter">
-                    <option value="All">All Frameworks</option>
-                    $($frameworkOptions.ToString())
-                </select>
-                <select id="categoryFilter">
-                    <option value="All">All Categories</option>
-                    <option value="Data Security">Data Security</option>
-                    <option value="Governance">Governance</option>
-                    <option value="Identity and Access Control">Identity and Access Control</option>
-                    <option value="Monitoring">Monitoring</option>
-                    <option value="Performance">Performance</option>
-                    <option value="Platform Security">Platform Security</option>
-                    <option value="Resilience">Resilience</option>
-                    <option value="Transport Security">Transport Security</option>
-                </select>
-                <select id="targetFilter">
-                    <option value="all">All Targets</option>
-                    <option value="org">Organisation</option>
-                    <option value="domain">Domain Name</option>
-                    <option value="mailbox">Mailbox Server</option>
-                    $(if ($collectedEdgeServers.Count -gt 0) { '<option value="edge">Edge Transport Server</option>' })
-                    <option value="database">Database</option>
-                </select>
+                <div class="ms-wrap" id="statusFilter-wrap">
+                    <button class="ms-btn no-print" id="statusFilter-btn" type="button">All RAG States</button>
+                    <div class="ms-panel">
+                        <label class="ms-item"><input type="checkbox" value="__all__" checked> All RAG States</label>
+                        <hr class="ms-sep">
+                        <label class="ms-item"><input type="checkbox" value="Pass"> &#10004; Passed</label>
+                        <label class="ms-item"><input type="checkbox" value="Fail"> &#10006; Risk</label>
+                        <label class="ms-item"><input type="checkbox" value="Unknown"> &#9888; Warning</label>
+                        <label class="ms-item"><input type="checkbox" value="Skipped"> &#8856; Skipped</label>
+                    </div>
+                </div>
+                <div class="ms-wrap" id="frameworkFilter-wrap">
+                    <button class="ms-btn no-print" id="frameworkFilter-btn" type="button">All Frameworks</button>
+                    <div class="ms-panel">
+                        <label class="ms-item"><input type="checkbox" value="__all__" checked> All Frameworks</label>
+                        <hr class="ms-sep">
+                        $($frameworkCheckboxes.ToString())
+                    </div>
+                </div>
+                <div class="ms-wrap" id="categoryFilter-wrap">
+                    <button class="ms-btn no-print" id="categoryFilter-btn" type="button">All Categories</button>
+                    <div class="ms-panel">
+                        <label class="ms-item"><input type="checkbox" value="__all__" checked> All Categories</label>
+                        <hr class="ms-sep">
+                        <label class="ms-item"><input type="checkbox" value="Data Security"> Data Security</label>
+                        <label class="ms-item"><input type="checkbox" value="Governance"> Governance</label>
+                        <label class="ms-item"><input type="checkbox" value="Identity and Access Control"> Identity and Access Control</label>
+                        <label class="ms-item"><input type="checkbox" value="Monitoring"> Monitoring</label>
+                        <label class="ms-item"><input type="checkbox" value="Performance"> Performance</label>
+                        <label class="ms-item"><input type="checkbox" value="Platform Security"> Platform Security</label>
+                        <label class="ms-item"><input type="checkbox" value="Resilience"> Resilience</label>
+                        <label class="ms-item"><input type="checkbox" value="Transport Security"> Transport Security</label>
+                    </div>
+                </div>
+                <div class="ms-wrap" id="targetFilter-wrap">
+                    <button class="ms-btn no-print" id="targetFilter-btn" type="button">All Targets</button>
+                    <div class="ms-panel">
+                        <label class="ms-item"><input type="checkbox" value="__all__" checked> All Targets</label>
+                        <hr class="ms-sep">
+                        <label class="ms-item"><input type="checkbox" value="org"> Organisation</label>
+                        <label class="ms-item"><input type="checkbox" value="domain"> Domain Name</label>
+                        <label class="ms-item"><input type="checkbox" value="mailbox"> Mailbox Server</label>
+                        $(if ($collectedEdgeServers.Count -gt 0) { '<label class="ms-item"><input type="checkbox" value="edge"> Edge Transport Server</label>' })
+                        <label class="ms-item"><input type="checkbox" value="database"> Database</label>
+                    </div>
+                </div>
             </div>
             <div id="findingContainer">
                 $($groupedFindingRows.ToString())
@@ -753,6 +779,90 @@ function New-EDCAHtmlReport {
     </div>
 
     <script>
+        /* ── Multi-select helper functions ── */
+        function msGetValues(wrapId) {
+            var wrap = document.getElementById(wrapId);
+            if (!wrap) { return ['__all__']; }
+            var allCb = wrap.querySelector('input[value="__all__"]');
+            if (allCb && allCb.checked) { return ['__all__']; }
+            var checked = wrap.querySelectorAll('input[type="checkbox"]:checked');
+            var vals = [];
+            for (var i = 0; i < checked.length; i++) { vals.push(checked[i].value); }
+            return vals.length > 0 ? vals : ['__all__'];
+        }
+        function msSetSingle(wrapId, value) {
+            var wrap = document.getElementById(wrapId);
+            if (!wrap) { return; }
+            var allCb = wrap.querySelector('input[value="__all__"]');
+            var itemCbs = wrap.querySelectorAll('input[type="checkbox"]:not([value="__all__"])');
+            var isAll = (value === 'All' || value === '__all__' || !value);
+            if (allCb) { allCb.checked = isAll; }
+            for (var i = 0; i < itemCbs.length; i++) {
+                itemCbs[i].checked = (!isAll && itemCbs[i].value === value);
+            }
+            msUpdateBtn(wrapId);
+            wrap.dispatchEvent(new Event('ms-change'));
+        }
+        function msUpdateBtn(wrapId) {
+            var wrap = document.getElementById(wrapId);
+            if (!wrap) { return; }
+            var btn = wrap.querySelector('.ms-btn');
+            if (!btn) { return; }
+            var allCb = wrap.querySelector('input[value="__all__"]');
+            var allLabel = allCb ? allCb.parentElement.textContent.trim() : 'All';
+            if (allCb && allCb.checked) { btn.textContent = allLabel; return; }
+            var checked = wrap.querySelectorAll('input[type="checkbox"]:checked');
+            if (checked.length === 0) { btn.textContent = allLabel; return; }
+            if (checked.length === 1) { btn.textContent = checked[0].parentElement.textContent.trim(); return; }
+            btn.textContent = checked.length + ' selected';
+        }
+        /* ── Multi-select dropdown setup ── */
+        (function () {
+            var wrapIds = ['statusFilter-wrap', 'frameworkFilter-wrap', 'categoryFilter-wrap', 'targetFilter-wrap'];
+            for (var wi = 0; wi < wrapIds.length; wi++) {
+                (function (wrapId) {
+                    var wrap = document.getElementById(wrapId);
+                    if (!wrap) { return; }
+                    var btn = wrap.querySelector('.ms-btn');
+                    var allCb = wrap.querySelector('input[value="__all__"]');
+                    var itemCbs = wrap.querySelectorAll('input[type="checkbox"]:not([value="__all__"])');
+                    btn.addEventListener('click', function (e) {
+                        e.stopPropagation();
+                        /* close all other open wraps */
+                        var allWraps = document.querySelectorAll('.ms-wrap.open');
+                        for (var aw = 0; aw < allWraps.length; aw++) {
+                            if (allWraps[aw] !== wrap) { allWraps[aw].classList.remove('open'); }
+                        }
+                        wrap.classList.toggle('open');
+                    });
+                    document.addEventListener('click', function (e) {
+                        if (!wrap.contains(e.target)) { wrap.classList.remove('open'); }
+                    });
+                    if (allCb) {
+                        allCb.addEventListener('change', function () {
+                            if (allCb.checked) {
+                                for (var i = 0; i < itemCbs.length; i++) { itemCbs[i].checked = false; }
+                            }
+                            msUpdateBtn(wrapId);
+                            wrap.dispatchEvent(new Event('ms-change'));
+                        });
+                    }
+                    for (var j = 0; j < itemCbs.length; j++) {
+                        (function (cb) {
+                            cb.addEventListener('change', function () {
+                                if (allCb) { allCb.checked = false; }
+                                var anyChecked = false;
+                                for (var k = 0; k < itemCbs.length; k++) { if (itemCbs[k].checked) { anyChecked = true; break; } }
+                                if (!anyChecked && allCb) { allCb.checked = true; }
+                                msUpdateBtn(wrapId);
+                                wrap.dispatchEvent(new Event('ms-change'));
+                            });
+                        }(itemCbs[j]));
+                    }
+                }(wrapIds[wi]));
+            }
+        })();
+
         /* ── Doughnut charts (pure Canvas, no CDN) ── */
         (function () {
             var cards = document.querySelectorAll('.score-card');
@@ -843,15 +953,14 @@ function New-EDCAHtmlReport {
             document.body.appendChild(tip);
 
             function drawChart(fw) {
-                var key = (fw && fw !== 'All') ? fw : 'All';
+                var key = (fw && fw !== 'All' && fw !== '__all__') ? fw : 'All';
                 /* update card label to reflect active filter */
                 if (labelEl) {
-                    var fwSel = document.getElementById('frameworkFilter');
                     var lbl;
-                    if (!fw || fw === 'All') {
+                    if (!fw || fw === 'All' || fw === '__all__') {
                         lbl = 'Total';
                     } else {
-                        lbl = (fwSel && fwSel.selectedIndex >= 0) ? fwSel.options[fwSel.selectedIndex].text : fw;
+                        lbl = fw;
                     }
                     labelEl.textContent = lbl + ' Compliance Trend';
                 }
@@ -912,10 +1021,13 @@ function New-EDCAHtmlReport {
                 }
             }
 
-            var fwFilter = document.getElementById('frameworkFilter');
-            drawChart(fwFilter ? fwFilter.value : 'All');
-            if (fwFilter) {
-                fwFilter.addEventListener('change', function () { drawChart(fwFilter.value); });
+            var fwWrap = document.getElementById('frameworkFilter-wrap');
+            drawChart('All');
+            if (fwWrap) {
+                fwWrap.addEventListener('ms-change', function () {
+                    var vals = msGetValues('frameworkFilter-wrap');
+                    drawChart(vals[0] === '__all__' || vals.length > 1 ? 'All' : vals[0]);
+                });
             }
 
             /* mouse hover interaction */
@@ -1025,11 +1137,19 @@ function New-EDCAHtmlReport {
         /* ── Score card click-to-filter ── */
         (function () {
             var cards = document.querySelectorAll('.score-card');
-            var frameworkFilter = document.getElementById('frameworkFilter');
+            var fwWrap = document.getElementById('frameworkFilter-wrap');
 
-            function setActiveCard(value) {
+            function updateActiveCards() {
+                if (!fwWrap) { return; }
+                var vals = msGetValues('frameworkFilter-wrap');
+                var isAll = (vals[0] === '__all__');
                 for (var i = 0; i < cards.length; i++) {
-                    cards[i].classList.toggle('active', cards[i].getAttribute('data-label') === value);
+                    var cardLabel = cards[i].getAttribute('data-label');
+                    if (isAll) {
+                        cards[i].classList.toggle('active', cardLabel === 'All');
+                    } else {
+                        cards[i].classList.toggle('active', vals.indexOf(cardLabel) >= 0);
+                    }
                 }
             }
 
@@ -1039,8 +1159,30 @@ function New-EDCAHtmlReport {
                     card.setAttribute('tabindex', '0');
                     card.addEventListener('click', function () {
                         var lbl = card.getAttribute('data-label') || 'All';
-                        frameworkFilter.value = lbl;
-                        frameworkFilter.dispatchEvent(new Event('change'));
+                        if (!fwWrap) { return; }
+                        if (lbl === 'All') {
+                            /* Total card — reset to All */
+                            msSetSingle('frameworkFilter-wrap', 'All');
+                        } else {
+                            /* Framework card — toggle this framework on/off */
+                            var allCb  = fwWrap.querySelector('input[value="__all__"]');
+                            var cb     = fwWrap.querySelector('input[value="' + lbl + '"]');
+                            if (!cb) { return; }
+                            if (allCb && allCb.checked) {
+                                /* coming from All: switch to just this framework */
+                                allCb.checked = false;
+                                cb.checked = true;
+                            } else {
+                                cb.checked = !cb.checked;
+                                /* if nothing remains checked, revert to All */
+                                var itemCbs = fwWrap.querySelectorAll('input[type="checkbox"]:not([value="__all__"])');
+                                var anyChecked = false;
+                                for (var k = 0; k < itemCbs.length; k++) { if (itemCbs[k].checked) { anyChecked = true; break; } }
+                                if (!anyChecked && allCb) { allCb.checked = true; }
+                            }
+                            msUpdateBtn('frameworkFilter-wrap');
+                            fwWrap.dispatchEvent(new Event('ms-change'));
+                        }
                     });
                     card.addEventListener('keydown', function (e) {
                         if (e.key === 'Enter' || e.key === ' ') { card.click(); e.preventDefault(); }
@@ -1048,19 +1190,15 @@ function New-EDCAHtmlReport {
                 }(cards[ci]));
             }
 
-            frameworkFilter.addEventListener('change', function () {
-                setActiveCard(frameworkFilter.value);
-            });
+            if (fwWrap) {
+                fwWrap.addEventListener('ms-change', function () { updateActiveCards(); });
+            }
 
-            setActiveCard('All');
+            updateActiveCards();
         })();
 
         /* ── Filters ── */
         (function () {
-            var statusFilter    = document.getElementById('statusFilter');
-            var frameworkFilter = document.getElementById('frameworkFilter');
-            var categoryFilter  = document.getElementById('categoryFilter');
-            var targetFilter    = document.getElementById('targetFilter');
             var searchFilter    = document.getElementById('searchFilter');
             var skipToggle      = document.getElementById('skipToggle');
             var groups = document.querySelectorAll('details.category-group');
@@ -1090,7 +1228,8 @@ function New-EDCAHtmlReport {
                 for (var g = 0; g < groups.length; g++) {
                     var group = groups[g];
                     var groupCategory = group.getAttribute('data-category') || '';
-                    var categoryMatch = categoryFilter.value === 'All' || groupCategory === categoryFilter.value;
+                    var selCategories = msGetValues('categoryFilter-wrap');
+                    var categoryMatch = selCategories[0] === '__all__' || selCategories.indexOf(groupCategory) >= 0;
                     var rows = group.querySelectorAll('.finding-row');
                     var visibleCount = 0;
                     var visibleStatuses = [];
@@ -1102,22 +1241,34 @@ function New-EDCAHtmlReport {
                             row.style.display = 'none';
                             continue;
                         }
-                        var statusMatch    = statusFilter.value === 'All'   || rowStatus === statusFilter.value;
+                        var selStatuses = msGetValues('statusFilter-wrap');
+                        var statusMatch = selStatuses[0] === '__all__' || selStatuses.indexOf(rowStatus) >= 0;
                         var frameworkText  = row.getAttribute('data-framework') || '';
-                        var frameworkMatch = frameworkFilter.value === 'All' || frameworkText.indexOf(frameworkFilter.value) >= 0;
+                        var selFrameworks = msGetValues('frameworkFilter-wrap');
+                        var frameworkMatch = selFrameworks[0] === '__all__' || (function () {
+                            for (var fx = 0; fx < selFrameworks.length; fx++) {
+                                if (frameworkText.indexOf(selFrameworks[fx]) >= 0) { return true; }
+                            }
+                            return false;
+                        })();
                         var rowId    = (row.getAttribute('data-id')    || '').toLowerCase();
                         var rowTitle = (row.getAttribute('data-title') || '').toLowerCase();
                         var rowDesc  = (row.getAttribute('data-description') || '').toLowerCase();
                         var searchMatch = searchText === '' || rowId.indexOf(searchText) >= 0 || rowTitle.indexOf(searchText) >= 0 || rowDesc.indexOf(searchText) >= 0;
                         var rowSubject = row.getAttribute('data-subject') || '';
                         var rowRoles   = row.getAttribute('data-roles')   || '';
-                        var tVal = targetFilter ? targetFilter.value : 'all';
-                        var targetMatch = tVal === 'all' ||
-                            (tVal === 'org'      && rowSubject === 'Organization') ||
-                            (tVal === 'domain'   && rowSubject === 'Domain') ||
-                            (tVal === 'mailbox'  && rowRoles.indexOf('Mailbox') >= 0) ||
-                            (tVal === 'edge'     && rowRoles.indexOf('Edge') >= 0) ||
-                            (tVal === 'database' && rowSubject === 'Database');
+                        var tVals = msGetValues('targetFilter-wrap');
+                        var targetMatch = tVals[0] === '__all__' || (function () {
+                            for (var ti = 0; ti < tVals.length; ti++) {
+                                var tv = tVals[ti];
+                                if ((tv === 'org'      && rowSubject === 'Organization') ||
+                                    (tv === 'domain'   && rowSubject === 'Domain') ||
+                                    (tv === 'mailbox'  && rowRoles.indexOf('Mailbox') >= 0) ||
+                                    (tv === 'edge'     && rowRoles.indexOf('Edge') >= 0) ||
+                                    (tv === 'database' && rowSubject === 'Database')) { return true; }
+                            }
+                            return false;
+                        })();
                         var rowVisible = statusMatch && frameworkMatch && categoryMatch && searchMatch && targetMatch;
                         row.style.display = rowVisible ? '' : 'none';
                         if (rowVisible) {
@@ -1149,10 +1300,14 @@ function New-EDCAHtmlReport {
                 }
             }
 
-            statusFilter.addEventListener('change', applyFilters);
-            frameworkFilter.addEventListener('change', applyFilters);
-            categoryFilter.addEventListener('change', applyFilters);
-            if (targetFilter) { targetFilter.addEventListener('change', applyFilters); }
+            var sfw = document.getElementById('statusFilter-wrap');
+            var ffw = document.getElementById('frameworkFilter-wrap');
+            var cfw = document.getElementById('categoryFilter-wrap');
+            var tfw = document.getElementById('targetFilter-wrap');
+            if (sfw) { sfw.addEventListener('ms-change', applyFilters); }
+            if (ffw) { ffw.addEventListener('ms-change', applyFilters); }
+            if (cfw) { cfw.addEventListener('ms-change', applyFilters); }
+            if (tfw) { tfw.addEventListener('ms-change', applyFilters); }
             if (searchFilter) { searchFilter.addEventListener('input', applyFilters); }
             if (skipToggle) {
                 try {

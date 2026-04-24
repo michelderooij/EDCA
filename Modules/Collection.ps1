@@ -6692,7 +6692,7 @@ function Invoke-EDCACollection {
 
         if ($localExchangeRole -eq 'Edge') {
             # Edge Transport servers are never domain-joined; skip AD discovery entirely.
-            Write-EDCALog -Message ('Exchange Edge Transport Server detected on this machine ({0}). AD discovery is not applicable for Edge servers; switching to local collection.' -f $env:COMPUTERNAME)
+            Write-EDCALog -Message ('Exchange Edge Transport Server detected on this machine ({0}). Using local collection.' -f $env:COMPUTERNAME)
             $normalizedServers = @($env:COMPUTERNAME)
         }
         else {

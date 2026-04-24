@@ -135,7 +135,7 @@
   {
     "id": "EDCA-DATA-004",
     "title": "Serialized data signing baseline",
-    "description": "Exchange serialized data signing (EnableSerializationDataSigning registry value) MUST be enabled. Serialized data signing prevents deserialization-based attacks against Exchange endpoint processing. CISA recommends enabling serialized data signing to prevent deserialization attacks.",
+    "description": "Exchange serialized data signing (EnableSerializationDataSigning registry value) MUST be enabled. Serialized data signing prevents deserialization-based attacks against Exchange endpoint processing.",
     "verify": false,
     "subject": "Server",
     "category": "Data Security",
@@ -181,7 +181,8 @@
       "CISA",
       "DISA",
       "ANSSI",
-      "BSI"
+      "BSI",
+      "ISM"
     ],
     "references": [
       {
@@ -215,6 +216,10 @@
       {
         "name": "BSI APP.5.2.A11 — Absicherung der Kommunikation zwischen Exchange-Systemen",
         "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/06_APP_Anwendungen/APP_5_2_Microsoft_Exchange_und_Outlook_Edition_2023.pdf?__blob=publicationFile"
+      },
+      {
+        "name": "ISM: Guidelines for Cryptography (ISM-0469, ISM-0481)",
+        "url": "https://www.cyber.gov.au/resources-business-and-government/essential-cyber-security/ism/cyber-security-guidelines/guidelines-for-cryptography"
       }
     ],
     "remediation": {
@@ -244,7 +249,8 @@
       "CISA",
       "DISA",
       "ANSSI",
-      "BSI"
+      "BSI",
+      "ISM"
     ],
     "references": [
       {
@@ -274,6 +280,10 @@
       {
         "name": "BSI APP.5.2.A11 — Absicherung der Kommunikation zwischen Exchange-Systemen",
         "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/06_APP_Anwendungen/APP_5_2_Microsoft_Exchange_und_Outlook_Edition_2023.pdf?__blob=publicationFile"
+      },
+      {
+        "name": "ISM: Guidelines for Cryptography (ISM-0469, ISM-0481)",
+        "url": "https://www.cyber.gov.au/resources-business-and-government/essential-cyber-security/ism/cyber-security-guidelines/guidelines-for-cryptography"
       }
     ],
     "remediation": {
@@ -380,7 +390,7 @@
   {
     "id": "EDCA-DATA-009",
     "title": "IIS HSTS configuration baseline for Exchange sites",
-    "description": "Validate IIS HSTS posture on Exchange-related websites, including unsupported usage on Exchange Back End, redirectHttpToHttps risk, and minimum max-age guidance. CISA recommends enabling HTTP Strict Transport Security (HSTS) on Exchange web virtual directories.",
+    "description": "Validate IIS HSTS posture on Exchange-related websites, including unsupported usage on Exchange Back End, redirectHttpToHttps risk, and minimum max-age guidance.",
     "verify": true,
     "subject": "Server",
     "category": "Data Security",
@@ -437,7 +447,8 @@
       "Best Practice",
       "NIS2",
       "ANSSI",
-      "BSI"
+      "BSI",
+      "ISM"
     ],
     "references": [
       {
@@ -455,6 +466,10 @@
       {
         "name": "BSI APP.5.2.A11 — Absicherung der Kommunikation zwischen Exchange-Systemen",
         "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/06_APP_Anwendungen/APP_5_2_Microsoft_Exchange_und_Outlook_Edition_2023.pdf?__blob=publicationFile"
+      },
+      {
+        "name": "ISM: Guidelines for Cryptography (ISM-1370, ISM-1553)",
+        "url": "https://www.cyber.gov.au/resources-business-and-government/essential-cyber-security/ism/cyber-security-guidelines/guidelines-for-cryptography"
       }
     ],
     "remediation": {
@@ -471,7 +486,7 @@
   {
     "id": "EDCA-DATA-011",
     "title": "Weak Schannel ciphers (NULL, DES, RC4, Triple-DES) are explicitly disabled",
-    "description": "Weak SCHANNEL ciphers - NULL, DES 56/56, RC4 (all variants), and Triple DES 168 - MUST be disabled in the Windows registry. These ciphers offer inadequate confidentiality or integrity protection and are prohibited by the NCSC TLS Guidelines (§3.3.4 Bulkversleuteling). NULL provides no encryption; DES and RC4 are cryptographically broken; Triple DES is vulnerable to SWEET32 and other attacks.",
+    "description": "Weak SCHANNEL ciphers - NULL, DES 56/56, RC4 (all variants), and Triple DES 168 - MUST be disabled in the Windows registry. These ciphers offer inadequate confidentiality or integrity protection. NULL provides no encryption; DES and RC4 are cryptographically broken; Triple DES is vulnerable to SWEET32 and other attacks.",
     "verify": true,
     "subject": "Server",
     "category": "Data Security",
@@ -481,7 +496,8 @@
       "Best Practice",
       "NIS2",
       "ANSSI",
-      "BSI"
+      "BSI",
+      "ISM"
     ],
     "references": [
       {
@@ -503,6 +519,10 @@
       {
         "name": "BSI APP.5.2.A11 — Absicherung der Kommunikation zwischen Exchange-Systemen",
         "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/06_APP_Anwendungen/APP_5_2_Microsoft_Exchange_und_Outlook_Edition_2023.pdf?__blob=publicationFile"
+      },
+      {
+        "name": "ISM: Guidelines for Cryptography (ISM-0471)",
+        "url": "https://www.cyber.gov.au/resources-business-and-government/essential-cyber-security/ism/cyber-security-guidelines/guidelines-for-cryptography"
       }
     ],
     "remediation": {
@@ -519,7 +539,7 @@
   {
     "id": "EDCA-DATA-012",
     "title": "Weak Schannel hash algorithms (MD5, SHA-1) are explicitly disabled",
-    "description": "Weak SCHANNEL hash algorithms - MD5 and SHA-1 - MUST be disabled in the Windows registry. MD5 is cryptographically broken (collision attacks) and is classified as Onvoldoende (insufficient) by the NCSC TLS Guidelines (§3.3.5). SHA-1 is classified as Uit te faseren (to be phased out) due to proven collision attacks and must no longer be used for new deployments.",
+    "description": "Weak SCHANNEL hash algorithms - MD5 and SHA-1 - MUST be disabled in the Windows registry. MD5 is cryptographically broken due to collision attacks. SHA-1 is vulnerable to proven collision attacks and must no longer be used for new deployments.",
     "verify": true,
     "subject": "Server",
     "category": "Data Security",
@@ -529,7 +549,8 @@
       "Best Practice",
       "NIS2",
       "ANSSI",
-      "BSI"
+      "BSI",
+      "ISM"
     ],
     "references": [
       {
@@ -551,6 +572,10 @@
       {
         "name": "BSI APP.5.2.A11 — Absicherung der Kommunikation zwischen Exchange-Systemen",
         "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/06_APP_Anwendungen/APP_5_2_Microsoft_Exchange_und_Outlook_Edition_2023.pdf?__blob=publicationFile"
+      },
+      {
+        "name": "ISM: Guidelines for Cryptography (ISM-0471, ISM-1374, ISM-1375)",
+        "url": "https://www.cyber.gov.au/resources-business-and-government/essential-cyber-security/ism/cyber-security-guidelines/guidelines-for-cryptography"
       }
     ],
     "remediation": {
@@ -567,7 +592,7 @@
   {
     "id": "EDCA-DATA-013",
     "title": "Non-forward-secret key exchange (PKCS / static RSA) is explicitly disabled",
-    "description": "The PKCS (static RSA) key exchange algorithm MUST be disabled in the Windows SCHANNEL registry. Static RSA key exchange does not provide forward secrecy: if the server private key is later compromised, all past sessions can be decrypted. The NCSC TLS Guidelines (§3.3.3 Sleuteluitwisseling) require Diffie-Hellman-based (DHE/ECDHE) key exchange to ensure forward secrecy. Disabling PKCS in SCHANNEL forces the use of ephemeral key exchange algorithms.",
+    "description": "The PKCS (static RSA) key exchange algorithm MUST be disabled in the Windows SCHANNEL registry. Static RSA key exchange does not provide forward secrecy: if the server private key is later compromised, all past sessions can be decrypted. Disabling PKCS in SCHANNEL forces the use of ephemeral (DHE/ECDHE) key exchange algorithms.",
     "verify": true,
     "subject": "Server",
     "category": "Data Security",
@@ -577,7 +602,8 @@
       "Best Practice",
       "NIS2",
       "ANSSI",
-      "BSI"
+      "BSI",
+      "ISM"
     ],
     "references": [
       {
@@ -599,6 +625,10 @@
       {
         "name": "BSI APP.5.2.A11 — Absicherung der Kommunikation zwischen Exchange-Systemen",
         "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/06_APP_Anwendungen/APP_5_2_Microsoft_Exchange_und_Outlook_Edition_2023.pdf?__blob=publicationFile"
+      },
+      {
+        "name": "ISM: Guidelines for Cryptography (ISM-1372, ISM-1448, ISM-1373, ISM-1453)",
+        "url": "https://www.cyber.gov.au/resources-business-and-government/essential-cyber-security/ism/cyber-security-guidelines/guidelines-for-cryptography"
       }
     ],
     "remediation": {
@@ -623,7 +653,8 @@
     "severityWeight": 3,
     "frameworks": [
       "Best Practice",
-      "CIS"
+      "CIS",
+      "ISM"
     ],
     "references": [
       {
@@ -633,6 +664,10 @@
       {
         "name": "S/MIME for message signing and encryption in Exchange Server",
         "url": "https://learn.microsoft.com/exchange/policy-and-compliance/smime/smime"
+      },
+      {
+        "name": "ISM: Guidelines for Cryptography (ISM-0490)",
+        "url": "https://www.cyber.gov.au/resources-business-and-government/essential-cyber-security/ism/cyber-security-guidelines/guidelines-for-cryptography"
       }
     ],
     "remediation": {
@@ -698,12 +733,17 @@
     "severity": "Medium",
     "severityWeight": 5,
     "frameworks": [
-      "Best Practice"
+      "Best Practice",
+      "ISM"
     ],
     "references": [
       {
         "name": "Enable support for AES256-CBC-encrypted content in Exchange Server August 2023 SU",
         "url": "https://support.microsoft.com/en-us/topic/enable-support-for-aes256-cbc-encrypted-content-in-exchange-server-august-2023-su-add63652-ee17-4428-8928-ddc45339f99e"
+      },
+      {
+        "name": "ISM: Guidelines for Cryptography (ISM-0479, ISM-1769)",
+        "url": "https://www.cyber.gov.au/resources-business-and-government/essential-cyber-security/ism/cyber-security-guidelines/guidelines-for-cryptography"
       }
     ],
     "remediation": {
@@ -726,7 +766,8 @@
     "severity": "Medium",
     "severityWeight": 6,
     "frameworks": [
-      "Best Practice"
+      "Best Practice",
+      "ISM"
     ],
     "references": [
       {
@@ -736,6 +777,10 @@
       {
         "name": "BitLocker overview",
         "url": "https://learn.microsoft.com/en-us/windows/security/operating-system-security/data-protection/bitlocker/"
+      },
+      {
+        "name": "ISM: Guidelines for Cryptography (ISM-0459, ISM-1080)",
+        "url": "https://www.cyber.gov.au/resources-business-and-government/essential-cyber-security/ism/cyber-security-guidelines/guidelines-for-cryptography"
       }
     ],
     "remediation": {
@@ -751,7 +796,7 @@
   {
     "id": "EDCA-DATA-018",
     "title": "TLS 1.2 approved cipher suite allowlist enforces forward secrecy",
-    "description": "The TLS 1.2 cipher suite order on Exchange servers MUST include only ANSSI-approved cipher suites that provide forward secrecy (ECDHE or DHE key exchange) and exclude weak options. ANSSI classifies AES-GCM and AES-CCM with ECDHE as recommended, and requires that cipher suites without perfect forward secrecy (PFS) such as static RSA key exchange (already addressed by EDCA-DATA-013) are not used. The Schannel cipher suite order must prioritise ECDHE-based suites over DHE-based suites for performance, and DHE group size must meet minimum strength requirements. ANSSI's TLS guide recommends a minimum 2048-bit DHE group and preference for ECDHE P-256 or P-384.",
+    "description": "The TLS 1.2 cipher suite order on Exchange servers MUST include only cipher suites that provide forward secrecy (ECDHE or DHE key exchange) and exclude weak options. Cipher suites without perfect forward secrecy (PFS) such as static RSA key exchange (already addressed by EDCA-DATA-013) MUST NOT be used. The Schannel cipher suite order must prioritise ECDHE-based suites over DHE-based suites for performance. DHE group size must be a minimum of 2048 bits; ECDHE P-256 or P-384 is preferred.",
     "verify": true,
     "subject": "Server",
     "category": "Data Security",
@@ -759,7 +804,8 @@
     "severityWeight": 7,
     "frameworks": [
       "ANSSI",
-      "BSI"
+      "BSI",
+      "ISM"
     ],
     "references": [
       {
@@ -777,6 +823,10 @@
       {
         "name": "BSI APP.5.2.A11 — Absicherung der Kommunikation zwischen Exchange-Systemen",
         "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/06_APP_Anwendungen/APP_5_2_Microsoft_Exchange_und_Outlook_Edition_2023.pdf?__blob=publicationFile"
+      },
+      {
+        "name": "ISM: Guidelines for Cryptography (ISM-1369, ISM-1453, ISM-1372, ISM-1448, ISM-1375)",
+        "url": "https://www.cyber.gov.au/resources-business-and-government/essential-cyber-security/ism/cyber-security-guidelines/guidelines-for-cryptography"
       }
     ],
     "remediation": {
@@ -821,7 +871,7 @@
   {
     "id": "EDCA-GOV-002",
     "title": "Exchange product line lifecycle status",
-    "description": "Exchange Server SE MUST be the supported production baseline and MUST be kept current on Cumulative Updates. Exchange Server 2016 and 2019 are out of support and represent a lifecycle risk. CISA (KEV Catalog) requires applying patches for known exploited Exchange Server vulnerabilities within mandated timelines.",
+    "description": "Exchange Server SE MUST be the supported production baseline and MUST be kept current on Cumulative Updates. Exchange Server 2016 and 2019 are out of support and represent a lifecycle risk.",
     "verify": true,
     "subject": "Server",
     "category": "Governance",
@@ -831,7 +881,8 @@
       "Best Practice",
       "NIS2",
       "CISA",
-      "BSI"
+      "BSI",
+      "ISM"
     ],
     "references": [
       {
@@ -849,6 +900,10 @@
       {
         "name": "BSI APP.5.2.A9 — Sichere Konfiguration von Exchange-Servern",
         "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/06_APP_Anwendungen/APP_5_2_Microsoft_Exchange_und_Outlook_Edition_2023.pdf?__blob=publicationFile"
+      },
+      {
+        "name": "ISM: Guidelines for System Management (ISM-1501, ISM-1704, ISM-1905)",
+        "url": "https://www.cyber.gov.au/resources-business-and-government/essential-cyber-security/ism/cyber-security-guidelines/guidelines-for-system-management"
       }
     ],
     "remediation": {
@@ -1279,7 +1334,7 @@
   {
     "id": "EDCA-IAC-003",
     "title": "NTLMv2 authentication enforcement baseline",
-    "description": "LAN Manager authentication level and NTLM minimum session security MUST be configured together to enforce NTLMv2 only and refuse LM/NTLM. Applicability: Exchange 2016/2019/SE with modern clients. Exception: validated legacy interoperability requirements must be risk accepted. The CIS benchmark requires 'Network security: LAN Manager authentication level' to be set to 'Send NTLMv2 response only. Refuse LM & NTLM' (LmCompatibilityLevel = 5). The CIS benchmark requires minimum session security for both NTLM SSP clients and servers to be set to 'Require NTLMv2 session security, Require 128-bit encryption' (NtlmMinClientSec and NtlmMinServerSec = 537395200).",
+    "description": "LAN Manager authentication level and NTLM minimum session security MUST be configured together to enforce NTLMv2 only and refuse LM/NTLM. LmCompatibilityLevel MUST be set to 5 (Send NTLMv2 response only; refuse LM & NTLM). NtlmMinClientSec and NtlmMinServerSec MUST be set to 537395200 (require NTLMv2 session security and 128-bit encryption). Applicability: Exchange 2016/2019/SE with modern clients. Exception: validated legacy interoperability requirements must be risk accepted.",
     "verify": true,
     "subject": "Server",
     "category": "Identity and Access Control",
@@ -1290,7 +1345,8 @@
       "CIS",
       "CISA",
       "ANSSI",
-      "BSI"
+      "BSI",
+      "ISM"
     ],
     "references": [
       {
@@ -1328,6 +1384,10 @@
       {
         "name": "BSI SYS.1.2.3.A5 — Sichere Authentisierung und Autorisierung in Windows Server",
         "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/07_SYS_IT_Systeme/SYS_1_2_3_Windows_Server_Edition_2023.pdf?__blob=publicationFile"
+      },
+      {
+        "name": "ISM: Guidelines for System Hardening (ISM-1603, ISM-1055)",
+        "url": "https://www.cyber.gov.au/resources-business-and-government/essential-cyber-security/ism/cyber-security-guidelines/guidelines-for-system-hardening"
       }
     ],
     "remediation": {
@@ -1352,7 +1412,8 @@
     "severityWeight": 8,
     "frameworks": [
       "Best Practice",
-      "CISA"
+      "CISA",
+      "ISM"
     ],
     "references": [
       {
@@ -1370,6 +1431,10 @@
       {
         "name": "CISA MS Exchange Security Best Practices",
         "url": "https://www.cisa.gov/sites/default/files/publications/CSI_MS_Exchange_Security_Best_Practices_Final.pdf"
+      },
+      {
+        "name": "ISM: Guidelines for System Hardening (ISM-1919)",
+        "url": "https://www.cyber.gov.au/resources-business-and-government/essential-cyber-security/ism/cyber-security-guidelines/guidelines-for-system-hardening"
       }
     ],
     "remediation": {
@@ -1385,7 +1450,7 @@
   {
     "id": "EDCA-IAC-005",
     "title": "RDP requires Network Level Authentication",
-    "description": "Each Exchange server MUST require Network Level Authentication (NLA) for all Remote Desktop connections. NLA authenticates users before establishing a full desktop session, reducing the RDP attack surface. The CIS benchmark requires 'Require user authentication for remote connections by using Network Level Authentication' to be set to 'Enabled'.",
+    "description": "Each Exchange server MUST require Network Level Authentication (NLA) for all Remote Desktop connections. NLA authenticates users before establishing a full desktop session, reducing the RDP attack surface.",
     "verify": true,
     "subject": "Server",
     "category": "Identity and Access Control",
@@ -1394,7 +1459,8 @@
     "frameworks": [
       "CIS",
       "ANSSI",
-      "BSI"
+      "BSI",
+      "ISM"
     ],
     "references": [
       {
@@ -1416,6 +1482,10 @@
       {
         "name": "BSI SYS.1.2.3.A6 — Sicherheit beim Fernzugriff über RDP",
         "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/07_SYS_IT_Systeme/SYS_1_2_3_Windows_Server_Edition_2023.pdf?__blob=publicationFile"
+      },
+      {
+        "name": "ISM: Guidelines for System Hardening (ISM-1546)",
+        "url": "https://www.cyber.gov.au/resources-business-and-government/essential-cyber-security/ism/cyber-security-guidelines/guidelines-for-system-hardening"
       }
     ],
     "remediation": {
@@ -1432,7 +1502,7 @@
   {
     "id": "EDCA-IAC-006",
     "title": "WDigest UseLogonCredential disabled",
-    "description": "Each Exchange server MUST have WDigest credential caching disabled (UseLogonCredential set to 0). WDigest authentication stores clear-text credentials in LSASS memory, enabling credential theft via memory dump. The CIS benchmark requires 'MSS: (UseLogonCredential) WDigest Authentication' to be set to 'Disabled'.",
+    "description": "Each Exchange server MUST have WDigest credential caching disabled (UseLogonCredential set to 0). WDigest authentication stores clear-text credentials in LSASS memory, enabling credential theft via memory dump.",
     "verify": true,
     "subject": "Server",
     "category": "Identity and Access Control",
@@ -1483,7 +1553,7 @@
   {
     "id": "EDCA-IAC-007",
     "title": "Alternate Service Account (ASA) usage follows Kerberos best practice",
-    "description": "Detect whether an Alternate Service Account credential is configured for Client Access Kerberos and validate baseline hygiene for credential rollover and server consistency. CISA recommends using Kerberos (Alternate Service Account) rather than NTLM for load-balanced Client Access authentication.",
+    "description": "Detect whether an Alternate Service Account credential is configured for Client Access Kerberos and validate baseline hygiene for credential rollover and server consistency.",
     "verify": true,
     "subject": "Server",
     "category": "Identity and Access Control",
@@ -1524,14 +1594,15 @@
   {
     "id": "EDCA-IAC-008",
     "title": "Exchange split permissions are enabled",
-    "description": "Exchange split permissions SHOULD be enabled to separate Active Directory and Exchange administration duties and reduce over-privileged access. CISA recommends enabling Exchange split permissions to limit Exchange Server's Active Directory write access.",
+    "description": "Exchange split permissions SHOULD be enabled to separate Active Directory and Exchange administration duties and reduce over-privileged access.",
     "verify": true,
     "subject": "Organization",
     "category": "Identity and Access Control",
     "severity": "High",
     "severityWeight": 8,
     "frameworks": [
-      "CISA"
+      "CISA",
+      "ISM"
     ],
     "references": [
       {
@@ -1541,6 +1612,10 @@
       {
         "name": "CISA AA21-062A: Mitigate Microsoft Exchange Server Vulnerabilities - enable Exchange split permissions to limit Exchange Server's Active Directory write access",
         "url": "https://www.cisa.gov/news-events/cybersecurity-advisories/aa21-062a"
+      },
+      {
+        "name": "ISM: Guidelines for System Hardening (ISM-1833)",
+        "url": "https://www.cyber.gov.au/resources-business-and-government/essential-cyber-security/ism/cyber-security-guidelines/guidelines-for-system-hardening"
       }
     ],
     "remediation": {
@@ -1556,7 +1631,7 @@
   {
     "id": "EDCA-IAC-009",
     "title": "Basic Authentication is disabled after Modern Authentication rollout",
-    "description": "The Exchange organization MUST have Basic Authentication disabled across all tracked protocols after Modern Authentication is confirmed as operational. This control evaluates the AllowBasicAuth* properties of the authentication policy referenced by Get-OrganizationConfig DefaultAuthenticationPolicy. All 13 tracked protocol properties must be set to $false (blocking enabled) for the control to pass. CISA recommends disabling Basic Authentication after Modern Authentication is fully deployed.",
+    "description": "The Exchange organization MUST have Basic Authentication disabled across all tracked protocols after Modern Authentication is confirmed as operational. This control evaluates the AllowBasicAuth* properties of the authentication policy referenced by Get-OrganizationConfig DefaultAuthenticationPolicy. All 13 tracked protocol properties must be set to $false (blocking enabled) for the control to pass.",
     "verify": true,
     "subject": "Organization",
     "category": "Identity and Access Control",
@@ -1564,7 +1639,8 @@
     "severityWeight": 8,
     "frameworks": [
       "CISA",
-      "BSI"
+      "BSI",
+      "ISM"
     ],
     "references": [
       {
@@ -1582,6 +1658,10 @@
       {
         "name": "BSI APP.5.2.A3 — Berechtigungsmanagement und Zugriffsrechte",
         "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/06_APP_Anwendungen/APP_5_2_Microsoft_Exchange_und_Outlook_Edition_2023.pdf?__blob=publicationFile"
+      },
+      {
+        "name": "ISM: Guidelines for System Hardening (ISM-1603, ISM-1919)",
+        "url": "https://www.cyber.gov.au/resources-business-and-government/essential-cyber-security/ism/cyber-security-guidelines/guidelines-for-system-hardening"
       }
     ],
     "remediation": {
@@ -1597,7 +1677,7 @@
   {
     "id": "EDCA-IAC-010",
     "title": "Administrative access to EAC and remote PowerShell is restricted",
-    "description": "Administrative access to the Exchange Admin Center (EAC) and remote PowerShell MUST be restricted to authorized management workstations and paths. This control evaluates two automated checks: (1) whether Client Access Rules are configured that explicitly restrict access to the RemotePowerShell or ExchangeAdminCenter protocol, and (2) whether any non-Exchange-administrative users (users without Exchange RBAC role group membership) have RemotePowerShellEnabled set to $true on their Exchange user object. (DISA STIG V-259698; CISA AA21-062A)",
+    "description": "Administrative access to the Exchange Admin Center (EAC) and remote PowerShell MUST be restricted to authorized management workstations and paths. This control evaluates two automated checks: (1) whether Client Access Rules are configured that explicitly restrict access to the RemotePowerShell or ExchangeAdminCenter protocol, and (2) whether any non-Exchange-administrative users (users without Exchange RBAC role group membership) have RemotePowerShellEnabled set to $true on their Exchange user object.",
     "verify": true,
     "subject": "Organization",
     "category": "Identity and Access Control",
@@ -1606,7 +1686,8 @@
     "frameworks": [
       "CISA",
       "DISA",
-      "BSI"
+      "BSI",
+      "ISM"
     ],
     "references": [
       {
@@ -1636,6 +1717,10 @@
       {
         "name": "BSI APP.2.2.A17 — Anmelderestriktionen für hochprivilegierte Konten der Gesamtstruktur auf Clients und Servern",
         "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/06_APP_Anwendungen/APP_2_2_Active_Directory_Domain_Services_Edition_2023.pdf?__blob=publicationFile"
+      },
+      {
+        "name": "ISM: Guidelines for System Hardening (ISM-1173, ISM-1833)",
+        "url": "https://www.cyber.gov.au/resources-business-and-government/essential-cyber-security/ism/cyber-security-guidelines/guidelines-for-system-hardening"
       }
     ],
     "remediation": {
@@ -1651,7 +1736,7 @@
   {
     "id": "EDCA-IAC-011",
     "title": "Dedicated hybrid app is used by EvoSTS AuthServer",
-    "description": "When hybrid OAuth configuration is detected, the EvoSTS AuthServer MUST use the dedicated Exchange hybrid application app ID and MUST NOT use the shared Exchange Online first-party app ID 00000002-0000-0ff1-ce00-000000000000. CISA recommends using a dedicated hybrid application identity to avoid over-privileged EvoSTS AuthServer configurations.",
+    "description": "When hybrid OAuth configuration is detected, the EvoSTS AuthServer MUST use the dedicated Exchange hybrid application app ID and MUST NOT use the shared Exchange Online first-party app ID 00000002-0000-0ff1-ce00-000000000000.",
     "verify": true,
     "subject": "Organization",
     "category": "Identity and Access Control",
@@ -2140,7 +2225,8 @@
     "severityWeight": 8,
     "frameworks": [
       "ANSSI",
-      "BSI"
+      "BSI",
+      "ISM"
     ],
     "references": [
       {
@@ -2158,6 +2244,10 @@
       {
         "name": "BSI APP.2.2.A9 — Schutz der Authentisierung beim Einsatz von AD DS",
         "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/06_APP_Anwendungen/APP_2_2_Active_Directory_Domain_Services_Edition_2023.pdf?__blob=publicationFile"
+      },
+      {
+        "name": "ISM: Guidelines for System Hardening (ISM-2010)",
+        "url": "https://www.cyber.gov.au/resources-business-and-government/essential-cyber-security/ism/cyber-security-guidelines/guidelines-for-system-hardening"
       }
     ],
     "remediation": {
@@ -2243,7 +2333,7 @@
   {
     "id": "EDCA-MON-001",
     "title": "Admin audit logging enabled and configured",
-    "description": "Admin audit logging (AdminAuditLogEnabled) MUST be enabled for the Exchange organization and audit record parameters MUST be set. The audit log configuration must specify the minimum cmdlet parameters to be audited, minimum log age, and a defined log path to ensure a complete audit trail. Ensures all Exchange cmdlet executions are recorded, supporting accountability and incident response. The CIS benchmark requires 'AdminAuditLogEnabled' to be set to 'True'.",
+    "description": "Admin audit logging (AdminAuditLogEnabled) MUST be enabled for the Exchange organization and audit record parameters MUST be set. The audit log configuration must specify the minimum cmdlet parameters to be audited, minimum log age, and a defined log path to ensure a complete audit trail. Ensures all Exchange cmdlet executions are recorded, supporting accountability and incident response.",
     "verify": true,
     "subject": "Organization",
     "category": "Monitoring",
@@ -2255,7 +2345,8 @@
       "CIS",
       "DISA",
       "ANSSI",
-      "BSI"
+      "BSI",
+      "ISM"
     ],
     "references": [
       {
@@ -2297,6 +2388,10 @@
       {
         "name": "BSI APP.2.2.A7 — Umsetzung sicherer Verwaltungsmethoden für Active Directory",
         "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/06_APP_Anwendungen/APP_2_2_Active_Directory_Domain_Services_Edition_2023.pdf?__blob=publicationFile"
+      },
+      {
+        "name": "ISM: Guidelines for System Monitoring (ISM-0580, ISM-0585)",
+        "url": "https://www.cyber.gov.au/resources-business-and-government/essential-cyber-security/ism/cyber-security-guidelines/guidelines-for-system-monitoring"
       }
     ],
     "remediation": {
@@ -2321,7 +2416,8 @@
     "frameworks": [
       "CIS",
       "ANSSI",
-      "BSI"
+      "BSI",
+      "ISM"
     ],
     "references": [
       {
@@ -2343,6 +2439,10 @@
       {
         "name": "BSI SYS.1.2.3.A7 — Verwendung der Windows PowerShell",
         "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/07_SYS_IT_Systeme/SYS_1_2_3_Windows_Server_Edition_2023.pdf?__blob=publicationFile"
+      },
+      {
+        "name": "ISM: Guidelines for System Hardening (ISM-0582)",
+        "url": "https://www.cyber.gov.au/resources-business-and-government/essential-cyber-security/ism/cyber-security-guidelines/guidelines-for-system-hardening"
       }
     ],
     "remediation": {
@@ -2763,7 +2863,8 @@
     "severityWeight": 8,
     "frameworks": [
       "ANSSI",
-      "BSI"
+      "BSI",
+      "ISM"
     ],
     "references": [
       {
@@ -2785,6 +2886,10 @@
       {
         "name": "BSI APP.2.2.A7 — Umsetzung sicherer Verwaltungsmethoden für Active Directory",
         "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/06_APP_Anwendungen/APP_2_2_Active_Directory_Domain_Services_Edition_2023.pdf?__blob=publicationFile"
+      },
+      {
+        "name": "ISM: Guidelines for System Hardening (ISM-0582)",
+        "url": "https://www.cyber.gov.au/resources-business-and-government/essential-cyber-security/ism/cyber-security-guidelines/guidelines-for-system-hardening"
       }
     ],
     "remediation": {
@@ -2810,7 +2915,8 @@
     "frameworks": [
       "ANSSI",
       "BSI",
-      "CIS"
+      "CIS",
+      "ISM"
     ],
     "references": [
       {
@@ -2824,6 +2930,10 @@
       {
         "name": "BSI SYS.1.2.3.A7 — Verwendung der Windows PowerShell",
         "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/07_SYS_IT_Systeme/SYS_1_2_3_Windows_Server_Edition_2023.pdf?__blob=publicationFile"
+      },
+      {
+        "name": "ISM: Guidelines for System Hardening (ISM-0582)",
+        "url": "https://www.cyber.gov.au/resources-business-and-government/essential-cyber-security/ism/cyber-security-guidelines/guidelines-for-system-hardening"
       }
     ],
     "remediation": {
@@ -5089,7 +5199,8 @@
     "frameworks": [
       "DISA",
       "ANSSI",
-      "BSI"
+      "BSI",
+      "ISM"
     ],
     "references": [
       {
@@ -5111,6 +5222,10 @@
       {
         "name": "BSI APP.5.2.A9 — Sichere Konfiguration von Exchange-Servern",
         "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/06_APP_Anwendungen/APP_5_2_Microsoft_Exchange_und_Outlook_Edition_2023.pdf?__blob=publicationFile"
+      },
+      {
+        "name": "ISM: Guidelines for System Management (ISM-1501, ISM-1704)",
+        "url": "https://www.cyber.gov.au/resources-business-and-government/essential-cyber-security/ism/cyber-security-guidelines/guidelines-for-system-management"
       }
     ],
     "remediation": {
@@ -5135,7 +5250,8 @@
     "severityWeight": 7,
     "frameworks": [
       "DISA",
-      "BSI"
+      "BSI",
+      "ISM"
     ],
     "references": [
       {
@@ -5157,6 +5273,10 @@
       {
         "name": "BSI APP.5.2.A9 — Sichere Konfiguration von Exchange-Servern",
         "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/06_APP_Anwendungen/APP_5_2_Microsoft_Exchange_und_Outlook_Edition_2023.pdf?__blob=publicationFile"
+      },
+      {
+        "name": "ISM: Guidelines for Email (ISM-1234)",
+        "url": "https://www.cyber.gov.au/resources-business-and-government/essential-cyber-security/ism/cyber-security-guidelines/guidelines-for-email"
       }
     ],
     "remediation": {
@@ -5756,7 +5876,8 @@
       "Best Practice",
       "BSI",
       "CIS",
-      "NIS2"
+      "NIS2",
+      "ISM"
     ],
     "references": [
       {
@@ -5770,6 +5891,10 @@
       {
         "name": "BSI APP.5.2.A11 — Absicherung der Kommunikation zwischen Exchange-Systemen",
         "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/06_APP_Anwendungen/APP_5_2_Microsoft_Exchange_und_Outlook_Edition_2023.pdf?__blob=publicationFile"
+      },
+      {
+        "name": "ISM: Guidelines for Email (ISM-0567)",
+        "url": "https://www.cyber.gov.au/resources-business-and-government/essential-cyber-security/ism/cyber-security-guidelines/guidelines-for-email"
       }
     ],
     "remediation": {
@@ -5785,7 +5910,7 @@
   {
     "id": "EDCA-TLS-012",
     "title": "Send connector maximum message size is 25 MB or less",
-    "description": "The MaxMessageSize property on each send connector MUST be set to 25 MB or less. Oversized messages consume excessive bandwidth and storage and may be used to conduct denial-of-service attacks against remote servers. The CIS benchmark requires the connector-level send size limit to be 25 MB or less.",
+    "description": "The MaxMessageSize property on each send connector MUST be set to 25 MB or less. Oversized messages consume excessive bandwidth and storage and may be used to conduct denial-of-service attacks against remote servers.",
     "verify": true,
     "subject": "Organization",
     "category": "Transport Security",
@@ -5823,7 +5948,7 @@
   {
     "id": "EDCA-TLS-013",
     "title": "Receive connector maximum message size is 25 MB or less",
-    "description": "The MaxMessageSize property on each receive connector MUST be set to 25 MB or less. Restricting inbound message size reduces the risk of storage exhaustion and denial-of-service attacks. The CIS benchmark requires the connector-level receive size limit to be 25 MB or less.",
+    "description": "The MaxMessageSize property on each receive connector MUST be set to 25 MB or less. Restricting inbound message size reduces the risk of storage exhaustion and denial-of-service attacks.",
     "verify": true,
     "subject": "Server",
     "category": "Transport Security",
@@ -5862,7 +5987,7 @@
   {
     "id": "EDCA-TLS-014",
     "title": "External send connector has domain security enabled",
-    "description": "The DomainSecureEnabled property on the internet-facing send connector MUST be set to True. Domain security (mutual TLS) provides certificate-based authentication between mail servers, offering stronger guarantees than opportunistic TLS. The CIS benchmark requires domain security to be enabled on the external send connector.",
+    "description": "The DomainSecureEnabled property on the internet-facing send connector MUST be set to True. Domain security (mutual TLS) provides certificate-based authentication between mail servers, offering stronger guarantees than opportunistic TLS.",
     "verify": true,
     "subject": "Organization",
     "category": "Transport Security",
@@ -5873,7 +5998,8 @@
       "BSI",
       "CIS",
       "DISA",
-      "NIS2"
+      "NIS2",
+      "ISM"
     ],
     "references": [
       {
@@ -5891,6 +6017,10 @@
       {
         "name": "BSI APP.5.2.A11 — Absicherung der Kommunikation zwischen Exchange-Systemen",
         "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/06_APP_Anwendungen/APP_5_2_Microsoft_Exchange_und_Outlook_Edition_2023.pdf?__blob=publicationFile"
+      },
+      {
+        "name": "ISM: Guidelines for Email (ISM-0567, ISM-0571)",
+        "url": "https://www.cyber.gov.au/resources-business-and-government/essential-cyber-security/ism/cyber-security-guidelines/guidelines-for-email"
       }
     ],
     "remediation": {
@@ -5906,7 +6036,7 @@
   {
     "id": "EDCA-TLS-015",
     "title": "Exchange Receive Connector maximum hop count is 60",
-    "description": "The Exchange Receive Connector Maximum Hop Count MUST be 60. The hop count limit controls the maximum number of times a message is allowed to be relayed before Exchange rejects it as looping. The value of 60 is the DISA-required default and must not be set lower, which could reject legitimate complex routing paths.",
+    "description": "The Exchange Receive Connector Maximum Hop Count MUST be 60. The hop count limit controls the maximum number of times a message is allowed to be relayed before Exchange rejects it as looping. Setting this value lower could reject legitimate complex routing paths.",
     "verify": true,
     "subject": "Server",
     "category": "Transport Security",
@@ -6102,7 +6232,7 @@
   {
     "id": "EDCA-TLS-021",
     "title": "Exchange internal receive connectors require encryption",
-    "description": "Exchange internal receive connectors accepting connections from internal mail servers MUST require TLS encryption to protect data in transit. The formal DISA STIG rule is specific to Exchange 2016; for Exchange 2019 and Exchange SE, the broader TLS protection requirements are addressed by EX-BP-057 and EX-BP-111. The security principle of requiring TLS on internal receive connectors applies to all Exchange versions.",
+    "description": "Exchange internal receive connectors accepting connections from internal mail servers MUST require TLS encryption to protect data in transit. This control applies to all Exchange versions.",
     "verify": true,
     "subject": "Server",
     "category": "Transport Security",
@@ -6111,7 +6241,8 @@
     "frameworks": [
       "DISA",
       "BSI",
-      "NIS2"
+      "NIS2",
+      "ISM"
     ],
     "references": [
       {
@@ -6125,6 +6256,10 @@
       {
         "name": "BSI APP.5.2.A11 — Absicherung der Kommunikation zwischen Exchange-Systemen",
         "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/06_APP_Anwendungen/APP_5_2_Microsoft_Exchange_und_Outlook_Edition_2023.pdf?__blob=publicationFile"
+      },
+      {
+        "name": "ISM: Guidelines for Email (ISM-0567)",
+        "url": "https://www.cyber.gov.au/resources-business-and-government/essential-cyber-security/ism/cyber-security-guidelines/guidelines-for-email"
       }
     ],
     "remediation": {
@@ -6141,7 +6276,7 @@
   {
     "id": "EDCA-TLS-022",
     "title": "Exchange receive connectors control the number of recipients per message",
-    "description": "Exchange receive connectors MUST limit the number of recipients per message to prevent misuse of inbound relay paths for large-scale bulk delivery or directed spam campaigns. The formal DISA STIG rule is specific to Exchange 2016. For Exchange 2019 and Exchange SE, global per-message recipient limits are enforced at the transport level (see EX-BP-141); per-connector limits are recommended for all Exchange versions.",
+    "description": "Exchange receive connectors MUST limit the number of recipients per message to prevent misuse of inbound relay paths for large-scale bulk delivery or directed spam campaigns. For Exchange 2019 and Exchange SE, global per-message recipient limits are enforced at the transport level (see EX-BP-141); per-connector limits are recommended for all Exchange versions.",
     "verify": true,
     "subject": "Server",
     "category": "Transport Security",
@@ -6174,7 +6309,7 @@
   {
     "id": "EDCA-TLS-023",
     "title": "Accepted domains publish enforcing DMARC records",
-    "description": "Each accepted domain MUST publish a DMARC TXT record at _dmarc.<domain> with a policy of quarantine or reject. CISA BOD 18-01 requires configuring DMARC with a policy of reject. CIS Controls v8 requires implementing DMARC and enabling receiver-side verification.",
+    "description": "Each accepted domain MUST publish a DMARC TXT record at _dmarc.<domain> with a policy of quarantine or reject.",
     "verify": true,
     "subject": "Organization",
     "category": "Transport Security",
@@ -6184,7 +6319,8 @@
       "Best Practice",
       "NIS2",
       "CIS",
-      "CISA"
+      "CISA",
+      "ISM"
     ],
     "references": [
       {
@@ -6202,6 +6338,10 @@
       {
         "name": "CIS 9.5 (IG1): Implement DMARC and Enable Receiver-Side Verification",
         "url": "https://www.cisecurity.org/insights/white-papers/cis-controls-v8"
+      },
+      {
+        "name": "ISM: Guidelines for Email (ISM-1540, ISM-1799)",
+        "url": "https://www.cyber.gov.au/resources-business-and-government/essential-cyber-security/ism/cyber-security-guidelines/guidelines-for-email"
       }
     ],
     "remediation": {
@@ -6217,7 +6357,7 @@
   {
     "id": "EDCA-TLS-024",
     "title": "Accepted domains publish SMTP DANE TLSA for MX hosts",
-    "description": "Each MX host serving accepted domains MUST have SMTP DANE configured with TLSA records at _25._tcp.<mx-host>. CISA BOD 18-01 requires enforcing SMTP encryption for email transport.",
+    "description": "Each MX host serving accepted domains MUST have SMTP DANE configured with TLSA records at _25._tcp.<mx-host>.",
     "verify": true,
     "subject": "Organization",
     "category": "Transport Security",
@@ -6255,7 +6395,7 @@
   {
     "id": "EDCA-TLS-025",
     "title": "Accepted domains publish valid MTA-STS policies",
-    "description": "Each accepted domain MUST publish a valid MTA-STS DNS TXT record and host a reachable HTTPS policy file with STSv1 syntax. CISA BOD 18-01 requires enforcing email transport security via policy.",
+    "description": "Each accepted domain MUST publish a valid MTA-STS DNS TXT record and host a reachable HTTPS policy file with STSv1 syntax.",
     "verify": true,
     "subject": "Organization",
     "category": "Transport Security",
@@ -6264,7 +6404,8 @@
     "frameworks": [
       "Best Practice",
       "NIS2",
-      "CISA"
+      "CISA",
+      "ISM"
     ],
     "references": [
       {
@@ -6278,6 +6419,10 @@
       {
         "name": "CISA BOD 18-01 (2017): Enhance Email and Web Security - enforce email transport security via policy",
         "url": "https://www.cisa.gov/binding-operational-directive-18-01"
+      },
+      {
+        "name": "ISM: Guidelines for Email (ISM-1589)",
+        "url": "https://www.cyber.gov.au/resources-business-and-government/essential-cyber-security/ism/cyber-security-guidelines/guidelines-for-email"
       }
     ],
     "remediation": {
@@ -6293,7 +6438,7 @@
   {
     "id": "EDCA-TLS-026",
     "title": "Accepted domains publish valid SPF records",
-    "description": "Each accepted domain MUST publish one syntactically valid SPF TXT record (v=spf1) with a terminal all mechanism and within the 10-lookup limit. CISA BOD 18-01 requires configuring SPF for all domains. CIS Controls v8 requires implementing DMARC and enabling receiver-side verification.",
+    "description": "Each accepted domain MUST publish one syntactically valid SPF TXT record (v=spf1) with a terminal all mechanism and within the 10-lookup limit.",
     "verify": true,
     "subject": "Organization",
     "category": "Transport Security",
@@ -6303,7 +6448,8 @@
       "Best Practice",
       "NIS2",
       "CIS",
-      "CISA"
+      "CISA",
+      "ISM"
     ],
     "references": [
       {
@@ -6321,6 +6467,10 @@
       {
         "name": "CIS 9.5 (IG1): Implement DMARC and Enable Receiver-Side Verification",
         "url": "https://www.cisecurity.org/insights/white-papers/cis-controls-v8"
+      },
+      {
+        "name": "ISM: Guidelines for Email (ISM-0574, ISM-1183, ISM-1151)",
+        "url": "https://www.cyber.gov.au/resources-business-and-government/essential-cyber-security/ism/cyber-security-guidelines/guidelines-for-email"
       }
     ],
     "remediation": {
@@ -6336,7 +6486,7 @@
   {
     "id": "EDCA-TLS-027",
     "title": "DKIM signing is enabled for all accepted domains",
-    "description": "Each accepted domain MUST have DKIM signing configured with valid selector keys published in DNS. DKIM (DomainKeys Identified Mail) cryptographically signs outbound messages, enabling receivers to verify message authenticity and prevent spoofing. Exchange Server on-premises does not natively support DKIM signing on any version; a third-party appliance, SaaS service, or signing agent is always required. BSI APP.5.3.A9 (Standard) requires DKIM as part of the expanded email authentication set (SPF + DKIM + DMARC + DANE + MTA-STS). CISA BOD 18-01 requires deploying DKIM for all domains. Detection probes well-known selectors for the following platforms: Exchange Online / Microsoft 365 (selector1, selector2), Google Workspace (google), Mimecast, Proofpoint (proofpoint), Amazon SES, SendGrid (s1, s2), Postmark (pm), Mailchimp / Mandrill (k1, k2), Klaviyo (k1, k2), Mailgun, SparkPost, Mailjet, SocketLabs, Salesforce Marketing Cloud, Symantec Email Security.cloud, and generic self-hosted signers (default, mail, dkim).",
+    "description": "Each accepted domain MUST have DKIM signing configured with valid selector keys published in DNS. DKIM (DomainKeys Identified Mail) cryptographically signs outbound messages, enabling receivers to verify message authenticity and prevent spoofing. Exchange Server on-premises does not natively support DKIM signing on any version; a third-party appliance, SaaS service, or signing agent is always required. Detection probes well-known selectors for the following platforms: Exchange Online / Microsoft 365 (selector1, selector2), Google Workspace (google), Mimecast, Proofpoint (proofpoint), Amazon SES, SendGrid (s1, s2), Postmark (pm), Mailchimp / Mandrill (k1, k2), Klaviyo (k1, k2), Mailgun, SparkPost, Mailjet, SocketLabs, Salesforce Marketing Cloud, Symantec Email Security.cloud, and generic self-hosted signers (default, mail, dkim).",
     "verify": true,
     "subject": "Organization",
     "category": "Transport Security",
@@ -6345,7 +6495,8 @@
     "frameworks": [
       "BSI",
       "Best Practice",
-      "CISA"
+      "CISA",
+      "ISM"
     ],
     "references": [
       {
@@ -6367,6 +6518,10 @@
       {
         "name": "EmailArchitect – DKIM for Exchange Server for Exchange Server",
         "url": "https://www.emailarchitect.net/domainkeys/"
+      },
+      {
+        "name": "ISM: Guidelines for Email (ISM-0861, ISM-1026, ISM-1027)",
+        "url": "https://www.cyber.gov.au/resources-business-and-government/essential-cyber-security/ism/cyber-security-guidelines/guidelines-for-email"
       }
     ],
     "remediation": {

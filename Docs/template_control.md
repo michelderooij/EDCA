@@ -57,7 +57,7 @@ List every framework that mandates or explicitly recommends this control. Use on
 already present in `controls.json`.
 
 ```
-"ANSSI" | "Best Practice" | "BSI" | "CIS" | "CISA" | "DISA" | "NIS2"
+"ANSSI" | "Best Practice" | "BSI" | "CIS" | "CISA" | "DISA" | "NIS2" | "ISM"
 ```
 
 Include `"Best Practice"` for every control that represents sound Exchange hardening regardless of

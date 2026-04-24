@@ -56,7 +56,7 @@
 .PARAMETER Framework
     One or more framework names to include in the analysis. When specified, only controls tagged
     with at least one of the supplied frameworks are evaluated. Valid values are:
-    Best Practice, ANSSI, BSI, CIS, CISA, DISA, NIS2.
+    Best Practice, ANSSI, BSI, CIS, CISA, DISA, ISM, NIS2.
     When omitted, all controls are evaluated regardless of framework.
 
 .PARAMETER Update
@@ -120,7 +120,7 @@ param(
 
     [switch]$Update,
 
-    [ValidateSet('Best Practice', 'ANSSI', 'BSI', 'CIS', 'CISA', 'DISA', 'NIS2')]
+    [ValidateSet('Best Practice', 'ANSSI', 'BSI', 'CIS', 'CISA', 'DISA', 'ISM', 'NIS2')]
     [string[]]$Framework
 )
 
@@ -253,29 +253,46 @@ if ($doCollect) {
     }
 
     # Write the organization-wide JSON file (separate from per-server files).
-    $safeOrgId = if ($null -ne $rawOrgId) { $rawOrgId -replace '[^\w\.\-]', '_' } else { 'organization' }
-    $orgJsonOut = Join-Path -Path $resolvedDataPath -ChildPath ('{0}_{1}.json' -f $safeOrgId, $stamp)
+    # Skip when every collected server is an Edge Transport server: Edge servers are not
+    # domain-joined and carry no meaningful organization data, so writing an org file would
+    # only produce an empty/stub entry that pollutes analysis runs on a Mailbox server.
+    $allServersAreEdge = (@($collectionData.Servers).Count -gt 0) -and (
+        @($collectionData.Servers | Where-Object {
+                -not (($_.PSObject.Properties.Name -contains 'Exchange') -and
+                    ($_.Exchange.PSObject.Properties.Name -contains 'IsEdge') -and
+                    [bool]$_.Exchange.IsEdge)
+            }).Count -eq 0
+    )
 
-    $orgMetadata = [pscustomobject]@{
-        FileType            = 'Organization'
-        ToolName            = $collectionData.Metadata.ToolName
-        ToolVersion         = $collectionData.Metadata.ToolVersion
-        CollectionTimestamp = $collectionData.Metadata.CollectionTimestamp
-        ExecutedBy          = $collectionData.Metadata.ExecutedBy
-        OrganizationId      = $rawOrgId
+    if (-not $allServersAreEdge) {
+        $safeOrgId = if ($null -ne $rawOrgId) { $rawOrgId -replace '[^\w\.\-]', '_' } else { 'organization' }
+        $orgJsonOut = Join-Path -Path $resolvedDataPath -ChildPath ('{0}_{1}.json' -f $safeOrgId, $stamp)
+
+        $orgMetadata = [pscustomobject]@{
+            FileType            = 'Organization'
+            ToolName            = $collectionData.Metadata.ToolName
+            ToolVersion         = $collectionData.Metadata.ToolVersion
+            CollectionTimestamp = $collectionData.Metadata.CollectionTimestamp
+            ExecutedBy          = $collectionData.Metadata.ExecutedBy
+            OrganizationId      = $rawOrgId
+        }
+
+        $orgData = [pscustomobject]@{
+            Metadata            = $orgMetadata
+            Organization        = $collectionData.Organization
+            EmailAuthentication = $collectionData.EmailAuthentication
+        }
+
+        ConvertTo-EDCAJson -InputObject $orgData | Set-Content -Path $orgJsonOut -Encoding UTF8
+        $exportedFiles.Add($orgJsonOut)
+        Write-Verbose ('Organization JSON exported: {0}' -f $orgJsonOut)
+    }
+    else {
+        Write-Verbose ('Organization JSON export skipped: all collected servers are Edge Transport servers.')
     }
 
-    $orgData = [pscustomobject]@{
-        Metadata            = $orgMetadata
-        Organization        = $collectionData.Organization
-        EmailAuthentication = $collectionData.EmailAuthentication
-    }
-
-    ConvertTo-EDCAJson -InputObject $orgData | Set-Content -Path $orgJsonOut -Encoding UTF8
-    $exportedFiles.Add($orgJsonOut)
-    Write-Verbose ('Organization JSON exported: {0}' -f $orgJsonOut)
-
-    Write-EDCALog -Message ('Collection complete: {0} server JSON file(s) and 1 organization JSON file written to {1}' -f ($exportedFiles.Count - 1), $resolvedDataPath)
+    $orgFileCount = if ($allServersAreEdge) { 0 } else { 1 }
+    Write-EDCALog -Message ('Collection complete: {0} server JSON file(s) and {1} organization JSON file written to {2}' -f ($exportedFiles.Count - $orgFileCount), $orgFileCount, $resolvedDataPath)
 
     # Identify Edge servers that were not fully collected (Exchange cmdlet phase was skipped because
     # EDCA was not run locally on the Edge server). Emit a visible advisory so the operator knows

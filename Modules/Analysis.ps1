@@ -7969,7 +7969,7 @@ function Get-EDCAScores {
         [object[]]$Findings
     )
 
-    $frameworks = @('Best Practice', 'ANSSI', 'BSI', 'CIS', 'CISA', 'NIS2', 'DISA')
+    $frameworks = @('Best Practice', 'ANSSI', 'BSI', 'CIS', 'CISA', 'DISA', 'ISM', 'NIS2')
     $scores = @()
 
     # Overall score across all verifiable controls (each counted once); Skipped excluded from denominator
