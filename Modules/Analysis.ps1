@@ -530,7 +530,7 @@ function Test-EDCAControl {
                                         }
                                         elseif ($rawDkimStatus -eq 'Fail') {
                                             $dkimStatus = 'Warn'
-                                            $dkimEvidence = 'DKIM signing could not be verified — no selector records found matching the predefined set of popular DKIM-supporting platforms. ' + (if ($_.Dkim.PSObject.Properties.Name -contains 'Evidence') { [string]$_.Dkim.Evidence } else { '' })
+                                            $dkimEvidence = 'DKIM signing could not be verified — no selector records found matching the predefined set of popular DKIM-supporting platforms. ' + $(if ($_.Dkim.PSObject.Properties.Name -contains 'Evidence') { [string]$_.Dkim.Evidence } else { '' })
                                         }
                                         else {
                                             $dkimStatus = $rawDkimStatus
