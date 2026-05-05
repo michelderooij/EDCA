@@ -1,0 +1,29 @@
+{
+  "id": "EDCA-SEC-028",
+  "title": "Dynamic memory disabled for virtualized Exchange hosts",
+  "description": "Virtualized Exchange hosts MUST NOT use dynamic memory allocation. Dynamic memory causes unpredictable memory pressure on the Exchange JET database cache (store.exe) and the transport service, which can trigger out-of-memory crashes, transport stalls, and inconsistent client response times. Exchange sizing guidance always specifies static memory allocation sized to the calculated user and mailbox load.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Platform Security",
+  "severity": "High",
+  "severityWeight": 8,
+  "frameworks": [
+    "Best Practice"
+  ],
+  "references": [
+    {
+      "name": "CSS dynamic memory check",
+      "url": "https://github.com/microsoft/CSS-Exchange/blob/main/Diagnostics/HealthChecker/HealthChecker.ps1"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Disable dynamic memory for Exchange virtual machines and align reserved/maximum memory with sizing guidance.",
+    "scriptTemplate": "# Diagnose: Check virtualization platform and physical memory configuration\nGet-WmiObject -Class Win32_ComputerSystem | Select-Object Manufacturer, Model, @{N='TotalRAMGB';E={[math]::Round($_.TotalPhysicalMemory/1GB,2)}}\n# If hosted on Hyper-V, check on the host: Get-VM -Name $env:COMPUTERNAME | Select-Object DynamicMemoryEnabled\n# Dynamic memory must be disabled in hypervisor settings to prevent Exchange memory pressure."
+  },
+  "considerations": "Dynamic memory for Exchange VMs creates unpredictable memory pressure that can cause Exchange process crashes and transport stalls. If dynamic memory is currently enabled, disabling it requires coordination with the virtualization team and a VM reboot. The VM should be sized with static memory according to Exchange sizing guidelines.",
+  "roles": [
+    "Mailbox",
+    "Edge"
+  ]
+}

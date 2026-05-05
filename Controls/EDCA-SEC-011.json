@@ -1,0 +1,28 @@
+{
+  "id": "EDCA-SEC-011",
+  "title": "RPC minimum connection timeout baseline",
+  "description": "The RPC minimum connection timeout setting controls how long the Windows RPC runtime maintains idle RPC connections before closing them, directly affecting MAPI client session persistence and reconnect behavior under intermittent network conditions. Exchange RPC minimum connection timeout (RpcMinConnectionTimeout registry value) MUST be non-negative. A value of 0 is treated as not configured; a negative value is an invalid setting.",
+  "verify": false,
+  "subject": "Server",
+  "category": "Platform Security",
+  "severity": "Medium",
+  "severityWeight": 6,
+  "frameworks": [
+    "Best Practice"
+  ],
+  "references": [
+    {
+      "name": "CSS RPCMinConnectionTimeoutCheck",
+      "url": "https://microsoft.github.io/CSS-Exchange/Diagnostics/HealthChecker/RPCMinConnectionTimeoutCheck/"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Adjust the RPC MinConnectionTimeout registry setting to a more aggressive value than the OS defaults if network devices are dropping idle connections before the Exchange timeout triggers.",
+    "scriptTemplate": "# Diagnose: Check RPC MinimumConnectionTimeout registry value\n$val = (Get-ItemProperty 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows NT\\RPC' -Name MinimumConnectionTimeout -ErrorAction SilentlyContinue).MinimumConnectionTimeout\n\"MinimumConnectionTimeout: $(if ($null -eq $val) { 'not set (OS default)' } else { \"$val seconds\" })\"\n# Exchange recommended: 120 seconds. Set: New-ItemProperty 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows NT\\RPC' -Name MinimumConnectionTimeout -Value 120 -PropertyType DWord -Force"
+  },
+  "considerations": "Adjusting the RPC minimum connection timeout can affect Outlook MAPI connectivity behavior. Changes should be tested against Outlook profile connect/reconnect timing before applying to all servers.",
+  "roles": [
+    "Mailbox"
+  ]
+}

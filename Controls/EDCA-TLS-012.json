@@ -1,0 +1,38 @@
+{
+  "id": "EDCA-TLS-012",
+  "title": "Send connector maximum message size is 25 MB or less",
+  "description": "The MaxMessageSize property on each send connector MUST be set to 25 MB or less. Oversized messages consume excessive bandwidth and storage and may be used to conduct denial-of-service attacks against remote servers.",
+  "verify": true,
+  "subject": "Organization",
+  "category": "Transport Security",
+  "severity": "Low",
+  "severityWeight": 3,
+  "frameworks": [
+    "Best Practice",
+    "CIS",
+    "DISA"
+  ],
+  "references": [
+    {
+      "name": "CIS 2.2.4 (L1): Ensure Maximum send size Connector level is set to 25",
+      "url": "https://www.cisecurity.org/benchmark/microsoft_exchange_server"
+    },
+    {
+      "name": "Message size limits in Exchange Server",
+      "url": "https://learn.microsoft.com/exchange/mail-flow/message-size-limits"
+    },
+    {
+      "name": "DISA STIG EX19-MB-000128: Exchange message size restrictions must be controlled on send connectors (V-259681)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259681"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Set MaxMessageSize to 25 MB or less on all send connectors.",
+    "scriptTemplate": "# Set the send size limit on all send connectors.\nGet-SendConnector | Set-SendConnector -MaxMessageSize 25MB"
+  },
+  "considerations": "Reducing the maximum send size may cause legitimate large-attachment emails to be rejected. Coordinate with business stakeholders before lowering the limit.",
+  "roles": [
+    "Mailbox"
+  ]
+}

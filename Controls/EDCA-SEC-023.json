@@ -1,0 +1,49 @@
+{
+  "id": "EDCA-SEC-023",
+  "title": "SMBv1 server protocol is disabled",
+  "description": "Each Exchange server MUST have SMBv1 disabled and the SMBv1 Windows feature removed. SMBv1 is obsolete and is the propagation mechanism for WannaCry and NotPetya. The CIS benchmark requires 'Configure SMBv1 Server' to be 'Disabled'.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Platform Security",
+  "severity": "High",
+  "severityWeight": 8,
+  "frameworks": [
+    "Best Practice",
+    "CIS",
+    "CISA",
+    "ANSSI",
+    "BSI"
+  ],
+  "references": [
+    {
+      "name": "CIS Microsoft Windows Server Benchmark",
+      "url": "https://www.cisecurity.org/benchmark/microsoft_windows_server"
+    },
+    {
+      "name": "SMB security hardening guidance",
+      "url": "https://learn.microsoft.com/windows-server/storage/file-server/troubleshoot/detect-enable-and-disable-smbv1-v2-v3"
+    },
+    {
+      "name": "CIS 4.8 (IG1): Uninstall or Disable Unnecessary Services on Enterprise Assets and Software",
+      "url": "https://www.cisecurity.org/insights/white-papers/cis-controls-v8"
+    },
+    {
+      "name": "ANSSI - Mise en œuvre sécurisée d'un serveur Windows membre AD DS (2025)",
+      "url": "https://messervices.cyber.gouv.fr/guides/mise-en-oeuvre-securisee-dun-serveur-windows"
+    },
+    {
+      "name": "BSI SYS.1.2.3.A4 — Schutz vor Ausnutzung von Schwachstellen in Anwendungen",
+      "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/07_SYS_IT_Systeme/SYS_1_2_3_Windows_Server_Edition_2023.pdf?__blob=publicationFile"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Disable SMBv1 using the SMB server configuration cmdlet and remove the Windows optional feature.",
+    "scriptTemplate": "# Group Policy equivalent (requires MS Security Guide ADMX templates):\n# Computer Configuration > Administrative Templates > MS Security Guide\n#   Configure SMBv1 Server = Disabled\n#   Configure SMBv1 client driver = Enabled (Disable driver)\n#\nSet-SmbServerConfiguration -EnableSMB1Protocol $false -Force\nDisable-WindowsOptionalFeature -Online -FeatureName SMB1Protocol -NoRestart"
+  },
+  "considerations": "Disabling SMBv1 will prevent file sharing with Windows XP and Windows Server 2003 clients or servers. In modern environments this is typically safe. Verify there are no legacy systems (e.g., old printers, NAS devices, or monitoring appliances) on the network that require SMBv1 before disabling.",
+  "roles": [
+    "Mailbox",
+    "Edge"
+  ]
+}

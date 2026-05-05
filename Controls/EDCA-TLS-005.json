@@ -1,0 +1,38 @@
+{
+  "id": "EDCA-TLS-005",
+  "title": "Automatic replies to remote domains are disabled",
+  "description": "The AutoReplyEnabled property on Exchange remote domains controls whether the Transport service will deliver client-configured automatic replies to recipients in that domain; when enabled for external domains it discloses employee absence periods, names, and alternate contact details to any external sender including spammers and reconnaissance actors. The AutoReplyEnabled property MUST be set to False on all remote domain entries. Sending automatic replies to external recipients discloses internal presence information and increases spam risk.",
+  "verify": true,
+  "subject": "Organization",
+  "category": "Transport Security",
+  "severity": "Medium",
+  "severityWeight": 6,
+  "frameworks": [
+    "Best Practice",
+    "CIS",
+    "DISA"
+  ],
+  "references": [
+    {
+      "name": "CIS 2.3.3 (L1): Ensure AutoReplyEnabled is set to False",
+      "url": "https://www.cisecurity.org/benchmark/microsoft_exchange_server"
+    },
+    {
+      "name": "Remote domains in Exchange Server",
+      "url": "https://learn.microsoft.com/exchange/mail-flow/remote-domains/remote-domains"
+    },
+    {
+      "name": "DISA STIG EX19-MB-000140: Exchange must not send automated replies to remote domains (V-259692)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259692"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Set AutoReplyEnabled to False on all remote domains.",
+    "scriptTemplate": "# Disable automatic replies to remote domains.\nGet-RemoteDomain | Set-RemoteDomain -AutoReplyEnabled $false"
+  },
+  "considerations": "This setting prevents client-rule-based auto-replies from being sent externally. It does not affect Out-of-Office messages controlled by the AllowedOOFType setting. Ensure users are informed that client-side auto-replies will no longer reach external recipients.",
+  "roles": [
+    "Mailbox"
+  ]
+}

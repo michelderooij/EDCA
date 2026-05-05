@@ -1,0 +1,49 @@
+{
+  "id": "EDCA-GOV-002",
+  "title": "Exchange product line lifecycle status",
+  "description": "Exchange Server SE MUST be the supported production baseline and MUST be kept current on Cumulative Updates. Exchange Server 2016 and 2019 are out of support and represent a lifecycle risk.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Governance",
+  "severity": "High",
+  "severityWeight": 9,
+  "frameworks": [
+    "Best Practice",
+    "NIS2",
+    "CISA",
+    "BSI",
+    "ISM"
+  ],
+  "references": [
+    {
+      "name": "Exchange Server build numbers, release dates, and support status",
+      "url": "https://learn.microsoft.com/exchange/new-features/build-numbers-and-release-dates"
+    },
+    {
+      "name": "CISA KEV Catalog: Apply patches for known exploited Exchange Server vulnerabilities within required timelines",
+      "url": "https://www.cisa.gov/known-exploited-vulnerabilities-catalog"
+    },
+    {
+      "name": "ENISA / NIS2 Directive (EU) 2022/2555 - Article 21(2)(e): security in network and information systems maintenance - Section 6.3, 6.4, 9",
+      "url": "https://eur-lex.europa.eu/eli/dir/2022/2555/oj"
+    },
+    {
+      "name": "BSI APP.5.2.A9 — Sichere Konfiguration von Exchange-Servern",
+      "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/06_APP_Anwendungen/APP_5_2_Microsoft_Exchange_und_Outlook_Edition_2023.pdf?__blob=publicationFile"
+    },
+    {
+      "name": "ISM: Guidelines for System Management (ISM-1501, ISM-1704, ISM-1905)",
+      "url": "https://www.cyber.gov.au/resources-business-and-government/essential-cyber-security/ism/cyber-security-guidelines/guidelines-for-system-management"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Ensure Exchange Server SE is running the latest approved update. If running Exchange 2016 or 2019, plan migration to Exchange Server SE first.",
+    "scriptTemplate": "# Diagnose: Check Exchange Server build version against lifecycle dates\nGet-ExchangeServer | Select-Object Name, AdminDisplayVersion, Edition, IsEdge | Format-Table -AutoSize\n# Compare build numbers at: https://learn.microsoft.com/exchange/new-features/build-numbers"
+  },
+  "considerations": "Migrating from Exchange 2016 or Exchange 2019 to Exchange SE requires environment planning and coexistence testing. Plan for sufficient coexistence time and test hybrid features, mail flow, and client connectivity before decommissioning older servers.",
+  "roles": [
+    "Mailbox",
+    "Edge"
+  ]
+}

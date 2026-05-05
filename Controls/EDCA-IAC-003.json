@@ -1,0 +1,70 @@
+{
+  "id": "EDCA-IAC-003",
+  "title": "NTLMv2 authentication enforcement baseline",
+  "description": "The Windows LAN Manager authentication level and NTLM minimum session security settings control which variants of the NTLM challenge-response protocol are permitted for network authentication, ranging from the broken LM protocol through NTLMv1 to the current NTLMv2. LAN Manager authentication level and NTLM minimum session security MUST be configured together to enforce NTLMv2 only and refuse LM/NTLM. LmCompatibilityLevel MUST be set to 5 (Send NTLMv2 response only; refuse LM & NTLM). NtlmMinClientSec and NtlmMinServerSec MUST be set to 537395200 (require NTLMv2 session security and 128-bit encryption). Applicability: Exchange 2016/2019/SE with modern clients. Exception: validated legacy interoperability requirements must be risk accepted.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Identity and Access Control",
+  "severity": "High",
+  "severityWeight": 8,
+  "frameworks": [
+    "Best Practice",
+    "CIS",
+    "CISA",
+    "ANSSI",
+    "BSI",
+    "ISM"
+  ],
+  "references": [
+    {
+      "name": "CIS Microsoft Windows Server Benchmark",
+      "url": "https://www.cisecurity.org/benchmark/microsoft_windows_server"
+    },
+    {
+      "name": "Network security: LAN Manager authentication level",
+      "url": "https://learn.microsoft.com/windows/security/threat-protection/security-policy-settings/network-security-lan-manager-authentication-level"
+    },
+    {
+      "name": "CIS 2.3.11.7 (L1): Ensure 'Network security: LAN Manager authentication level' is set to 'Send NTLMv2 response only. Refuse LM & NTLM'",
+      "url": "https://www.cisecurity.org/benchmark/microsoft_windows_server"
+    },
+    {
+      "name": "Network security: minimum session security for NTLM SSP based clients and servers",
+      "url": "https://learn.microsoft.com/windows/security/threat-protection/security-policy-settings/network-security-minimum-session-security-for-ntlm-ssp-based-including-secure-rpc-clients"
+    },
+    {
+      "name": "CIS 2.3.11.10 (L1): Ensure 'Network security: Minimum session security for NTLM SSP based (including secure RPC) clients' is set to 'Require NTLMv2 session security, Require 128-bit encryption'",
+      "url": "https://www.cisecurity.org/benchmark/microsoft_windows_server"
+    },
+    {
+      "name": "CIS 2.3.11.11 (L1): Ensure 'Network security: Minimum session security for NTLM SSP based (including secure RPC) servers' is set to 'Require NTLMv2 session security, Require 128-bit encryption'",
+      "url": "https://www.cisecurity.org/benchmark/microsoft_windows_server"
+    },
+    {
+      "name": "ANSSI - Mise en œuvre sécurisée d'un serveur Windows membre AD DS (2025)",
+      "url": "https://messervices.cyber.gouv.fr/guides/mise-en-oeuvre-securisee-dun-serveur-windows"
+    },
+    {
+      "name": "BSI APP.2.2.A9 — Schutz der Authentisierung beim Einsatz von AD DS",
+      "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/06_APP_Anwendungen/APP_2_2_Active_Directory_Domain_Services_Edition_2023.pdf?__blob=publicationFile"
+    },
+    {
+      "name": "BSI SYS.1.2.3.A5 — Sichere Authentisierung und Autorisierung in Windows Server",
+      "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/07_SYS_IT_Systeme/SYS_1_2_3_Windows_Server_Edition_2023.pdf?__blob=publicationFile"
+    },
+    {
+      "name": "ISM: Guidelines for System Hardening (ISM-1603, ISM-1055)",
+      "url": "https://www.cyber.gov.au/resources-business-and-government/essential-cyber-security/ism/cyber-security-guidelines/guidelines-for-system-hardening"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Set LmCompatibilityLevel to 5 (refuse LM and NTLM, send NTLMv2), and set NtlmMinClientSec and NtlmMinServerSec to require NTLMv2 session security with 128-bit encryption.",
+    "scriptTemplate": "# Enforce NTLMv2 only - refuse LM and NTLM (CIS 2.3.11.7)\nSet-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Lsa' -Name LmCompatibilityLevel -Type DWord -Value 5\n\n# Require NTLMv2 session security + 128-bit encryption for NTLM SSP clients (CIS 2.3.11.10)\nSet-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Lsa\\MSV1_0' -Name NtlmMinClientSec -Type DWord -Value 537395200\n\n# Require NTLMv2 session security + 128-bit encryption for NTLM SSP servers (CIS 2.3.11.11)\nSet-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Lsa\\MSV1_0' -Name NtlmMinServerSec -Type DWord -Value 537395200"
+  },
+  "considerations": "Setting LAN Manager authentication level to NTLMv2-only will break authentication for legacy clients and systems that only support LM or NTLM authentication. Requiring NTLM 128-bit session encryption drops connections from legacy clients that only support 56-bit encryption (pre-Windows 2000). Verify all clients, servers, and services that authenticate against Exchange or AD support NTLMv2 and 128-bit session security before enforcing these policies. Test against any legacy NTLM-dependent services before applying.",
+  "roles": [
+    "Mailbox",
+    "Edge"
+  ]
+}

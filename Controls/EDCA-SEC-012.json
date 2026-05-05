@@ -1,0 +1,33 @@
+{
+  "id": "EDCA-SEC-012",
+  "title": "AMSI integration baseline",
+  "description": "The Antimalware Scan Interface (AMSI) is a Windows platform feature that allows Exchange IIS to pass the content of every HTTP request to a registered antimalware engine for real-time scanning before processing, enabling detection of malicious payloads in web requests. At least one AMSI (Antimalware Scan Interface) provider MUST be registered and AMSI MUST NOT be disabled by Exchange setting override. AMSI enables real-time scanning of Exchange HTTP requests against antimalware engines.",
+  "verify": false,
+  "subject": "Server",
+  "category": "Platform Security",
+  "severity": "High",
+  "severityWeight": 8,
+  "frameworks": [
+    "Best Practice",
+    "CISA"
+  ],
+  "references": [
+    {
+      "name": "CSS AMSIIntegration",
+      "url": "https://microsoft.github.io/CSS-Exchange/Diagnostics/HealthChecker/AMSIIntegration/"
+    },
+    {
+      "name": "CISA AA21-062A: Mitigate Microsoft Exchange Server Vulnerabilities - enable AMSI integration to detect and block malicious scripts",
+      "url": "https://www.cisa.gov/news-events/cybersecurity-advisories/aa21-062a"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Ensure AMSI integration is enabled and no Setting Overrides exist that disable it. If Body Scanning is enabled, verify it is supported on the installed Exchange build version.",
+    "scriptTemplate": "Get-SettingOverride | Where-Object { $_.SectionName -like '*AMSI*' } | Format-List"
+  },
+  "considerations": "Some third-party antivirus products that replace the Windows Defender AMSI provider may not register an AMSI provider even when active. Verify AMSI integration compatibility with your antivirus vendor before enforcing this control. Incorrectly disabling AMSI can leave Exchange endpoints exposed to script-based attacks.",
+  "roles": [
+    "Mailbox"
+  ]
+}

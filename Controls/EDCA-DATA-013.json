@@ -1,0 +1,53 @@
+{
+  "id": "EDCA-DATA-013",
+  "title": "Non-forward-secret key exchange (PKCS / static RSA) is explicitly disabled",
+  "description": "The PKCS (static RSA) key exchange algorithm MUST be disabled in the Windows SCHANNEL registry. Static RSA key exchange does not provide forward secrecy: if the server private key is later compromised, all past sessions can be decrypted. Disabling PKCS in SCHANNEL forces the use of ephemeral (DHE/ECDHE) key exchange algorithms.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Data Security",
+  "severity": "High",
+  "severityWeight": 8,
+  "frameworks": [
+    "Best Practice",
+    "NIS2",
+    "ANSSI",
+    "BSI",
+    "ISM"
+  ],
+  "references": [
+    {
+      "name": "NCSC TLS-Richtlijnen 2025 §3.3.3 - Sleuteluitwisseling",
+      "url": "https://www.ncsc.nl/transport-layer-security/ICT-beveiligingsrichtlijnen-voor-TLS"
+    },
+    {
+      "name": "Microsoft - How to restrict the use of certain cryptographic algorithms in Schannel",
+      "url": "https://learn.microsoft.com/en-us/troubleshoot/windows-server/windows-security/restrict-cryptographic-algorithms-protocols-schannel"
+    },
+    {
+      "name": "ENISA / NIS2 Directive (EU) 2022/2555 - Article 21(2)(h): cryptography and encryption policies - Section 9, 6.7, 6.3, 6.6",
+      "url": "https://eur-lex.europa.eu/eli/dir/2022/2555/oj"
+    },
+    {
+      "name": "ANSSI - Recommandations de sécurité relatives à TLS (v1.2, 2020)",
+      "url": "https://messervices.cyber.gouv.fr/guides/recommandations-de-securite-relatives-tls"
+    },
+    {
+      "name": "BSI APP.5.2.A11 — Absicherung der Kommunikation zwischen Exchange-Systemen",
+      "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/06_APP_Anwendungen/APP_5_2_Microsoft_Exchange_und_Outlook_Edition_2023.pdf?__blob=publicationFile"
+    },
+    {
+      "name": "ISM: Guidelines for Cryptography (ISM-1372, ISM-1448, ISM-1373, ISM-1453)",
+      "url": "https://www.cyber.gov.au/resources-business-and-government/essential-cyber-security/ism/cyber-security-guidelines/guidelines-for-cryptography"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Explicitly disable the PKCS key exchange algorithm by setting the DWORD registry value Enabled=0 under SCHANNEL\\KeyExchangeAlgorithms\\PKCS. A system restart is required for the changes to take effect.",
+    "scriptTemplate": "# Disable the non-forward-secret PKCS (static RSA) key exchange algorithm in SCHANNEL.\n# Run on each Exchange / Windows server. Requires a restart to take effect.\n\n$path = 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\SecurityProviders\\SCHANNEL\\KeyExchangeAlgorithms\\PKCS'\nif (-not (Test-Path -Path $path)) {\n    New-Item -Path $path -Force | Out-Null\n}\nSet-ItemProperty -Path $path -Name 'Enabled' -Type DWord -Value 0\nWrite-Host 'PKCS key exchange disabled. Restart the server for the changes to take effect.'"
+  },
+  "considerations": "Disabling non-forward-secret key exchange (PKCS/static RSA) removes cipher suites that do not provide forward secrecy from TLS negotiation. This improves security by ensuring session keys cannot be decrypted retroactively if the server private key is compromised. Legacy clients or SMTP partners that only support RSA key exchange may be unable to establish TLS sessions after this change.",
+  "roles": [
+    "Mailbox",
+    "Edge"
+  ]
+}

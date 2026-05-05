@@ -1,0 +1,47 @@
+{
+  "id": "EDCA-GOV-012",
+  "title": "Exchange services are documented and unnecessary services are disabled",
+  "description": "Exchange Server installs a set of Windows services corresponding to its enabled roles and features; documenting the required service baseline and disabling unnecessary services minimizes the attack surface exposed by the server. Exchange services MUST be documented, and unnecessary services MUST be removed or disabled. Only services required for the installed Exchange server role and configured features must be active. Unnecessary services expand the attack surface and must be disabled to minimize exposure.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Governance",
+  "severity": "Medium",
+  "severityWeight": 5,
+  "frameworks": [
+    "DISA",
+    "ANSSI",
+    "BSI"
+  ],
+  "references": [
+    {
+      "name": "DISA STIG EX19-MB-000198: Exchange services must be documented and unnecessary services must be removed or disabled (V-259702)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259702"
+    },
+    {
+      "name": "DISA STIG EX19-ED-000198: Exchange services must be documented and unnecessary services must be removed or disabled (V-259635)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_edge_server/2024-12-06/finding/V-259635"
+    },
+    {
+      "name": "Exchange services reference",
+      "url": "https://learn.microsoft.com/exchange/plan-and-deploy/deployment-ref/exchange-2019-system-requirements"
+    },
+    {
+      "name": "ANSSI - Mise en œuvre sécurisée d'un serveur Windows membre AD DS (2025)",
+      "url": "https://messervices.cyber.gouv.fr/guides/mise-en-oeuvre-securisee-dun-serveur-windows"
+    },
+    {
+      "name": "BSI SYS.1.1.A6 — Deaktivierung nicht benötigter Dienste",
+      "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/07_SYS_IT_Systeme/SYS_1_1_Allgemeiner_Server_Edition_2023.pdf?__blob=publicationFile"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Enumerate all running services on Exchange servers and document required services. Disable any non-essential services. POP3 and IMAP4 are disabled by default in Exchange and should remain disabled unless explicitly required. If not in use, set both the back-end and front-end service instances to Disabled and stop any running instances.",
+    "scriptTemplate": "# List all Exchange-related services and their startup types\nGet-Service -DisplayName 'Microsoft Exchange*' | Select-Object DisplayName, Status, StartType | Sort-Object DisplayName\n\n# Diagnose: Check POP3 and IMAP4 service state\nGet-Service -Name MSExchangePOP3, MSExchangePOP3BE, MSExchangeIMAP4, MSExchangeIMAP4BE -ErrorAction SilentlyContinue | Select-Object Name, DisplayName, Status, StartType\n\n# To disable POP3 (frontend + backend):\n# Set-Service -Name MSExchangePOP3   -StartupType Disabled\n# Set-Service -Name MSExchangePOP3BE -StartupType Disabled\n# Stop-Service -Name MSExchangePOP3,   MSExchangePOP3BE   -Force -ErrorAction SilentlyContinue\n\n# To disable IMAP4 (frontend + backend):\n# Set-Service -Name MSExchangeIMAP4   -StartupType Disabled\n# Set-Service -Name MSExchangeIMAP4BE -StartupType Disabled\n# Stop-Service -Name MSExchangeIMAP4, MSExchangeIMAP4BE -Force -ErrorAction SilentlyContinue"
+  },
+  "considerations": "Disabling Exchange services without understanding their role can cause mail flow, client connectivity, or high-availability failures. Consult the Exchange service documentation before disabling any service. Test changes in a non-production environment. Before disabling POP3 or IMAP4, confirm that no mail clients, monitoring systems, or legacy integrations depend on those protocols. Disabling POP3/IMAP4 services does not affect MAPI, EWS, ActiveSync, or SMTP connectivity.",
+  "roles": [
+    "Mailbox",
+    "Edge"
+  ]
+}

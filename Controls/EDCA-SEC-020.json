@@ -1,0 +1,37 @@
+{
+  "id": "EDCA-SEC-020",
+  "title": "OWA Download Domains configured",
+  "description": "OWA Download Domains is an Exchange feature that serves attachment content from a separate HTTPS subdomain (the ExternalDownloadHostName) rather than the primary OWA origin, isolating attachment rendering from the OWA/ECP cookie and script origin to prevent cross-site scripting exploitation. OWA Download Domains (ExternalDownloadHostName) MUST be configured. Without a separate download domain, OWA attachment rendering shares origin with ECP/OWA, creating cross-site scripting (XSS) attack surface. When Hybrid Modern Authentication (HMA) is active, the OAuthIdentityCacheFixForDownloadDomains setting override must also be configured to ensure OWA HMA token caching functions with Download Domains.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Platform Security",
+  "severity": "Medium",
+  "severityWeight": 6,
+  "frameworks": [
+    "Best Practice",
+    "CISA"
+  ],
+  "references": [
+    {
+      "name": "OWA Download Domains configuration guidance",
+      "url": "https://learn.microsoft.com/exchange/plan-and-deploy/post-installation-tasks/security-best-practices/owa-download-domains"
+    },
+    {
+      "name": "CISA AA21-062A: Mitigate Microsoft Exchange Server Vulnerabilities - configure OWA Download Domains to prevent NTLM relay attacks",
+      "url": "https://www.cisa.gov/news-events/cybersecurity-advisories/aa21-062a"
+    },
+    {
+      "name": "Configure Exchange Server on-premises to use Hybrid Modern Authentication",
+      "url": "https://learn.microsoft.com/microsoft-365/enterprise/configure-exchange-server-for-hybrid-modern-authentication"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Configure OWA download domains according to Exchange security best practices. If Hybrid Modern Authentication is active, also apply the OWA HMA Download Domain Support setting override.",
+    "scriptTemplate": "# Diagnose: Check OWA virtual directory DownloadDomains configuration\nGet-OwaVirtualDirectory -Server $env:COMPUTERNAME | Select-Object Server, Name, DownloadDomains, ExternalUrl, InternalUrl | Format-List\n\n# Diagnose: Check if the OWA HMA Download Domain Support override is configured\nGet-SettingOverride | Where-Object { $_.ComponentName -eq 'OAuth' -and $_.SectionName -eq 'OAuthIdentityCacheFixForDownloadDomains' }\n\n# If Hybrid Modern Authentication is active and the override is missing, configure it:\nNew-SettingOverride -Name \"OWA HMA Download Domain Support\" -Component \"OAuth\" -Section \"OAuthIdentityCacheFixForDownloadDomains\" -Parameters (\"Enabled=true\") -Reason \"Enable support for OWA HMA when Download Domains are in use\"\nGet-ExchangeDiagnosticInfo -Process Microsoft.Exchange.Directory.TopologyService -Component VariantConfiguration -Argument Refresh\nRestart-Service -Name W3SVC, WAS -Force"
+  },
+  "considerations": "Configuring OWA Download Domains creates a separate subdomain (e.g., attachments.domain.com) for serving attachment content. This requires DNS configuration and possibly additional SSL certificate coverage for the new subdomain. After configuration, browser clients will be redirected to the attachment domain when downloading from OWA. When HMA is active, the OAuthIdentityCacheFixForDownloadDomains setting override ensures OWA HMA token identity caching is compatible with Download Domains. Restart-Service on W3SVC and WAS will briefly interrupt web services - schedule during a maintenance window.",
+  "roles": [
+    "Mailbox"
+  ]
+}

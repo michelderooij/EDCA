@@ -1,0 +1,74 @@
+{
+  "id": "EDCA-MON-001",
+  "title": "Admin audit logging enabled and configured",
+  "description": "Exchange administrator audit logging records every Exchange Management Shell cmdlet execution — including the cmdlet name, parameters, caller identity, and timestamp — to a dedicated arbitration mailbox, providing a complete audit trail of all administrative changes. Admin audit logging (AdminAuditLogEnabled) MUST be enabled for the Exchange organization and audit record parameters MUST be set. The audit log configuration must specify the minimum cmdlet parameters to be audited, minimum log age, and a defined log path to ensure a complete audit trail. Ensures all Exchange cmdlet executions are recorded, supporting accountability and incident response.",
+  "verify": true,
+  "subject": "Organization",
+  "category": "Monitoring",
+  "severity": "Medium",
+  "severityWeight": 6,
+  "frameworks": [
+    "Best Practice",
+    "NIS2",
+    "CIS",
+    "DISA",
+    "ANSSI",
+    "BSI",
+    "ISM"
+  ],
+  "references": [
+    {
+      "name": "Admin audit logging in Exchange",
+      "url": "https://learn.microsoft.com/exchange/policy-and-compliance/admin-audit-logging/admin-audit-logging"
+    },
+    {
+      "name": "CIS Microsoft Exchange Server Benchmark",
+      "url": "https://www.cisecurity.org/benchmark/microsoft_exchange_server"
+    },
+    {
+      "name": "CIS 1.1.1 (L1): Ensure 'AdminAuditLogEnabled' is set to 'True'",
+      "url": "https://www.cisecurity.org/benchmark/microsoft_exchange_server"
+    },
+    {
+      "name": "DISA STIG EX19-MB-000016: Exchange must have administrator audit logging enabled (V-259648)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259648"
+    },
+    {
+      "name": "DISA STIG EX19-MB-000033: Exchange audit record parameters must be set (V-259654)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259654"
+    },
+    {
+      "name": "Set-AdminAuditLogConfig cmdlet",
+      "url": "https://learn.microsoft.com/powershell/module/exchange/set-adminauditlogconfig"
+    },
+    {
+      "name": "ENISA / NIS2 Directive (EU) 2022/2555 - Article 21(2)(b): incident handling and audit logging - Section 3.2-3.6, 7, 2.2-2.3",
+      "url": "https://eur-lex.europa.eu/eli/dir/2022/2555/oj"
+    },
+    {
+      "name": "ANSSI - Sécuriser la journalisation dans un environnement Microsoft Active Directory (2022)",
+      "url": "https://messervices.cyber.gouv.fr/guides/securiser-la-journalisation-dans-un-environnement-microsoft-active-directory"
+    },
+    {
+      "name": "BSI SYS.1.1.A10 — Protokollierung",
+      "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/07_SYS_IT_Systeme/SYS_1_1_Allgemeiner_Server_Edition_2023.pdf?__blob=publicationFile"
+    },
+    {
+      "name": "BSI APP.2.2.A7 — Umsetzung sicherer Verwaltungsmethoden für Active Directory",
+      "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/06_APP_Anwendungen/APP_2_2_Active_Directory_Domain_Services_Edition_2023.pdf?__blob=publicationFile"
+    },
+    {
+      "name": "ISM: Guidelines for System Monitoring (ISM-0580, ISM-0585)",
+      "url": "https://www.cyber.gov.au/resources-business-and-government/essential-cyber-security/ism/cyber-security-guidelines/guidelines-for-system-monitoring"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Enable Exchange admin audit logging and configure audit record parameters including age limit.",
+    "scriptTemplate": "Set-AdminAuditLogConfig -AdminAuditLogEnabled $true -AdminAuditLogAgeLimit 90.00:00:00"
+  },
+  "considerations": "Admin audit logging generates storage overhead in the arbitration mailbox over time. The default 90-day retention period should be reviewed against organizational compliance requirements; it may be insufficient for regulatory requirements. Ensure the log mailbox (arbitration mailbox) has adequate space. Enabling verbose logging significantly increases log volume and should be used selectively.",
+  "roles": [
+    "Mailbox"
+  ]
+}

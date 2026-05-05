@@ -1,0 +1,52 @@
+{
+  "id": "EDCA-SEC-038",
+  "title": "Exchange has the most current approved update installed",
+  "description": "Exchange MUST have the most current, approved Cumulative Update installed. Running an outdated build exposes the server to known, published security vulnerabilities. Exchange Cumulative Updates must be applied within the DoD-defined timeframe after release. This applies to Exchange 2019, Exchange SE, and Exchange 2016. Note: Exchange 2016 reached end of mainstream support in October 2025, with CU23 as the terminal build; Exchange 2016 organizations must have CU23 installed and should plan migration to Exchange 2019, Exchange SE, or Exchange Online.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Platform Security",
+  "severity": "Medium",
+  "severityWeight": 7,
+  "frameworks": [
+    "DISA",
+    "ANSSI",
+    "BSI",
+    "ISM"
+  ],
+  "references": [
+    {
+      "name": "DISA STIG EX19-MB-000244: Exchange must have the most current, approved Cumulative Update installed (V-259711)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259711"
+    },
+    {
+      "name": "Exchange Server build numbers and release dates",
+      "url": "https://learn.microsoft.com/exchange/new-features/build-numbers-and-release-dates"
+    },
+    {
+      "name": "Exchange Update Wizard",
+      "url": "https://aka.ms/ExchangeUpdateWizard"
+    },
+    {
+      "name": "ANSSI - Mise en œuvre sécurisée d'un serveur Windows membre AD DS (2025)",
+      "url": "https://messervices.cyber.gouv.fr/guides/mise-en-oeuvre-securisee-dun-serveur-windows"
+    },
+    {
+      "name": "BSI APP.5.2.A9 — Sichere Konfiguration von Exchange-Servern",
+      "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/06_APP_Anwendungen/APP_5_2_Microsoft_Exchange_und_Outlook_Edition_2023.pdf?__blob=publicationFile"
+    },
+    {
+      "name": "ISM: Guidelines for System Management (ISM-1501, ISM-1704)",
+      "url": "https://www.cyber.gov.au/resources-business-and-government/essential-cyber-security/ism/cyber-security-guidelines/guidelines-for-system-management"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Install the latest approved Cumulative Update for the installed Exchange Server version.",
+    "scriptTemplate": "# Check current Exchange build for all servers\r\nGet-ExchangeServer | Select-Object Name, AdminDisplayVersion, Edition"
+  },
+  "considerations": "Always test Cumulative Update installations in a non-production environment first. Review the Microsoft Exchange Team Blog for known issues before applying. Exchange 2016 reached end of mainstream support in October 2025; CU23 is the final build -- Exchange 2016 organizations should prioritize migration.",
+  "roles": [
+    "Mailbox",
+    "Edge"
+  ]
+}

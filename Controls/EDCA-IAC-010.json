@@ -1,0 +1,59 @@
+{
+  "id": "EDCA-IAC-010",
+  "title": "Administrative access to EAC and remote PowerShell is restricted",
+  "description": "Administrative access to the Exchange Admin Center (EAC) and remote PowerShell MUST be restricted to authorized management workstations and paths. This control evaluates two automated checks: (1) whether Client Access Rules are configured that explicitly restrict access to the RemotePowerShell or ExchangeAdminCenter protocol, and (2) whether any non-Exchange-administrative users (users without Exchange RBAC role group membership) have RemotePowerShellEnabled set to $true on their Exchange user object.",
+  "verify": true,
+  "subject": "Organization",
+  "category": "Identity and Access Control",
+  "severity": "High",
+  "severityWeight": 8,
+  "frameworks": [
+    "CISA",
+    "DISA",
+    "BSI",
+    "ISM"
+  ],
+  "references": [
+    {
+      "name": "Client Access Rules in Exchange",
+      "url": "https://learn.microsoft.com/exchange/clients/client-access-rules/client-access-rules"
+    },
+    {
+      "name": "Network ports for clients and mail flow in Exchange",
+      "url": "https://learn.microsoft.com/exchange/plan-and-deploy/deployment-ref/network-ports"
+    },
+    {
+      "name": "CISA AA21-062A: Mitigate Microsoft Exchange Server Vulnerabilities - restrict administrative access to Exchange Admin Center and remote PowerShell",
+      "url": "https://www.cisa.gov/news-events/cybersecurity-advisories/aa21-062a"
+    },
+    {
+      "name": "DISA STIG EX19-MB-000173: Role-Based Access Control must be defined for privileged and nonprivileged users (V-259698)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259698"
+    },
+    {
+      "name": "DISA STIG EX19-MB-000034: The RBAC role for audit log management must be defined and restricted (V-259655)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259655"
+    },
+    {
+      "name": "BSI APP.5.2.A3 — Berechtigungsmanagement und Zugriffsrechte",
+      "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/06_APP_Anwendungen/APP_5_2_Microsoft_Exchange_und_Outlook_Edition_2023.pdf?__blob=publicationFile"
+    },
+    {
+      "name": "BSI APP.2.2.A17 — Anmelderestriktionen für hochprivilegierte Konten der Gesamtstruktur auf Clients und Servern",
+      "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/06_APP_Anwendungen/APP_2_2_Active_Directory_Domain_Services_Edition_2023.pdf?__blob=publicationFile"
+    },
+    {
+      "name": "ISM: Guidelines for System Hardening (ISM-1173, ISM-1833)",
+      "url": "https://www.cyber.gov.au/resources-business-and-government/essential-cyber-security/ism/cyber-security-guidelines/guidelines-for-system-hardening"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Create Client Access Rules to restrict EAC and remote PowerShell access to authorized source IP ranges, and disable RemotePowerShellEnabled for all users who are not Exchange administrators.",
+    "scriptTemplate": "# --- Check 1: Client Access Rules ---\n# Review existing rules; look for rules covering RemotePowerShell and ExchangeAdminCenter protocols.\nGet-ClientAccessRule | Select-Object Name, Action, AnyOfProtocols, AnyOfClientIPAddressesOrRanges, Priority, Enabled | Sort-Object Priority | Format-Table -AutoSize\n\n# Create a rule to allow only trusted management IP ranges for remote PowerShell and EAC\n# (replace 10.0.0.0/8 with your actual management IP range)\nNew-ClientAccessRule -Name 'Allow PS and EAC from management range' -Action AllowAccess -AnyOfProtocols RemotePowerShell, ExchangeAdminCenter -AnyOfClientIPAddressesOrRanges 10.0.0.0/8 -Priority 1\nNew-ClientAccessRule -Name 'Block PS and EAC from all other sources' -Action DenyAccess -AnyOfProtocols RemotePowerShell, ExchangeAdminCenter -AnyOfClientIPAddressesOrRanges 0.0.0.0-255.255.255.255 -Priority 2\n\n# --- Check 2: Non-Exchange-admin users with RemotePowerShellEnabled ---\n# Find Exchange RBAC role group members (Exchange admins):\n$adminSams = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)\nGet-RoleGroup | ForEach-Object {\n    Get-RoleGroupMember -Identity $_.Name -ErrorAction SilentlyContinue |\n        ForEach-Object { $null = $adminSams.Add($_.SamAccountName) }\n}\n\n# Find non-admin users with RemotePowerShellEnabled = $true and disable it:\nGet-User -Filter {RemotePowerShellEnabled -eq $true} -ResultSize Unlimited |\n    Where-Object { -not $adminSams.Contains($_.SamAccountName) } |\n    ForEach-Object {\n        Write-Host \"Disabling RemotePowerShellEnabled for $($_.Name) ($($_.SamAccountName))\"\n        Set-User -Identity $_.Identity -RemotePowerShellEnabled $false\n    }"
+  },
+  "considerations": "Restricting EAC and remote PowerShell access to specific client access rules may lock out administrators working from unregistered IP addresses. Ensure VPN or jump server access is available for administrative operations. Changes to Client Access Rules take effect immediately and can lock out the current session.",
+  "roles": [
+    "Mailbox"
+  ]
+}

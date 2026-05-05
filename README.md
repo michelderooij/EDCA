@@ -127,7 +127,7 @@ Report and remediation files are written to `Output`:
 
 ## Frameworks
 
-EDCA evaluates controls against the following compliance frameworks. Each control in `Config/controls.json` is tagged with one or more framework identifiers; the HTML report displays a separate score for each.
+EDCA evaluates controls against the following compliance frameworks. Each control in `Controls/` is tagged with one or more framework identifiers; the HTML report displays a separate score for each.
 
 | Framework | Official Reference(s) | Version / Date | Official URL | License |
 |---|---|---|---|---|

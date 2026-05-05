@@ -1,0 +1,43 @@
+{
+  "id": "EDCA-SEC-026",
+  "title": "Microsoft Defender real-time protection enabled",
+  "description": "Each Exchange server MUST have Microsoft Defender Antivirus real-time protection enabled when Defender is the active antivirus solution. CIS Controls v8 requires deploying and maintaining anti-malware software.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Platform Security",
+  "severity": "Medium",
+  "severityWeight": 7,
+  "frameworks": [
+    "BSI",
+    "CIS",
+    "CISA"
+  ],
+  "references": [
+    {
+      "name": "CIS Microsoft Windows Server 2019/2022/2025 Benchmarks",
+      "url": "https://www.cisecurity.org/benchmark/microsoft_windows_server"
+    },
+    {
+      "name": "Get-MpComputerStatus reference",
+      "url": "https://learn.microsoft.com/powershell/module/defender/get-mpcomputerstatus"
+    },
+    {
+      "name": "CIS 10.1 (IG1): Deploy and Maintain Anti-Malware Software",
+      "url": "https://www.cisecurity.org/insights/white-papers/cis-controls-v8"
+    },
+    {
+      "name": "BSI SYS.1.1.A9 — Einsatz von Virenschutz-Programmen auf Servern",
+      "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/07_SYS_IT_Systeme/SYS_1_1_Allgemeiner_Server_Edition_2023.pdf?__blob=publicationFile"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Enable Defender real-time monitoring.",
+    "scriptTemplate": "# Group Policy equivalent:\n# Computer Configuration > Administrative Templates > Windows Components > Microsoft Defender Antivirus > Real-time Protection\n#   Turn off real-time protection = Disabled  (Disabled policy = real-time protection ON)\n#\nSet-MpPreference -DisableRealtimeMonitoring $false"
+  },
+  "considerations": "Microsoft Defender real-time protection on Exchange servers must be configured with correct Exchange-specific exclusions to avoid false positives and performance degradation. Enabling real-time protection without the correct exclusions can cause database corruption or transport stalls. Verify all Microsoft-recommended exclusions are in place before enabling.",
+  "roles": [
+    "Mailbox",
+    "Edge"
+  ]
+}

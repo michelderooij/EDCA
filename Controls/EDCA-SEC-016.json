@@ -1,0 +1,28 @@
+{
+  "id": "EDCA-SEC-016",
+  "title": "IIS web.config baseline",
+  "description": "All Exchange IIS web.config files MUST be present and contain valid XML. Missing or corrupt web.config files cause failures in virtual directories including OWA, ECP, EWS, and Autodiscover.",
+  "verify": false,
+  "subject": "Server",
+  "category": "Platform Security",
+  "severity": "Medium",
+  "severityWeight": 6,
+  "frameworks": [
+    "Best Practice"
+  ],
+  "references": [
+    {
+      "name": "CSS IISWebConfigCheck",
+      "url": "https://microsoft.github.io/CSS-Exchange/Diagnostics/HealthChecker/IISWebConfigCheck/"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Replace all %ExchangeInstallDir% placeholder tokens in Exchange web.config and SharedWebConfig.config files with the actual Exchange installation path.",
+    "scriptTemplate": "# Diagnose: Scan for unresolved %ExchangeInstallDir% placeholder tokens in Exchange web.config files\n$exchPath = $exinstall\nGet-ChildItem $exchPath -Filter 'web.config' -Recurse -ErrorAction SilentlyContinue | Select-String '%ExchangeInstallDir%' | Select-Object Path, LineNumber, Line | Format-Table -AutoSize"
+  },
+  "considerations": "Modifying IIS web.config files for Exchange virtual directories can break authentication, HTTPS bindings, or client connectivity. Only apply changes that are explicitly documented in Exchange configuration guidance. Back up web.config files before making any manual changes.",
+  "roles": [
+    "Mailbox"
+  ]
+}

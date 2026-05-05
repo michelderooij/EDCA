@@ -1,0 +1,37 @@
+{
+  "id": "EDCA-PERF-015",
+  "title": "Processor cores meet Exchange version and role requirements",
+  "description": "Exchange Server has a published maximum physical core count per server:\n• Exchange 2016: maximum 24 cores\n• Exchange 2019 / Exchange SE: maximum 48 cores\n\nExceeding the limit is unsupported and can cause scheduling inefficiencies in the Exchange worker process thread pool. On virtual hosts, the supported vCPU-to-physical-core ratio is:\n• Maximum: 2:1\n• Recommended: 1:1\n\nOver-allocation causes CPU ready time in the hypervisor scheduler and latency spikes under load.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Performance",
+  "severity": "High",
+  "severityWeight": 8,
+  "frameworks": [
+    "Best Practice"
+  ],
+  "references": [
+    {
+      "name": "Exchange Server 2019 and Exchange SE system requirements",
+      "url": "https://learn.microsoft.com/en-us/exchange/plan-and-deploy/system-requirements"
+    },
+    {
+      "name": "Exchange Server virtualization: requirements for hardware virtualization",
+      "url": "https://learn.microsoft.com/en-us/exchange/plan-and-deploy/virtualization#requirements-for-hardware-virtualization"
+    },
+    {
+      "name": "Exchange Server role requirements calculator",
+      "url": "https://www.microsoft.com/en-us/download/details.aspx?id=102123"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Reduce the number of physical cores (or assigned vCPUs on virtual machines) to the supported maximum for the Exchange version. For virtual machines, also ensure the vCPU count does not exceed twice the number of physical processor cores available on the host. Use the Exchange Server role requirements calculator (https://aka.ms/Exchange2019Calc) to determine the optimal core count based on mailbox count and message profile before resizing.",
+    "scriptTemplate": "# Report current processor topology and evaluate against Exchange requirements\n$cs      = Get-CimInstance Win32_ComputerSystem\n$cores   = (@(Get-CimInstance Win32_Processor) | Measure-Object -Property NumberOfCores -Sum).Sum\n$logical = [int]$cs.NumberOfLogicalProcessors\nWrite-Host ('Physical cores  : {0}' -f $cores)\nWrite-Host ('Logical procs   : {0}' -f $logical)\nWrite-Host ('vCPU:pCore ratio: {0}:1' -f [math]::Round($logical / $cores, 2))\n\n$exSrv  = Get-ExchangeServer -Identity $env:COMPUTERNAME -ErrorAction SilentlyContinue\n$ver    = if ($null -ne $exSrv) { [string]$exSrv.AdminDisplayVersion } else { 'Unknown' }\nWrite-Host ('Exchange version: {0}' -f $ver)\n\n$maxCores = $null\nif ($ver -match 'Version 15\\.1') { $maxCores = 24 }\nelseif ($ver -match 'Version 15\\.2') { $maxCores = 48 }\n\nif ($null -ne $maxCores -and $cores -gt $maxCores) {\n    Write-Warning ('Physical core count ({0}) exceeds the {1}-core maximum.' -f $cores, $maxCores)\n} else { Write-Host 'Core count is within the supported range.' }\n\n$ratio = [math]::Round($logical / $cores, 2)\nif ($ratio -gt 2) {\n    Write-Warning ('vCPU:pCore ratio {0}:1 exceeds the supported 2:1 maximum.' -f $ratio)\n} elseif ($ratio -gt 1) {\n    Write-Warning ('vCPU:pCore ratio {0}:1 is above the recommended 1:1 ratio.' -f $ratio)\n} else { Write-Host 'vCPU:pCore ratio is compliant.' }"
+  },
+  "considerations": "• Assigning more cores than the supported maximum does not improve Exchange throughput; the worker process thread pool is tuned for the documented core counts and excess cores introduce additional scheduling latency.\n• On virtual machines, a vCPU:pCore ratio above 2:1 causes CPU ready time in the hypervisor scheduler, manifesting as unpredictable latency spikes in Exchange processing. Even the 2:1 ratio is an upper bound; a 1:1 ratio is recommended for production Mailbox workloads.\n• Reducing the vCPU count on a virtual machine requires a reboot before Exchange processes observe the new topology; schedule during a maintenance window.\n• Use the Exchange Server role requirements calculator (https://aka.ms/Exchange2019Calc) to determine the optimal core count before making changes.",
+  "roles": [
+    "Mailbox",
+    "Edge"
+  ]
+}

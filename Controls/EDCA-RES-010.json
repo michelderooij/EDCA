@@ -1,0 +1,32 @@
+{
+  "id": "EDCA-RES-010",
+  "title": "Exchange mailbox databases are in a highly available and redundant configuration",
+  "description": "A Database Availability Group (DAG) is an Exchange high-availability feature that maintains synchronous log-shipping copies of mailbox databases across two or more Mailbox servers, enabling automatic failover with minimal data loss when a server or storage failure occurs. Exchange MUST provide mailbox databases in a highly available and redundant configuration. Exchange Database Availability Groups (DAGs) provide continuous replication of mailbox database copies across multiple servers. At least one additional database copy must exist to protect against server failure and data loss.",
+  "verify": true,
+  "subject": "Database",
+  "category": "Resilience",
+  "severity": "Medium",
+  "severityWeight": 7,
+  "frameworks": [
+    "DISA"
+  ],
+  "references": [
+    {
+      "name": "DISA STIG EX19-MB-000234: Exchange must provide mailbox databases in a highly available and redundant configuration (V-259709)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259709"
+    },
+    {
+      "name": "Database Availability Groups in Exchange Server",
+      "url": "https://learn.microsoft.com/exchange/high-availability/database-availability-groups/database-availability-groups"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Configure a Database Availability Group with at least two mailbox database copies across different servers.",
+    "scriptTemplate": "# Check mailbox database copy status."
+  },
+  "considerations": "DAG deployment requires at least two Exchange Mailbox servers and a witness server (file share witness or Azure cloud witness). Planning DAG deployment involves network, storage, and licensing considerations. This is a significant infrastructure change requiring careful planning.",
+  "roles": [
+    "Mailbox"
+  ]
+}

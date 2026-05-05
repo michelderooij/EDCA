@@ -1,0 +1,36 @@
+{
+  "id": "EDCA-RES-011",
+  "title": "Single Item Recovery enabled on user mailboxes",
+  "description": "Single Item Recovery is a per-mailbox Exchange feature that prevents items purged from the Recoverable Items folder (dumpster) from being permanently deleted, retaining them for the full deleted-item retention period so they can be restored by an administrator. Single Item Recovery (SingleItemRecoveryEnabled) MUST be enabled on all user mailboxes. When enabled, items permanently deleted from the Recoverable Items folder are retained for the deleted-item retention period, protecting against accidental or malicious deletion.",
+  "verify": false,
+  "subject": "Mailbox",
+  "category": "Resilience",
+  "severity": "Medium",
+  "severityWeight": 6,
+  "frameworks": [
+    "Best Practice"
+  ],
+  "references": [
+    {
+      "name": "Exchange Server Preferred Architecture: Data resiliency",
+      "url": "https://learn.microsoft.com/en-us/exchange/plan-and-deploy/deployment-ref/preferred-architecture-2019"
+    },
+    {
+      "name": "Enable or disable single item recovery for a mailbox",
+      "url": "https://learn.microsoft.com/en-us/exchange/recipients/user-mailboxes/enable-or-disable-single-item-recovery"
+    },
+    {
+      "name": "Set-Mailbox: SingleItemRecoveryEnabled parameter",
+      "url": "https://learn.microsoft.com/en-us/powershell/module/exchange/set-mailbox"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Enable Single Item Recovery on all user mailboxes where it is currently disabled.",
+    "scriptTemplate": "Get-Mailbox -ResultSize Unlimited -RecipientTypeDetails UserMailbox | Where-Object { -not $_.SingleItemRecoveryEnabled } | Set-Mailbox -SingleItemRecoveryEnabled $true"
+  },
+  "considerations": "Enabling Single Item Recovery increases Recoverable Items folder storage usage because purged items are retained beyond the normal dumpster expiry for the full deleted-item retention period. Ensure adequate mailbox database storage capacity before enabling globally. Single Item Recovery is superseded by In-Place Hold or Litigation Hold when a hold is active on the mailbox.",
+  "roles": [
+    "Mailbox"
+  ]
+}

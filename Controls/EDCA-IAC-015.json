@@ -1,0 +1,33 @@
+{
+  "id": "EDCA-IAC-015",
+  "title": "Mobile device mailbox policy does not allow unmanaged devices",
+  "description": "The AllowNonProvisionableDevices property on the default mobile device mailbox policy MUST be False. Allowing unmanaged devices permits devices that cannot enforce the policy to connect, undermining mobile security controls. The CIS benchmark requires unmanaged devices to be blocked.",
+  "verify": true,
+  "subject": "Organization",
+  "category": "Identity and Access Control",
+  "severity": "Medium",
+  "severityWeight": 5,
+  "frameworks": [
+    "Best Practice",
+    "CIS"
+  ],
+  "references": [
+    {
+      "name": "CIS 3.2 (L1): Ensure Allow unmanaged devices is set to False",
+      "url": "https://www.cisecurity.org/benchmark/microsoft_exchange_server"
+    },
+    {
+      "name": "Mobile device mailbox policies in Exchange Server",
+      "url": "https://learn.microsoft.com/exchange/clients/exchange-activesync/mobile-device-mailbox-policies"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Block unmanaged devices in the default mobile device mailbox policy.",
+    "scriptTemplate": "# Block unmanaged (non-provisionable) devices in the default mobile device mailbox policy.\nSet-MobileDeviceMailboxPolicy -Identity Default -AllowNonProvisionableDevices $false"
+  },
+  "considerations": "Blocking non-provisionable devices will prevent some older devices from synchronising. Evaluate the device inventory before enforcing this setting.",
+  "roles": [
+    "Mailbox"
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "id": "EDCA-TLS-020",
+  "title": "Exchange receive connector connection timeout is limited",
+  "description": "The receive connector ConnectionTimeout property controls the maximum duration of an inbound SMTP session before the Exchange Transport service forcibly closes the connection; without an enforced limit, slow-transmitting senders or intentionally slow clients can hold transport worker threads open indefinitely, enabling slow-transmission denial-of-service attacks. The Exchange receive connector timeout MUST be limited. Excessively long receive connector timeouts hold transport service resources open and may enable slow-transmission denial-of-service attacks. Receive connectors must be configured with a defined connection timeout to release stalled inbound connections promptly.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Transport Security",
+  "severity": "Low",
+  "severityWeight": 3,
+  "frameworks": [
+    "DISA"
+  ],
+  "references": [
+    {
+      "name": "DISA STIG EX19-MB-000158: The Exchange receive connector timeout must be limited (V-259697)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259697"
+    },
+    {
+      "name": "Set-ReceiveConnector cmdlet",
+      "url": "https://learn.microsoft.com/powershell/module/exchange/set-receiveconnector"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Set ConnectionTimeout on all receive connectors to 5 minutes or less.",
+    "scriptTemplate": "Get-ReceiveConnector | Set-ReceiveConnector -ConnectionTimeout 00:05:00"
+  },
+  "considerations": "Reducing connection timeout too aggressively may reject legitimate slow-transmitting senders. A 5-minute timeout is the DISA-recommended value and covers most SMTP use cases. Test with non-production connectors first.",
+  "roles": [
+    "Mailbox",
+    "Edge"
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "id": "EDCA-TLS-048",
+  "title": "Edge Receive connector tarpitting interval is configured",
+  "description": "Receive connectors on the Edge Transport server MUST have a tarpitting interval of at least 5 seconds (00:00:05). Tarpitting introduces an artificial delay in SMTP responses to commands issued by senders who fail recipient validation, slowing down directory harvest attacks and reducing the throughput of malicious senders.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Transport Security",
+  "severity": "Medium",
+  "severityWeight": 5,
+  "frameworks": [
+    "Best Practice",
+    "DISA"
+  ],
+  "references": [
+    {
+      "name": "Microsoft — Receive connectors",
+      "url": "https://learn.microsoft.com/exchange/mail-flow/connectors/receive-connectors"
+    },
+    {
+      "name": "DISA STIG EX19-ED-000099: The Exchange Receive connector must use tarpitting (V-259621)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_edge_server/2024-12-06/finding/V-259621"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Set TarpitInterval to at least 00:00:05 on all Edge Receive connectors: Set-ReceiveConnector -Identity <name> -TarpitInterval '00:00:05'.",
+    "scriptTemplate": "Get-ReceiveConnector | Select-Object Identity, TarpitInterval\n# To set minimum tarpitting:\n# Get-ReceiveConnector | Set-ReceiveConnector -TarpitInterval '00:00:05'"
+  },
+  "considerations": "The default tarpitting interval in Exchange is 5 seconds (00:00:05), which meets this control. Verify that no connector has been set to 00:00:00. Increasing the interval beyond 5 seconds may cause timeouts with legitimate mail servers that have strict timeout thresholds.",
+  "roles": [
+    "Edge"
+  ]
+}

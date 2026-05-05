@@ -1,0 +1,37 @@
+{
+  "id": "EDCA-IAC-011",
+  "title": "Dedicated hybrid app is used by EvoSTS AuthServer",
+  "description": "The EvoSTS AuthServer is the Exchange on-premises OAuth authorization server entry that points to Microsoft Entra ID as the token issuer, enabling Exchange to validate OAuth tokens issued by Entra ID for hybrid mail flow and free/busy operations. When hybrid OAuth configuration is detected, the EvoSTS AuthServer MUST use the dedicated Exchange hybrid application app ID and MUST NOT use the shared Exchange Online first-party app ID 00000002-0000-0ff1-ce00-000000000000.",
+  "verify": true,
+  "subject": "Organization",
+  "category": "Identity and Access Control",
+  "severity": "High",
+  "severityWeight": 8,
+  "frameworks": [
+    "Best Practice",
+    "CISA"
+  ],
+  "references": [
+    {
+      "name": "CSS ExchangeHybridApplicationCheck",
+      "url": "https://microsoft.github.io/CSS-Exchange/Diagnostics/HealthChecker/ExchangeHybridApplicationCheck/"
+    },
+    {
+      "name": "Dedicated Exchange Hybrid Application guidance",
+      "url": "https://aka.ms/HC-ExchangeHybridApplication"
+    },
+    {
+      "name": "CISA AA21-062A: Mitigate Microsoft Exchange Server Vulnerabilities - use a dedicated hybrid application identity to avoid over-privileged EvoSTS AuthServer",
+      "url": "https://www.cisa.gov/news-events/cybersecurity-advisories/aa21-062a"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Deploy a dedicated Exchange Hybrid Application using the ConfigureExchangeHybridApplication tool to support the transition from EWS to Microsoft Graph API for hybrid functionality.",
+    "scriptTemplate": "# Diagnose: Check EvoSTS AuthServer ApplicationIdentifier for dedicated hybrid app configuration\nGet-AuthServer | Where-Object { $_.Type -eq 'AzureAD' } | Select-Object Name, Enabled, ApplicationIdentifier, DomainName | Format-List\n# Default (non-dedicated) app ApplicationIdentifier: 48af08dc-f6d2-435f-b2a7-069abd99c086\n# A dedicated hybrid app will show a different GUID provisioned via the Hybrid Configuration Wizard."
+  },
+  "considerations": "Transitioning from a shared to a dedicated hybrid application requires creating a new dedicated application in Azure AD and re-registering the EvoSTS AuthServer in Exchange. During the transition period, hybrid connectivity (free/busy, mail routing, mailbox moves) may be briefly interrupted. Test hybrid features after completing the migration.",
+  "roles": [
+    "Mailbox"
+  ]
+}

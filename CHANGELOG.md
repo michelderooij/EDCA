@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.93 Preview
+- Controls library split into individual JSON files: `Config/controls.json` has been replaced by a `Controls/` directory containing one JSON file per control, named after the control ID (e.g. `EDCA-DATA-001.json`). This makes individual controls easier to manage, review, and contribute to.
+- `-ControlFile` parameter renamed to `-ControlsPath`; it now accepts a directory path (default: `.\Controls`). EDCA loads all `*.json` files from that directory at startup.
+
 ## v0.92 Preview
 - Added ASD ISM framework controls
 - You can now select multiple frameworks, multiple RAG states, categories or targets in the report.

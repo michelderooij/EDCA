@@ -1,0 +1,28 @@
+{
+  "id": "EDCA-SEC-027",
+  "title": "IIS loaded modules are signed and trusted",
+  "description": "IIS global modules are native or managed code components registered in the IIS global module list that intercept and process all HTTP requests on the server; on Exchange hosts, unexpected or unsigned modules may indicate tampering, web shell installation, or persistence by an attacker. Detect unsigned or untrusted IIS modules that can represent security risk on Exchange hosts.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Platform Security",
+  "severity": "High",
+  "severityWeight": 8,
+  "frameworks": [
+    "Best Practice"
+  ],
+  "references": [
+    {
+      "name": "CSS IIS module anomaly checks",
+      "url": "https://github.com/microsoft/CSS-Exchange/blob/main/Diagnostics/HealthChecker/HealthChecker.ps1"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Remove or replace unsigned/untrusted IIS modules and validate module chain-of-trust.",
+    "scriptTemplate": "# Diagnose: List IIS global modules and check Authenticode signature status\nImport-Module WebAdministration -ErrorAction SilentlyContinue\nGet-WebConfiguration 'system.webServer/globalModules/*' | Select-Object Name, Image | ForEach-Object { $sig = Get-AuthenticodeSignature $_.Image -ErrorAction SilentlyContinue; [PSCustomObject]@{ Name=$_.Name; SignatureStatus=$sig.Status; SignedBy=$sig.SignerCertificate.Subject } }"
+  },
+  "considerations": "Unsigned or untrusted IIS modules in Exchange virtual directories may have been installed by Exchange patches or third-party products. Removing a module required by Exchange or a legitimate third-party product will break the associated Exchange functionality. Verify the purpose of each flagged module before removal.",
+  "roles": [
+    "Mailbox"
+  ]
+}

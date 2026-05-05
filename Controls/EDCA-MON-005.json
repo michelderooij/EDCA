@@ -1,0 +1,46 @@
+{
+  "id": "EDCA-MON-005",
+  "title": "Transport message tracking logging is enabled",
+  "description": "Exchange message tracking is a per-message audit log that records every routing decision, delivery attempt, and status event for messages processed by the Transport service, enabling administrators to trace the path of any message through the Exchange organization. Each Exchange server MUST have transport message tracking logging enabled. Message tracking logs record per-message routing events and support incident response, compliance, and delivery troubleshooting.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Monitoring",
+  "severity": "Medium",
+  "severityWeight": 6,
+  "frameworks": [
+    "DISA",
+    "ANSSI"
+  ],
+  "references": [
+    {
+      "name": "Get-TransportService cmdlet",
+      "url": "https://learn.microsoft.com/powershell/module/exchange/get-transportservice"
+    },
+    {
+      "name": "Set-TransportService cmdlet",
+      "url": "https://learn.microsoft.com/powershell/module/exchange/set-transportservice"
+    },
+    {
+      "name": "DISA STIG EX19-MB-000041: Exchange message tracking logging must be enabled (V-259657)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259657"
+    },
+    {
+      "name": "DISA STIG EX19-ED-000041: Exchange message tracking logging must be enabled (V-259583)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_edge_server/2024-12-06/finding/V-259583"
+    },
+    {
+      "name": "ANSSI - Sécuriser la journalisation dans un environnement Microsoft Active Directory (2022)",
+      "url": "https://messervices.cyber.gouv.fr/guides/securiser-la-journalisation-dans-un-environnement-microsoft-active-directory"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Enable message tracking logging on transport service.",
+    "scriptTemplate": "Set-TransportService -Identity $env:COMPUTERNAME -MessageTrackingLogEnabled $true"
+  },
+  "considerations": "Message tracking logs contain metadata about every message processed by Transport. On high-traffic servers these logs can consume substantial disk space. Ensure log rotation and disk capacity are appropriate. Message tracking logs may contain sensitive information about internal communication patterns.",
+  "roles": [
+    "Mailbox",
+    "Edge"
+  ]
+}

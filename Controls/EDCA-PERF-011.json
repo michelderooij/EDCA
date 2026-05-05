@@ -1,0 +1,37 @@
+{
+  "id": "EDCA-PERF-011",
+  "title": "VMXNET3 adapter health baseline (ESX)",
+  "description": "The VMXNET3 virtual network adapter is VMware's high-performance paravirtualized NIC driver for ESXi guests; its receive ring buffers and small receive buffer pools determine how many inbound packets can be queued before the guest OS is forced to discard them. For VMware ESX-hosted Exchange servers using VMXNET3 virtual NICs, the PacketsReceivedDiscarded counter MUST be zero. A non-zero value indicates the guest OS is dropping inbound packets due to insufficient receive buffer space, which causes retransmits and degrades Exchange performance. The HealthChecker evaluation criteria are: Pass is no discards; Warning is 1–999 discards; Fail is 1000 or more discards (Fail). This counter is cumulative from the last reboot or NIC driver reset, so even a non-zero value that is not increasing warrants investigation. Two key VMXNET3 advanced driver properties govern receive buffer capacity: Small Rx Buffers (recommended maximum: 8192) and Rx Ring #1 Size (recommended maximum: 4096). Values below the recommended maximum increase the risk of buffer exhaustion under high-traffic bursts. In addition, the 'adaptive rx ring sizing' feature can cause random interface resets when it dynamically resizes the ring - disabling it is recommended if intermittent resets are observed. Note: this counter is a cumulative accumulation since last reboot or NIC driver reset, so even an idle adapter can report a non-zero value from historical activity.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Performance",
+  "severity": "Low",
+  "severityWeight": 4,
+  "frameworks": [
+    "Best Practice"
+  ],
+  "references": [
+    {
+      "name": "Microsoft CSS-Exchange HealthChecker: PacketsLossCheck",
+      "url": "https://microsoft.github.io/CSS-Exchange/Diagnostics/HealthChecker/PacketsLossCheck/"
+    },
+    {
+      "name": "VMware KB 2039495: Large packet loss in the guest OS using VMXNET3 in ESXi",
+      "url": "https://knowledge.broadcom.com/external/article?legacyId=2039495"
+    },
+    {
+      "name": "VMware KB 78343: Disable adaptive rx ring sizing to avoid random interface reset",
+      "url": "https://knowledge.broadcom.com/external/article?legacyId=78343"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "When PacketsReceivedDiscarded is non-zero on a VMXNET3 adapter, increase the receive buffer settings to their maximum values to reduce the risk of buffer exhaustion: set Small Rx Buffers to 8192 and Rx Ring #1 Size to 4096 via the adapter Advanced Properties in Device Manager. If random interface resets are observed alongside packet loss, also disable the 'adaptive rx ring sizing' advanced property. No reboot is required, but existing TCP sessions (including RDP) may be disrupted when the driver reloads the new configuration - use a vSphere console to make changes where possible.",
+    "scriptTemplate": "# Diagnose: Show VMXNET3 adapters, packet loss counter, and current ring/buffer settings\n$vmxnet = @(Get-NetAdapter | Where-Object { $_.InterfaceDescription -like '*VMXNET3*' })\nif ($vmxnet.Count -eq 0) { Write-Host 'No VMXNET3 adapters found.'; return }\n\nforeach ($nic in $vmxnet) {\n    Write-Host ('--- Adapter: {0} ({1}) ---' -f $nic.Name, $nic.InterfaceDescription)\n\n    # Packet loss counter (Good=0, Warning<1000, Error>=1000)\n    $stats = Get-NetAdapterStatistics -Name $nic.Name -ErrorAction SilentlyContinue\n    if ($null -ne $stats) {\n        $discards = ($stats.PSObject.Properties | Where-Object { $_.Name -match 'Discard' } | Measure-Object -Property Value -Sum).Sum\n        Write-Host ('  PacketsReceivedDiscarded : {0}  (Good=0 / Warning<1000 / Error>=1000)' -f $discards)\n    }\n\n    # Current advanced driver properties (ring size and buffer settings)\n    $advProps = Get-NetAdapterAdvancedProperty -Name $nic.Name -ErrorAction SilentlyContinue\n    $ring1    = $advProps | Where-Object { $_.DisplayName -match 'Rx Ring.*#?\\s*1|Ring.*#?\\s*1' } | Select-Object -First 1\n    $smallRx  = $advProps | Where-Object { $_.DisplayName -match 'Small' } | Select-Object -First 1\n    $adaptive = $advProps | Where-Object { $_.DisplayName -match 'adaptive' } | Select-Object -First 1\n    Write-Host ('  Rx Ring #1 Size          : {0}  (recommended: 4096)' -f $(if ($ring1)   { $ring1.DisplayValue }   else { 'not found' }))\n    Write-Host ('  Small Rx Buffers         : {0}  (recommended: 8192)' -f $(if ($smallRx) { $smallRx.DisplayValue } else { 'not found' }))\n    if ($adaptive) { Write-Host ('  Adaptive Rx Ring Sizing  : {0}  (recommended: Disabled)' -f $adaptive.DisplayValue) }\n}\n\n# To update: open Device Manager -> Network Adapters -> right-click VMXNET3 adapter\n# -> Properties -> Advanced tab -> set Rx Ring #1 Size = 4096, Small Rx Buffers = 8192\n# Alternatively, use Set-NetAdapterAdvancedProperty (name may vary by driver version):\n# Set-NetAdapterAdvancedProperty -Name 'Ethernet0' -DisplayName 'Rx Ring #1 Size' -DisplayValue '4096'\n# Set-NetAdapterAdvancedProperty -Name 'Ethernet0' -DisplayName 'Small Rx Buffers' -DisplayValue '8192'"
+  },
+  "considerations": "Only applicable in VMware environments with VMXNET3 virtual NICs. The PacketsReceivedDiscarded counter accumulates from the last reboot or NIC driver reset, so a non-zero value may reflect historical activity rather than an active issue. Increasing Small Rx Buffers and Rx Ring #1 Size allocates more memory for the virtual NIC receive path, which increases memory overhead on both the VM and the ESXi host. Increase values gradually when host memory resources are near capacity, and monitor host memory balloon activity after changes. No reboot is required to apply ring/buffer changes, but the driver will momentarily reset the adapter, which will disconnect active TCP sessions - including RDP and Exchange client connections. Perform changes during a maintenance window or via vSphere console to avoid disruption. The Small Rx Buffers and Rx Ring #1 Size settings affect non-jumbo frame traffic only. On hosts running VMware Tools 10.4.0 or later, adaptive rx ring sizing is disabled by default.",
+  "roles": [
+    "Mailbox",
+    "Edge"
+  ]
+}

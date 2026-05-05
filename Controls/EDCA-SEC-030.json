@@ -1,0 +1,28 @@
+{
+  "id": "EDCA-SEC-030",
+  "title": "DisableAsyncNotification reset to baseline",
+  "description": "The DisableAsyncNotification registry value under HKLM\\SOFTWARE\\Microsoft\\ExchangeServer\\v15 was introduced as a temporary workaround for a specific Exchange push notification issue and must be restored to its baseline value of 0 once the underlying issue is resolved. The DisableAsyncNotification registry value MUST be set to 0 on each Exchange server. A value of 1 was a temporary mitigation for a specific Exchange vulnerability and must be restored to 0 to avoid degraded push notification performance.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Platform Security",
+  "severity": "Medium",
+  "severityWeight": 6,
+  "frameworks": [
+    "Best Practice"
+  ],
+  "references": [
+    {
+      "name": "CSS DisableAsyncNotification warning",
+      "url": "http://support.microsoft.com/kb/5013118"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Reset DisableAsyncNotification to 0 in Exchange registry root.",
+    "scriptTemplate": "Set-ItemProperty -Path 'HKLM:\\SOFTWARE\\Microsoft\\ExchangeServer\\v15' -Name DisableAsyncNotification -Type DWord -Value 0"
+  },
+  "considerations": "The DisableAsyncNotification registry value was introduced as a mitigation for a specific Exchange issue. If it is set incorrectly it can affect push notification delivery for OWA and Outlook. Only reset this value if it has drifted from the baseline without explicit support guidance.",
+  "roles": [
+    "Mailbox"
+  ]
+}

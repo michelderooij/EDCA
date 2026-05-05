@@ -1,0 +1,29 @@
+{
+  "id": "EDCA-PERF-003",
+  "title": "Hyper-Threading/SMT not enabled",
+  "description": "Hyper-Threading (Intel) and Simultaneous Multi-Threading (AMD) are CPU features that present each physical core as two logical processors to the operating system, allowing two threads to share a single core's execution resources simultaneously. Hyper-Threading (SMT) MUST be disabled: logical processor count MUST equal physical core count. Exchange does not support Hyper-Threading and its presence can degrade performance.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Performance",
+  "severity": "Low",
+  "severityWeight": 4,
+  "frameworks": [
+    "Best Practice"
+  ],
+  "references": [
+    {
+      "name": "CSS processor topology guidance",
+      "url": "https://github.com/microsoft/CSS-Exchange/blob/main/Diagnostics/HealthChecker/HealthChecker.ps1"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Review BIOS/host settings for SMT/Hyper-Threading and disable per performance policy where approved.",
+    "scriptTemplate": "# Diagnose: Check Hyper-Threading/SMT state (LogicalProcessors > Cores indicates HT is enabled)\nGet-WmiObject -Class Win32_Processor | Select-Object Name, NumberOfCores, NumberOfLogicalProcessors | ForEach-Object { \"$($_.Name): $($_.NumberOfCores) cores / $($_.NumberOfLogicalProcessors) logical - HT: $(if ($_.NumberOfLogicalProcessors -gt $_.NumberOfCores) {'ENABLED'} else {'disabled'})\" }\n# If HT/SMT is enabled, disable it in BIOS firmware. Verify Exchange sizing after the change."
+  },
+  "considerations": "Disabling Hyper-Threading/SMT is a mitigation for CPU side-channel vulnerabilities (MDS, TAA, Spectre). The performance reduction can be up to 30%. Only apply this if regulatory requirements or your threat model mandate it. This change requires a reboot and coordination with production scheduling.",
+  "roles": [
+    "Mailbox",
+    "Edge"
+  ]
+}

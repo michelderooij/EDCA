@@ -1,0 +1,37 @@
+{
+  "id": "EDCA-SEC-015",
+  "title": "FIP-FS baseline",
+  "description": "FIP-FS (Forefront Identity Protection — File Scanning) is the Exchange transport content filtering engine that scans messages in the transport pipeline for malware and policy violations; its scan engine version is stored in numbered subdirectories under the Exchange FIP-FS installation path. FIP-FS engine version folders MUST NOT contain known-problematic version markers. Known-problematic FIP-FS engine versions cause Exchange transport queue failures and mail flow stoppage.",
+  "verify": false,
+  "subject": "Server",
+  "category": "Platform Security",
+  "severity": "Medium",
+  "severityWeight": 6,
+  "frameworks": [
+    "Best Practice",
+    "DISA"
+  ],
+  "references": [
+    {
+      "name": "CSS FIPFSCheck",
+      "url": "https://microsoft.github.io/CSS-Exchange/Diagnostics/HealthChecker/FIPFSCheck/"
+    },
+    {
+      "name": "DISA STIG EX19-MB-000146: Exchange antimalware agent must be enabled and configured (V-259694)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259694"
+    },
+    {
+      "name": "DISA STIG EX19-MB-000147: The Exchange malware scanning agent must be configured for automatic updates (V-259695)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259695"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Run Reset-ScanEngineVersion.ps1 from the CSS-Exchange toolkit to remove the problematic FIP-FS scan engine version folder (2201010000 or higher). On fixed Exchange builds, delete the folder manually or restart the Transport service.",
+    "scriptTemplate": "# Diagnose: Check FIP-FS scan engine version (versions >= 2201010000 caused the Y2K22 bug on unpatched Exchange)\n$exchPath = $exinstall\nGet-ChildItem (Join-Path $exchPath 'FIP-FS\\Data\\Engines\\amd64\\Microsoft') -Directory -ErrorAction SilentlyContinue | Select-Object Name, LastWriteTime | Sort-Object Name\nGet-Service MSExchangeTransport | Select-Object Name, Status"
+  },
+  "considerations": "FIP-FS (File Inspection for Filtering) is used by the Exchange transport pipeline for content filtering. FIP-FS failures typically indicate scan engine issues. Repair or reinstallation of the scan engine may temporarily disable content filtering. Review impact on transport rules and malware filtering before proceeding.",
+  "roles": [
+    "Mailbox"
+  ]
+}

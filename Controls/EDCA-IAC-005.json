@@ -1,0 +1,52 @@
+{
+  "id": "EDCA-IAC-005",
+  "title": "RDP requires Network Level Authentication",
+  "description": "Network Level Authentication (NLA) is an RDP security feature that requires users to authenticate with valid credentials before the Remote Desktop server allocates a full desktop session, moving authentication to the network layer before a session is established. Each Exchange server MUST require Network Level Authentication (NLA) for all Remote Desktop connections. NLA authenticates users before establishing a full desktop session, reducing the RDP attack surface.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Identity and Access Control",
+  "severity": "High",
+  "severityWeight": 8,
+  "frameworks": [
+    "CIS",
+    "ANSSI",
+    "BSI",
+    "ISM"
+  ],
+  "references": [
+    {
+      "name": "CIS Microsoft Windows Server 2019/2022/2025 Benchmarks",
+      "url": "https://www.cisecurity.org/benchmark/microsoft_windows_server"
+    },
+    {
+      "name": "NLA for Remote Desktop",
+      "url": "https://learn.microsoft.com/windows-server/remote/remote-desktop-services/clients/remote-desktop-allow-access"
+    },
+    {
+      "name": "CIS 18.10.28.3.8 (L1): Ensure 'Require user authentication for remote connections by using Network Level Authentication' is set to 'Enabled'",
+      "url": "https://www.cisecurity.org/benchmark/microsoft_windows_server"
+    },
+    {
+      "name": "ANSSI - Mise en œuvre sécurisée d'un serveur Windows membre AD DS (2025)",
+      "url": "https://messervices.cyber.gouv.fr/guides/mise-en-oeuvre-securisee-dun-serveur-windows"
+    },
+    {
+      "name": "BSI SYS.1.2.3.A6 — Sicherheit beim Fernzugriff über RDP",
+      "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/07_SYS_IT_Systeme/SYS_1_2_3_Windows_Server_Edition_2023.pdf?__blob=publicationFile"
+    },
+    {
+      "name": "ISM: Guidelines for System Hardening (ISM-1546)",
+      "url": "https://www.cyber.gov.au/resources-business-and-government/essential-cyber-security/ism/cyber-security-guidelines/guidelines-for-system-hardening"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Require NLA for RDP-Tcp endpoint.",
+    "scriptTemplate": "Set-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Terminal Server\\WinStations\\RDP-Tcp' -Name UserAuthentication -Type DWord -Value 1"
+  },
+  "considerations": "Enabling Network Level Authentication (NLA) for RDP requires that connecting clients support CredSSP authentication. Very old RDP clients (pre-Vista) may not connect. Some RDP proxy solutions may require configuration updates. Test admin connectivity after enabling NLA before applying broadly.",
+  "roles": [
+    "Mailbox",
+    "Edge"
+  ]
+}

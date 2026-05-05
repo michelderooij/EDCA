@@ -1,0 +1,49 @@
+{
+  "id": "EDCA-TLS-014",
+  "title": "External send connector has domain security enabled",
+  "description": "Domain security (mutual TLS) is an Exchange feature that uses certificate-based authentication to cryptographically verify the identity of a remote mail server during SMTP session establishment, binding the session to a specific certificate subject rather than relying on opportunistic encryption alone. The DomainSecureEnabled property on the internet-facing send connector MUST be set to True. Domain security (mutual TLS) provides certificate-based authentication between mail servers, offering stronger guarantees than opportunistic TLS.",
+  "verify": true,
+  "subject": "Organization",
+  "category": "Transport Security",
+  "severity": "Medium",
+  "severityWeight": 5,
+  "frameworks": [
+    "Best Practice",
+    "BSI",
+    "CIS",
+    "DISA",
+    "NIS2",
+    "ISM"
+  ],
+  "references": [
+    {
+      "name": "CIS 2.2.10 (L1): Ensure External send connector authentication Domain security is set to True",
+      "url": "https://www.cisecurity.org/benchmark/microsoft_exchange_server"
+    },
+    {
+      "name": "Domain Security in Exchange Server",
+      "url": "https://learn.microsoft.com/exchange/mail-flow/connectors/connector-selection"
+    },
+    {
+      "name": "DISA STIG EX19-MB-000233: Exchange internal send connectors must use an authentication level (V-259708)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259708"
+    },
+    {
+      "name": "BSI APP.5.2.A11 — Absicherung der Kommunikation zwischen Exchange-Systemen",
+      "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/06_APP_Anwendungen/APP_5_2_Microsoft_Exchange_und_Outlook_Edition_2023.pdf?__blob=publicationFile"
+    },
+    {
+      "name": "ISM: Guidelines for Email (ISM-0567, ISM-0571)",
+      "url": "https://www.cyber.gov.au/resources-business-and-government/essential-cyber-security/ism/cyber-security-guidelines/guidelines-for-email"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Enable DomainSecureEnabled on the external send connector.",
+    "scriptTemplate": "# Enable domain security on the internet send connector.\nGet-SendConnector | Where-Object { $_.AddressSpaces -like '*' } |\n    Set-SendConnector -DomainSecureEnabled $true"
+  },
+  "considerations": "Domain security requires both sending and receiving mail systems to be configured with valid certificates and mutual TLS settings. Coordinate with partner mail administrators before enabling.",
+  "roles": [
+    "Mailbox"
+  ]
+}

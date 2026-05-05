@@ -1,0 +1,43 @@
+{
+  "id": "EDCA-DATA-015",
+  "title": "RPC client access connections require encryption",
+  "description": "The EncryptionRequired property on the RPC client access service MUST be set to True. Requiring encryption for MAPI/RPC connections protects mailbox data in transit from clients connecting via legacy Outlook profiles.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Data Security",
+  "severity": "Medium",
+  "severityWeight": 5,
+  "frameworks": [
+    "Best Practice",
+    "BSI",
+    "CIS",
+    "DISA"
+  ],
+  "references": [
+    {
+      "name": "CIS 2.3.6 (L1): Ensure Require client MAPI encryption is set to True",
+      "url": "https://www.cisecurity.org/benchmark/microsoft_exchange_server"
+    },
+    {
+      "name": "Set-RpcClientAccess in Exchange Server",
+      "url": "https://learn.microsoft.com/powershell/module/exchange/set-rpcclientaccess"
+    },
+    {
+      "name": "DISA STIG EX19-MB-000006: Exchange must use encryption for RPC client access (V-259645)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259645"
+    },
+    {
+      "name": "BSI APP.5.2.A11 — Absicherung der Kommunikation zwischen Exchange-Systemen",
+      "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/06_APP_Anwendungen/APP_5_2_Microsoft_Exchange_und_Outlook_Edition_2023.pdf?__blob=publicationFile"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Set EncryptionRequired to True on the RPC client access service.",
+    "scriptTemplate": "# Require encryption for MAPI/RPC client connections.\nSet-RpcClientAccess -Server $env:COMPUTERNAME -EncryptionRequired $true"
+  },
+  "considerations": "Enabling encryption required may break older Outlook clients that do not support encrypted MAPI connections. Verify Outlook version compatibility before enforcing this setting.",
+  "roles": [
+    "Mailbox"
+  ]
+}

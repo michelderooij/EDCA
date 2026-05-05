@@ -1,0 +1,48 @@
+{
+  "id": "EDCA-TLS-023",
+  "title": "Accepted domains publish enforcing DMARC records",
+  "description": "Domain-based Message Authentication, Reporting, and Conformance (DMARC) is a DNS-published email authentication policy that instructs receiving mail servers on how to handle messages that fail SPF and DKIM alignment checks, with actions ranging from monitoring (p=none) through quarantine to outright rejection (p=reject). Each accepted domain MUST publish a DMARC TXT record at _dmarc.<domain> with a policy of quarantine or reject.",
+  "verify": true,
+  "subject": "Organization",
+  "category": "Transport Security",
+  "severity": "High",
+  "severityWeight": 8,
+  "frameworks": [
+    "Best Practice",
+    "NIS2",
+    "CIS",
+    "CISA",
+    "ISM"
+  ],
+  "references": [
+    {
+      "name": "RFC 7489 - Domain-based Message Authentication, Reporting, and Conformance (DMARC)",
+      "url": "https://www.rfc-editor.org/rfc/rfc7489"
+    },
+    {
+      "name": "ENISA / NIS2 Directive (EU) 2022/2555 - Article 21(2)(e): network and information systems security, anti-spoofing - Section 1, 6.7, 3.2-3.4, 8",
+      "url": "https://eur-lex.europa.eu/eli/dir/2022/2555/oj"
+    },
+    {
+      "name": "CISA BOD 18-01 (2017): Enhance Email and Web Security - §d(3): Configure DMARC with a policy of reject",
+      "url": "https://www.cisa.gov/binding-operational-directive-18-01"
+    },
+    {
+      "name": "CIS 9.5 (IG1): Implement DMARC and Enable Receiver-Side Verification",
+      "url": "https://www.cisecurity.org/insights/white-papers/cis-controls-v8"
+    },
+    {
+      "name": "ISM: Guidelines for Email (ISM-1540, ISM-1799)",
+      "url": "https://www.cyber.gov.au/resources-business-and-government/essential-cyber-security/ism/cyber-security-guidelines/guidelines-for-email"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Publish one DMARC TXT record and move policy to quarantine or reject after monitoring.",
+    "scriptTemplate": "# DNS change required at _dmarc.<domain>, e.g. v=DMARC1; p=quarantine; rua=mailto:dmarc-reports@example.com"
+  },
+  "considerations": "Enforcing DMARC p=reject blocks mail that fails SPF and/or DKIM alignment, including forwarded mail and mailing lists that rewrite DMARC-aligned identities. Begin with p=none (monitoring mode) and review DMARC aggregate reports before moving to p=quarantine, then p=reject. Ensure DKIM is fully deployed before switching to reject policy.",
+  "roles": [
+    "Mailbox"
+  ]
+}

@@ -1,0 +1,38 @@
+{
+  "id": "EDCA-TLS-006",
+  "title": "Non-delivery reports to remote domains are disabled",
+  "description": "Non-Delivery Reports (NDRs) are bounce messages that Exchange Transport generates when a message cannot be delivered; when enabled for external remote domains, these reports disclose internal mail routing infrastructure details to external parties and can be exploited to verify whether recipient addresses exist (directory harvest attack enablement). The NDREnabled property MUST be set to False on all remote domain entries. Sending Non-Delivery Reports to external senders exposes internal infrastructure details and contributes to backscatter spam.",
+  "verify": true,
+  "subject": "Organization",
+  "category": "Transport Security",
+  "severity": "Medium",
+  "severityWeight": 5,
+  "frameworks": [
+    "Best Practice",
+    "CIS",
+    "DISA"
+  ],
+  "references": [
+    {
+      "name": "CIS 2.3.1 (L2): Ensure NDREnabled is set to False",
+      "url": "https://www.cisecurity.org/benchmark/microsoft_exchange_server"
+    },
+    {
+      "name": "Configure external postmaster address",
+      "url": "https://learn.microsoft.com/exchange/mail-flow/connectors/configure-outbound-connector"
+    },
+    {
+      "name": "DISA STIG EX19-MB-000231: Exchange must not send nondelivery reports to remote domains (V-259706)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259706"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Set NDREnabled to False on all remote domains.",
+    "scriptTemplate": "# Disable NDRs to remote domains.\nGet-RemoteDomain | Set-RemoteDomain -NDREnabled $false"
+  },
+  "considerations": "This is a CIS Level 2 control. Disabling NDRs to external senders may complicate troubleshooting of legitimate delivery failures. Consider whether your organization needs external NDRs for business continuity before applying.",
+  "roles": [
+    "Mailbox"
+  ]
+}

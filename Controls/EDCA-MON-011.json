@@ -1,0 +1,32 @@
+{
+  "id": "EDCA-MON-011",
+  "title": "Exchange audit data resides on a separate partition",
+  "description": "Exchange audit data MUST be on separate partitions. Placing audit logs on a dedicated volume ensures that audit data is not lost due to system volume exhaustion and provides isolation from the operating system and Exchange application files, which is required for DISA compliance.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Monitoring",
+  "severity": "Medium",
+  "severityWeight": 5,
+  "frameworks": [
+    "DISA"
+  ],
+  "references": [
+    {
+      "name": "DISA STIG EX19-MB-000058: Exchange audit data must be on separate partitions (V-259663)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259663"
+    },
+    {
+      "name": "Exchange Server storage configuration",
+      "url": "https://learn.microsoft.com/exchange/plan-and-deploy/deployment-ref/preferred-architecture"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Move Exchange audit log paths to a dedicated volume separate from the OS and Exchange application volumes.",
+    "scriptTemplate": "# Verify audit log paths are on dedicated volumes."
+  },
+  "considerations": "Moving log paths requires downtime and reconfiguration of the Transport service and audit log configuration. Plan for a maintenance window and ensure the target volume has adequate capacity for log growth.",
+  "roles": [
+    "Mailbox"
+  ]
+}

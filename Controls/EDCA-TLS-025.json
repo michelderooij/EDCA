@@ -1,0 +1,43 @@
+{
+  "id": "EDCA-TLS-025",
+  "title": "Accepted domains publish valid MTA-STS policies",
+  "description": "MTA-STS (Mail Transfer Agent Strict Transport Security) allows a domain to publish a requirement that sending mail servers must use TLS when delivering to that domain and must validate the certificate; the policy is served over HTTPS and cached by senders so that future deliveries enforce TLS even if DNS is temporarily manipulated. Each accepted domain MUST publish a valid MTA-STS DNS TXT record and host a reachable HTTPS policy file with STSv1 syntax.",
+  "verify": true,
+  "subject": "Organization",
+  "category": "Transport Security",
+  "severity": "Medium",
+  "severityWeight": 7,
+  "frameworks": [
+    "Best Practice",
+    "NIS2",
+    "CISA",
+    "ISM"
+  ],
+  "references": [
+    {
+      "name": "RFC 8461 - SMTP MTA Strict Transport Security (MTA-STS)",
+      "url": "https://www.rfc-editor.org/rfc/rfc8461"
+    },
+    {
+      "name": "ENISA / NIS2 Directive (EU) 2022/2555 - Article 21(2)(e): secure email transport and mail flow integrity - Section 6.7, 6.3, 6.4, 3.2-3.4",
+      "url": "https://eur-lex.europa.eu/eli/dir/2022/2555/oj"
+    },
+    {
+      "name": "CISA BOD 18-01 (2017): Enhance Email and Web Security - enforce email transport security via policy",
+      "url": "https://www.cisa.gov/binding-operational-directive-18-01"
+    },
+    {
+      "name": "ISM: Guidelines for Email (ISM-1589)",
+      "url": "https://www.cyber.gov.au/resources-business-and-government/essential-cyber-security/ism/cyber-security-guidelines/guidelines-for-email"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Publish _mta-sts TXT with v=STSv1; id=... and host a valid policy at https://mta-sts.<domain>/.well-known/mta-sts.txt.",
+    "scriptTemplate": "# DNS + web hosting change required for MTA-STS policy publication."
+  },
+  "considerations": "MTA-STS in enforce mode causes sending servers that cannot verify TLS to bounce messages rather than deliver them in plaintext. Always begin with mode=testing and monitor policy evaluation before switching to enforce. The max_age TTL determines how long senders cache the policy - a shorter TTL allows faster rollback but reduces caching efficiency.",
+  "roles": [
+    "Mailbox"
+  ]
+}

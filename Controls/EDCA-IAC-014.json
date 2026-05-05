@@ -1,0 +1,33 @@
+{
+  "id": "EDCA-IAC-014",
+  "title": "Mobile device mailbox policy does not allow simple passwords",
+  "description": "The AllowSimplePassword property on the default mobile device mailbox policy MUST be False. Allowing simple passwords (such as sequential or repeated digits) reduces the security of mobile device PIN codes, making them easier to guess. The CIS benchmark requires simple passwords to be disallowed.",
+  "verify": true,
+  "subject": "Organization",
+  "category": "Identity and Access Control",
+  "severity": "Medium",
+  "severityWeight": 5,
+  "frameworks": [
+    "Best Practice",
+    "CIS"
+  ],
+  "references": [
+    {
+      "name": "CIS 3.1 (L1): Ensure Allow simple passwords is set to False",
+      "url": "https://www.cisecurity.org/benchmark/microsoft_exchange_server"
+    },
+    {
+      "name": "Mobile device mailbox policies in Exchange Server",
+      "url": "https://learn.microsoft.com/exchange/clients/exchange-activesync/mobile-device-mailbox-policies"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Disable simple passwords in the default mobile device mailbox policy.",
+    "scriptTemplate": "# Disallow simple passwords in the default mobile device mailbox policy.\nSet-MobileDeviceMailboxPolicy -Identity Default -AllowSimplePassword $false"
+  },
+  "considerations": "Disabling simple passwords requires users to set a more complex PIN or password on their devices. End-user communication may be required before enforcing this change.",
+  "roles": [
+    "Mailbox"
+  ]
+}

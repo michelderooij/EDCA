@@ -1,0 +1,36 @@
+{
+  "id": "EDCA-SEC-006",
+  "title": "Setting overrides baseline",
+  "description": "Exchange setting overrides are runtime configuration entries created via New-SettingOverride that modify Exchange component behavior outside of standard cmdlet settings — typically applied by Microsoft Support or automated tooling to deliver targeted fixes without requiring a full Cumulative Update. Active Exchange setting overrides MUST NOT exist unless the override has been formally approved and documented. Active overrides can suppress critical security or functionality controls.",
+  "verify": false,
+  "subject": "Server",
+  "category": "Platform Security",
+  "severity": "Medium",
+  "severityWeight": 6,
+  "frameworks": [
+    "Best Practice"
+  ],
+  "references": [
+    {
+      "name": "CSS SettingOverridesCheck",
+      "url": "https://microsoft.github.io/CSS-Exchange/Diagnostics/HealthChecker/SettingOverridesCheck/"
+    },
+    {
+      "name": "Deploy dedicated Exchange hybrid app",
+      "url": "https://learn.microsoft.com/en-us/exchange/hybrid-deployment/deploy-dedicated-hybrid-app"
+    },
+    {
+      "name": "Exchange Server AMSI integration",
+      "url": "https://learn.microsoft.com/en-us/exchange/antispam-and-antimalware/amsi-integration-with-exchange"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Remove problematic Setting Overrides using Remove-SettingOverride. Review existing overrides with Get-SettingOverride and remove those flagged by the check. Only modify overrides as directed by Microsoft documentation or CSS support - incorrect usage can cause serious Exchange damage.",
+    "scriptTemplate": "Get-SettingOverride | Format-List Name, ComponentName, SectionName, Status"
+  },
+  "considerations": "Setting overrides are typically applied by Microsoft support to mitigate specific issues. Removing an override can re-expose the condition that originally required it. Review the purpose of each override with Microsoft before removing it.\n\nThe following overrides are expected and should not be treated as an issue:\n\n• EnableSigningVerification: automatically set by Exchange when serialized data signing (EX-BP-054) is enabled.\n• EnableExchangeHybrid3PAppFeature and FlightingServiceOverride_<ServerName>_F1.1[.x] (one per server): expected when the dedicated Exchange hybrid application is configured.\n• EnableAMSIBodyScan* (e.g., EnableAMSIBodyScanAllProtocols, EnableAMSIBodyScanForEcp, EnableAMSIBodyScanForEws, EnableAMSIBodyScanForOwa, EnableAMSIBodyScanForEcpEwsOwaPS): expected when AMSI body scanning is enabled per-protocol or globally.\n• EnableEncryptionAlgorithmCBC: enables AES256-CBC encryption mode for IRM-protected messages (EX-BP-153).",
+  "roles": [
+    "Mailbox"
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "id": "EDCA-SEC-017",
+  "title": "IPv6 enabled baseline",
+  "description": "The DisabledComponents registry value under HKLM\\SYSTEM\\CurrentControlSet\\Services\\Tcpip6\\Parameters is a bitmask that controls which IPv6 components are active on Windows; a value of 0xFF (255) disables all IPv6 interfaces, tunnel adapters, and loopback, removing the IPv6 stack entirely. IPv6 MUST NOT be fully disabled (DisabledComponents registry value MUST NOT be 255 = 0xFF). Exchange 2013 and later require IPv6 for internal communication; fully disabling IPv6 causes transport and directory failures.",
+  "verify": false,
+  "subject": "Server",
+  "category": "Platform Security",
+  "severity": "Medium",
+  "severityWeight": 6,
+  "frameworks": [
+    "Best Practice"
+  ],
+  "references": [
+    {
+      "name": "CSS IPv6EnabledCheck",
+      "url": "https://microsoft.github.io/CSS-Exchange/Diagnostics/HealthChecker/IPv6EnabledCheck/"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "If disabling IPv6, disable it consistently both on the NIC adapters and in the registry under HKLM\\SYSTEM\\CurrentControlSet\\Services\\Tcpip6\\Parameters (DisabledComponents). Partial disabling causes more problems than leaving IPv6 enabled.",
+    "scriptTemplate": "# Diagnose: Check IPv6 DisabledComponents registry value and adapter binding state\n$val = (Get-ItemProperty 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\Tcpip6\\Parameters' -Name DisabledComponents -ErrorAction SilentlyContinue).DisabledComponents\n\"DisabledComponents: $(if ($null -eq $val) { 'not set (IPv6 fully enabled - default)' } else { '0x{0:X2} ({0})' -f $val })\"\nGet-NetAdapterBinding -ComponentID 'ms_tcpip6' | Select-Object Name, Enabled"
+  },
+  "considerations": "Completely disabling IPv6 at the OS level is not recommended by Microsoft and can cause issues with Windows Server networking stack and Active Directory on Server 2019 and later. Use the Exchange CSS guidance - which configures specific IPv6 bindings - rather than disabling IPv6 entirely. Exchange Server itself does not require IPv6 but the Windows stack does.",
+  "roles": [
+    "Mailbox",
+    "Edge"
+  ]
+}

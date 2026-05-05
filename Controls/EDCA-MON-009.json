@@ -1,0 +1,38 @@
+{
+  "id": "EDCA-MON-009",
+  "title": "Exchange transport queue monitoring is configured",
+  "description": "Exchange transport back pressure is a built-in resource monitoring mechanism in the Transport service that tracks server resource consumption — primarily disk space on the queue database volume — and automatically throttles or defers inbound SMTP connections when resources approach exhaustion. Exchange transport back pressure configuration MUST be present and active. Back pressure in Exchange monitors disk space utilization to protect transport service availability - queue growth is disk-bounded, not message-count-bounded. Message retention in queues is time-bounded by message priority: normal-priority messages expire after NormalPriorityMessageExpirationTimeout (default: 2 days) and critical-priority messages expire after CriticalPriorityMessageExpirationTimeout (default: 4 hours). Critical messages are time-limited, not size-limited. Transport flood protection relies entirely on back pressure: if the back pressure thresholds are breached, Exchange defers inbound connections to prevent disk exhaustion. Configuration is stored in $ExInstall\\Bin\\EdgeTransport.exe.config under the appSettings section.",
+  "verify": false,
+  "subject": "Server",
+  "category": "Monitoring",
+  "severity": "Medium",
+  "severityWeight": 5,
+  "frameworks": [
+    "DISA",
+    "ANSSI"
+  ],
+  "references": [
+    {
+      "name": "DISA STIG EX19-MB-000048: Exchange queue monitoring must be configured with threshold and action (V-259659)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259659"
+    },
+    {
+      "name": "Back pressure and resource monitoring in Exchange Server",
+      "url": "https://learn.microsoft.com/exchange/mail-flow/back-pressure"
+    },
+    {
+      "name": "ANSSI - Sécuriser la journalisation dans un environnement Microsoft Active Directory (2022)",
+      "url": "https://messervices.cyber.gouv.fr/guides/securiser-la-journalisation-dans-un-environnement-microsoft-active-directory"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Ensure EdgeTransport.exe.config is present at $ExInstall\\Bin\\EdgeTransport.exe.config. To customize message expiration timeouts, add or update the NormalPriorityMessageExpirationTimeout and CriticalPriorityMessageExpirationTimeout keys in the appSettings section. Restart the Microsoft Exchange Transport service after any changes.",
+    "scriptTemplate": "# Back pressure settings are in $ExInstall\\Bin\\EdgeTransport.exe.config\n# Example appSettings entries (add inside <appSettings>):\n#   <add key=\"NormalPriorityMessageExpirationTimeout\"   value=\"2.00:00:00\" />\n#   <add key=\"CriticalPriorityMessageExpirationTimeout\" value=\"0.04:00:00\" />\n# Restart the transport service after editing:\nRestart-Service MSExchangeTransport"
+  },
+  "considerations": "Exchange SMTP queue growth is disk-bounded: back pressure monitors disk space percentage and database checkpoint depth, not message count. When disk pressure thresholds are reached, Exchange defers inbound SMTP connections. Message expiration is time-bounded by priority - normal messages default to 2 days, critical messages default to 4 hours. These timeouts are enforced even when queues are near-full; critical messages are not protected by size limits. If NormalPriorityMessageExpirationTimeout or CriticalPriorityMessageExpirationTimeout are absent from EdgeTransport.exe.config, Exchange uses built-in compiled defaults (2.00:00:00 and 0.04:00:00 respectively). Changes to EdgeTransport.exe.config require a restart of the Microsoft Exchange Transport service. Use care when modifying back-pressure thresholds as overly aggressive settings may cause unnecessary mail deferral.",
+  "roles": [
+    "Mailbox",
+    "Edge"
+  ]
+}

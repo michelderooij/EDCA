@@ -1,0 +1,68 @@
+{
+  "id": "EDCA-DATA-005",
+  "title": "TLS 1.0 and TLS 1.1 are disabled",
+  "description": "Each Exchange server MUST have TLS 1.0 and TLS 1.1 disabled for both the server and client SCHANNEL roles. Legacy TLS versions contain known cryptographic weaknesses and must not be available to clients or outbound connections.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Data Security",
+  "severity": "High",
+  "severityWeight": 8,
+  "frameworks": [
+    "Best Practice",
+    "NIS2",
+    "CIS",
+    "CISA",
+    "DISA",
+    "ANSSI",
+    "BSI",
+    "ISM"
+  ],
+  "references": [
+    {
+      "name": "Microsoft TLS best practices",
+      "url": "https://learn.microsoft.com/windows-server/security/tls/tls-registry-settings"
+    },
+    {
+      "name": "ENISA / NIS2 Directive (EU) 2022/2555 - Article 21(2)(h): cryptography and encryption policies - Section 9, 6.7, 6.3, 6.6",
+      "url": "https://eur-lex.europa.eu/eli/dir/2022/2555/oj"
+    },
+    {
+      "name": "CIS Microsoft Windows Server Benchmark",
+      "url": "https://www.cisecurity.org/benchmark/microsoft_windows_server"
+    },
+    {
+      "name": "CIS Microsoft Windows Server 2022 Benchmark v3.0.0 (L1): Ensure TLS 1.0 is disabled (Enabled = 0) under HKLM\\SYSTEM\\CurrentControlSet\\Control\\SecurityProviders\\SCHANNEL\\Protocols\\TLS 1.0",
+      "url": "https://www.cisecurity.org/benchmark/microsoft_windows_server"
+    },
+    {
+      "name": "CIS Microsoft Windows Server 2022 Benchmark v3.0.0 (L1): Ensure TLS 1.1 is disabled (Enabled = 0) under HKLM\\SYSTEM\\CurrentControlSet\\Control\\SecurityProviders\\SCHANNEL\\Protocols\\TLS 1.1",
+      "url": "https://www.cisecurity.org/benchmark/microsoft_windows_server"
+    },
+    {
+      "name": "DISA STIG EX19-MB-000007: Exchange must use encryption for Outlook Web App (OWA) access (V-259646)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259646"
+    },
+    {
+      "name": "ANSSI - Recommandations de sécurité relatives à TLS (v1.2, 2020)",
+      "url": "https://messervices.cyber.gouv.fr/guides/recommandations-de-securite-relatives-tls"
+    },
+    {
+      "name": "BSI APP.5.2.A11 — Absicherung der Kommunikation zwischen Exchange-Systemen",
+      "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/06_APP_Anwendungen/APP_5_2_Microsoft_Exchange_und_Outlook_Edition_2023.pdf?__blob=publicationFile"
+    },
+    {
+      "name": "ISM: Guidelines for Cryptography (ISM-0469, ISM-0481)",
+      "url": "https://www.cyber.gov.au/resources-business-and-government/essential-cyber-security/ism/cyber-security-guidelines/guidelines-for-cryptography"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Disable TLS 1.0 and TLS 1.1 for both Server and Client sides in SCHANNEL, creating keys if absent and setting DisabledByDefault.",
+    "scriptTemplate": "foreach ($ver in 'TLS 1.0', 'TLS 1.1') {\n    foreach ($side in 'Server', 'Client') {\n        $path = \"HKLM:\\SYSTEM\\CurrentControlSet\\Control\\SecurityProviders\\SCHANNEL\\Protocols\\$ver\\$side\"\n        New-Item -Path $path -Force | Out-Null\n        Set-ItemProperty -Path $path -Name Enabled -Type DWord -Value 0\n        Set-ItemProperty -Path $path -Name DisabledByDefault -Type DWord -Value 1\n    }\n}"
+  },
+  "considerations": "Disabling TLS 1.0 and TLS 1.1 can break connectivity with legacy clients, monitoring systems, and SMTP relay partners that do not support TLS 1.2. Audit all TLS-dependent applications, relay connectors, and partner connectors before disabling. Monitor Exchange transport logs after enforcement for TLS handshake failures.",
+  "roles": [
+    "Mailbox",
+    "Edge"
+  ]
+}

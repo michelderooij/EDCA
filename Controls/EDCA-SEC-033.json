@@ -1,0 +1,33 @@
+{
+  "id": "EDCA-SEC-033",
+  "title": "Transport pickup directory path is not configured",
+  "description": "The Exchange transport pickup directory is a filesystem folder that the Transport service monitors for specially formatted .EML files; any process with write access to the folder can inject messages into the transport pipeline without SMTP authentication by dropping files directly into it. The PickupDirectoryPath property of the Transport service MUST be empty (not set). A configured pickup directory allows local processes to inject mail without authentication by dropping files into a folder.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Platform Security",
+  "severity": "Medium",
+  "severityWeight": 5,
+  "frameworks": [
+    "Best Practice",
+    "CIS"
+  ],
+  "references": [
+    {
+      "name": "CIS 2.2.1 (L1): Ensure Transport Pickup Directory Path is not set",
+      "url": "https://www.cisecurity.org/benchmark/microsoft_exchange_server"
+    },
+    {
+      "name": "Configure the Pickup directory and the Replay directory in Exchange Server",
+      "url": "https://learn.microsoft.com/exchange/mail-flow/transport-pipeline/pickup-directory-and-replay-directory"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Clear the PickupDirectoryPath on each transport service instance.",
+    "scriptTemplate": "# Clear the pickup directory path on the local transport service.\nSet-TransportService -Identity $env:COMPUTERNAME -PickupDirectoryPath $null"
+  },
+  "considerations": "Clearing the pickup directory disables the file-based mail injection mechanism. Ensure no legitimate applications or scripts rely on this path before making the change.",
+  "roles": [
+    "Mailbox"
+  ]
+}

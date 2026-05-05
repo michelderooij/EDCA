@@ -1,0 +1,28 @@
+{
+  "id": "EDCA-GOV-009",
+  "title": "Exchange Customer Experience Improvement Program (CEIP) is disabled",
+  "description": "The Customer Experience Improvement Program (CEIP) is an optional Exchange telemetry feature that periodically collects and transmits anonymized usage statistics — such as feature invocation frequency and configuration data — to Microsoft for product improvement purposes. Exchange MUST NOT send customer experience reports to Microsoft. The Customer Experience Improvement Program (CEIP) transmits usage data to Microsoft, which may violate network data-flow restrictions on DoD/government systems. CEIP must be disabled.",
+  "verify": true,
+  "subject": "Organization",
+  "category": "Governance",
+  "severity": "Medium",
+  "severityWeight": 5,
+  "frameworks": [
+    "DISA"
+  ],
+  "references": [
+    {
+      "name": "DISA STIG EX19-MB-000064: Exchange must not send customer experience reports to Microsoft (V-259666)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259666"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Run Set-OrganizationConfig -CustomerFeedbackEnabled $false to disable the Customer Experience Improvement Program.",
+    "scriptTemplate": "Set-OrganizationConfig -CustomerFeedbackEnabled $false"
+  },
+  "considerations": "CEIP data is asynchronously batched and transmitted. Disabling it has no operational impact on Exchange functionality. Apply via Group Policy in domain-joined environments to ensure it is not re-enabled after updates.",
+  "roles": [
+    "Mailbox"
+  ]
+}

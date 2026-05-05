@@ -1,0 +1,64 @@
+{
+  "id": "EDCA-DATA-006",
+  "title": "TLS 1.2 is enabled",
+  "description": "Each Exchange server MUST have TLS 1.2 enabled for both the server and client SCHANNEL roles. TLS 1.2 is the minimum supported version for all current Exchange client and server communications.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Data Security",
+  "severity": "High",
+  "severityWeight": 8,
+  "frameworks": [
+    "Best Practice",
+    "NIS2",
+    "CIS",
+    "CISA",
+    "DISA",
+    "ANSSI",
+    "BSI",
+    "ISM"
+  ],
+  "references": [
+    {
+      "name": "Microsoft TLS 1.2 deployment guidance",
+      "url": "https://learn.microsoft.com/exchange/plan-and-deploy/post-installation-tasks/security-best-practices/exchange-tls-configuration"
+    },
+    {
+      "name": "CIS Microsoft Windows Server Benchmark",
+      "url": "https://www.cisecurity.org/benchmark/microsoft_windows_server"
+    },
+    {
+      "name": "CIS Microsoft Windows Server 2022 Benchmark v3.0.0 (L1): Ensure TLS 1.2 is enabled (Enabled = 1, DisabledByDefault = 0) under HKLM\\SYSTEM\\CurrentControlSet\\Control\\SecurityProviders\\SCHANNEL\\Protocols\\TLS 1.2",
+      "url": "https://www.cisecurity.org/benchmark/microsoft_windows_server"
+    },
+    {
+      "name": "DISA STIG EX19-MB-000236 (HIGH): The application must protect the confidentiality and integrity of transmitted information (V-259710)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259710"
+    },
+    {
+      "name": "ENISA / NIS2 Directive (EU) 2022/2555 - Article 21(2)(h): cryptography and encryption policies - Section 9, 6.7, 6.3, 6.6",
+      "url": "https://eur-lex.europa.eu/eli/dir/2022/2555/oj"
+    },
+    {
+      "name": "ANSSI - Recommandations de sécurité relatives à TLS (v1.2, 2020)",
+      "url": "https://messervices.cyber.gouv.fr/guides/recommandations-de-securite-relatives-tls"
+    },
+    {
+      "name": "BSI APP.5.2.A11 — Absicherung der Kommunikation zwischen Exchange-Systemen",
+      "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/06_APP_Anwendungen/APP_5_2_Microsoft_Exchange_und_Outlook_Edition_2023.pdf?__blob=publicationFile"
+    },
+    {
+      "name": "ISM: Guidelines for Cryptography (ISM-0469, ISM-0481)",
+      "url": "https://www.cyber.gov.au/resources-business-and-government/essential-cyber-security/ism/cyber-security-guidelines/guidelines-for-cryptography"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Enable TLS 1.2 for both Server and Client sides in SCHANNEL, creating keys if absent and clearing DisabledByDefault.",
+    "scriptTemplate": "$path = 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\SecurityProviders\\SCHANNEL\\Protocols\\TLS 1.2'\nforeach ($side in 'Server', 'Client') {\n    New-Item -Path \"$path\\$side\" -Force | Out-Null\n    Set-ItemProperty -Path \"$path\\$side\" -Name Enabled -Type DWord -Value 1\n    Set-ItemProperty -Path \"$path\\$side\" -Name DisabledByDefault -Type DWord -Value 0\n}"
+  },
+  "considerations": "Enabling TLS 1.2 is generally low-risk on modern systems. However, if TLS 1.0 and 1.1 are simultaneously disabled, applications or services that do not support TLS 1.2 will fail. Test dependent systems before disabling older protocol versions alongside enabling TLS 1.2.",
+  "roles": [
+    "Mailbox",
+    "Edge"
+  ]
+}

@@ -1,0 +1,37 @@
+{
+  "id": "EDCA-GOV-011",
+  "title": "Exchange software baseline is documented and monitored for unauthorized changes",
+  "description": "An Exchange software baseline is a documented reference snapshot of the installed Exchange binaries, DLLs, and configuration files at a known-good state, used to detect unauthorized modifications through file integrity comparison. An Exchange software baseline copy MUST exist, and Exchange software MUST be monitored for unauthorized changes. A software baseline enables rapid detection of unauthorized modifications to Exchange binaries, configuration files, or DLLs. File integrity monitoring must be in place to alert on deviations from the baseline.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Governance",
+  "severity": "Medium",
+  "severityWeight": 6,
+  "frameworks": [
+    "DISA"
+  ],
+  "references": [
+    {
+      "name": "DISA STIG EX19-MB-000196: An Exchange software baseline copy must exist (V-259700)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259700"
+    },
+    {
+      "name": "DISA STIG EX19-MB-000197: Exchange software must be monitored for unauthorized changes (V-259701)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259701"
+    },
+    {
+      "name": "DISA STIG EX19-ED-000197: The Exchange software baseline copy must exist (V-259633)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_edge_server/2024-12-06/finding/V-259633"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Create and maintain a documented software baseline, and implement file integrity monitoring for the Exchange installation directory.",
+    "scriptTemplate": "# Document Exchange binary baseline hashes. Run from EMS on each Exchange server.\n$exchPath = $exinstall\nGet-ChildItem $exchPath -Recurse -File -ErrorAction SilentlyContinue | Get-FileHash -Algorithm SHA256 | Select-Object Hash, Path | Export-Csv ($env:COMPUTERNAME + '-ExchangeBaseline.csv') -NoTypeInformation\nWrite-Host ('Baseline written to ' + $env:COMPUTERNAME + '-ExchangeBaseline.csv')"
+  },
+  "considerations": "File integrity monitoring solutions (e.g., Microsoft Defender for Endpoint, Tripwire, AIDE) are typically required to meet this control in an automated fashion. Store baselines in a write-protected location. Refresh the baseline after each Exchange Cumulative Update.",
+  "roles": [
+    "Mailbox",
+    "Edge"
+  ]
+}

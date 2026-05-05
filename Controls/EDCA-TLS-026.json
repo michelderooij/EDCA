@@ -1,0 +1,48 @@
+{
+  "id": "EDCA-TLS-026",
+  "title": "Accepted domains publish valid SPF records",
+  "description": "Sender Policy Framework (SPF) is a DNS-published email authentication mechanism that defines which IP addresses and mail servers are authorized to send email on behalf of a domain; receiving mail servers check the SPF record to determine whether the sending server's IP is permitted and can use the result to reject or mark messages that fail the check. Each accepted domain MUST publish one syntactically valid SPF TXT record (v=spf1) with a terminal all mechanism and within the 10-lookup limit.",
+  "verify": true,
+  "subject": "Organization",
+  "category": "Transport Security",
+  "severity": "High",
+  "severityWeight": 8,
+  "frameworks": [
+    "Best Practice",
+    "NIS2",
+    "CIS",
+    "CISA",
+    "ISM"
+  ],
+  "references": [
+    {
+      "name": "RFC 7208 - Sender Policy Framework (SPF)",
+      "url": "https://www.rfc-editor.org/rfc/rfc7208"
+    },
+    {
+      "name": "ENISA / NIS2 Directive (EU) 2022/2555 - Article 21(2)(e): network and information systems security, anti-spoofing - Section 1, 6.7, 3.2-3.4, 8",
+      "url": "https://eur-lex.europa.eu/eli/dir/2022/2555/oj"
+    },
+    {
+      "name": "CISA BOD 18-01 (2017): Enhance Email and Web Security - §d(1): Configure SPF for all domains",
+      "url": "https://www.cisa.gov/binding-operational-directive-18-01"
+    },
+    {
+      "name": "CIS 9.5 (IG1): Implement DMARC and Enable Receiver-Side Verification",
+      "url": "https://www.cisecurity.org/insights/white-papers/cis-controls-v8"
+    },
+    {
+      "name": "ISM: Guidelines for Email (ISM-0574, ISM-1183, ISM-1151)",
+      "url": "https://www.cyber.gov.au/resources-business-and-government/essential-cyber-security/ism/cyber-security-guidelines/guidelines-for-email"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Publish one SPF TXT record per accepted domain with only authorized senders and an explicit -all or ~all policy.",
+    "scriptTemplate": "# DNS change required: create one TXT at the zone apex, e.g. v=spf1 include:mail.example.com -all"
+  },
+  "considerations": "A hard-fail SPF record (v=spf1 ... -all) causes receiving servers to reject mail that does not pass SPF. Soft-fail (~all) marks mail without rejecting it. Before changing from softfail to hardfail, ensure all legitimate sending sources (bulk mail services, line-of-business applications, forwarding servers) are included in the SPF record. Incomplete SPF records will cause legitimate mail to be blocked.",
+  "roles": [
+    "Mailbox"
+  ]
+}

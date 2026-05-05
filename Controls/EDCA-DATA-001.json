@@ -1,0 +1,52 @@
+{
+  "id": "EDCA-DATA-001",
+  "title": "No expired Exchange certificates",
+  "description": "Exchange service certificates are used to establish TLS-encrypted connections for client access (HTTPS/OWA), SMTP transport, and hybrid authentication — each requiring a valid, trusted certificate to negotiate sessions successfully. All Exchange service certificates MUST be valid and within their expiry date. Expired certificates cause TLS negotiation failures, breaking client connectivity, mail flow, and hybrid authentication.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Data Security",
+  "severity": "Medium",
+  "severityWeight": 7,
+  "frameworks": [
+    "Best Practice",
+    "NIS2",
+    "DISA",
+    "ANSSI",
+    "BSI"
+  ],
+  "references": [
+    {
+      "name": "Microsoft Exchange certificate procedures",
+      "url": "https://learn.microsoft.com/exchange/architecture/client-access/certificates"
+    },
+    {
+      "name": "DISA STIG EX19-MB-000019: Exchange servers must use approved DOD certificates (V-259649)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259649"
+    },
+    {
+      "name": "DISA STIG EX19-ED-000016: Exchange servers must use approved DOD certificates (V-259578)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_edge_server/2024-12-06/finding/V-259578"
+    },
+    {
+      "name": "ENISA / NIS2 Directive (EU) 2022/2555 - Article 21(2)(h): cryptography and encryption policies - Section 9, 6.7, 6.3, 6.6",
+      "url": "https://eur-lex.europa.eu/eli/dir/2022/2555/oj"
+    },
+    {
+      "name": "ANSSI - Recommandations de sécurité relatives à TLS (v1.2, 2020)",
+      "url": "https://messervices.cyber.gouv.fr/guides/recommandations-de-securite-relatives-tls"
+    },
+    {
+      "name": "BSI APP.5.2.A11 — Absicherung der Kommunikation zwischen Exchange-Systemen",
+      "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/06_APP_Anwendungen/APP_5_2_Microsoft_Exchange_und_Outlook_Edition_2023.pdf?__blob=publicationFile"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Replace expired certificates and assign them to Exchange services.",
+    "scriptTemplate": "# Diagnose: List Exchange certificates with expiry status\nGet-ExchangeCertificate -Server $env:COMPUTERNAME | Select-Object Thumbprint, Subject, NotAfter, Status, Services | Sort-Object NotAfter | Format-Table -AutoSize\n# To renew: Import-ExchangeCertificate -FileData ([Byte[]](Get-Content <pfx> -Encoding Byte -ReadCount 0)) -Password (Read-Host -AsSecureString)\n# Then enable: Enable-ExchangeCertificate -Thumbprint <thumb> -Services SMTP,IIS"
+  },
+  "considerations": "Certificate renewal on an Exchange server requires updating the certificate on all Services (IIS, SMTP, IMAP, POP3) and removing the expired certificate. If using a third-party CA, plan lead time for certificate issuance (typically 1–5 business days). Internal clients may show SSL warnings until the new certificate is fully propagated via Directory Services.",
+  "roles": [
+    "Mailbox"
+  ]
+}

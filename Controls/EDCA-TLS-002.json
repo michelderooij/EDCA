@@ -1,0 +1,29 @@
+{
+  "id": "EDCA-TLS-002",
+  "title": "Transport retry configuration baseline",
+  "description": "Exchange transport retry settings control how the Transport service queues and retries failed outbound SMTP delivery attempts, governing both the maximum number of simultaneous connections to any one remote domain and the interval between successive delivery retries for deferred messages. Transport retry settings MUST meet recommended thresholds: MaxPerDomainOutboundConnections >= 40 and MessageRetryInterval <= 5 minutes. Below-minimum connection limits and long retry intervals cause mail delivery delays to high-volume domains.",
+  "verify": false,
+  "subject": "Server",
+  "category": "Transport Security",
+  "severity": "Medium",
+  "severityWeight": 6,
+  "frameworks": [
+    "Best Practice"
+  ],
+  "references": [
+    {
+      "name": "CSS TransportRetryConfigCheck",
+      "url": "https://microsoft.github.io/CSS-Exchange/Diagnostics/HealthChecker/TransportRetryConfigCheck/"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Use Set-TransportService to set MaxPerDomainOutboundConnections to 40 or higher and MessageRetryInterval to 5 minutes or less to prevent mail queue buildup during delivery retries.",
+    "scriptTemplate": "Set-TransportService -Identity $env:COMPUTERNAME -MaxPerDomainOutboundConnections 40 -MessageRetryInterval 00:05:00"
+  },
+  "considerations": "Adjusting transport retry configuration can affect how quickly Exchange requeues messages after a transient failure. Changes to retry intervals impact end-user mail delivery experience during disruptions. Follow Microsoft guidance for retry values - overly aggressive retries increase load on target servers.",
+  "roles": [
+    "Mailbox",
+    "Edge"
+  ]
+}

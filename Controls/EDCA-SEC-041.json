@@ -1,0 +1,42 @@
+{
+  "id": "EDCA-SEC-041",
+  "title": "LAPS is deployed for local administrator accounts",
+  "description": "Local Administrator Password Solution (LAPS) MUST be deployed on Exchange servers to ensure unique, rotated local administrator passwords. Without LAPS, a compromised local administrator password on one server can be used for lateral movement to all servers sharing the same credential. Windows LAPS (built into Windows Server 2019+) stores passwords in the msLAPS-Password AD attribute; legacy LAPS stores them in ms-Mcs-AdmPwd. ANSSI recommends deploying LAPS on all member servers to mitigate lateral movement risk from shared local credentials.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Platform Security",
+  "severity": "Medium",
+  "severityWeight": 7,
+  "frameworks": [
+    "ANSSI",
+    "BSI"
+  ],
+  "references": [
+    {
+      "name": "Windows LAPS overview",
+      "url": "https://learn.microsoft.com/windows-server/identity/laps/laps-overview"
+    },
+    {
+      "name": "Deploy Windows LAPS",
+      "url": "https://learn.microsoft.com/windows-server/identity/laps/laps-deployment-guide"
+    },
+    {
+      "name": "ANSSI - Mise en œuvre sécurisée d'un serveur Windows membre AD DS (2025)",
+      "url": "https://messervices.cyber.gouv.fr/guides/mise-en-oeuvre-securisee-dun-serveur-windows"
+    },
+    {
+      "name": "BSI APP.2.2.A7 — Umsetzung sicherer Verwaltungsmethoden für Active Directory",
+      "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/06_APP_Anwendungen/APP_2_2_Active_Directory_Domain_Services_Edition_2023.pdf?__blob=publicationFile"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Deploy Windows LAPS (Windows Server 2019+) or legacy Microsoft LAPS. For Windows LAPS: ensure the Active Directory schema is updated and configure LAPS policy via Group Policy (Computer Configuration > Administrative Templates > System > LAPS). For legacy LAPS: install the LAPS MSI and configure via LAPS Group Policy extension.",
+    "scriptTemplate": "# Group Policy equivalent:\n# Computer Configuration > Administrative Templates > System > LAPS\n#   Enable local admin password management = Enabled\n#   (For legacy LAPS: Computer Configuration > Administrative Templates > LAPS)\n#\n# Check if Windows LAPS attribute is present (Windows Server 2019+)\ntry {\n    $attr = Get-ADComputer -Identity $env:COMPUTERNAME -Properties 'msLAPS-Password','msLAPS-PasswordExpirationTime' -ErrorAction Stop\n    if ($null -ne $attr.'msLAPS-Password') {\n        \"Windows LAPS: attribute msLAPS-Password is populated\"\n    } else {\n        \"Windows LAPS: msLAPS-Password attribute exists but is empty - LAPS may not yet have generated a password\"\n    }\n} catch {\n    \"Windows LAPS: msLAPS-Password attribute not found - LAPS may not be configured or schema not extended\"\n}\n\n# Check for legacy LAPS (ms-Mcs-AdmPwd attribute)\ntry {\n    $legacyAttr = Get-ADComputer -Identity $env:COMPUTERNAME -Properties 'ms-Mcs-AdmPwd' -ErrorAction Stop\n    if ($null -ne $legacyAttr.'ms-Mcs-AdmPwd') {\n        \"Legacy LAPS: ms-Mcs-AdmPwd attribute is populated\"\n    }\n} catch {\n    \"Legacy LAPS: ms-Mcs-AdmPwd attribute not present\"\n}"
+  },
+  "considerations": "LAPS manages the local administrator account (built-in SID S-1-5-21-*-500 or a named account) and requires Active Directory schema extensions. In environments that use Windows Server 2019 and later, prefer Windows LAPS over legacy LAPS as it is built into the OS and supports Azure AD and enhanced encryption. If the Exchange server has a custom local administrator account name (not 'Administrator'), configure LAPS to target that account name explicitly. LAPS password storage in AD requires appropriate ACLs to prevent unauthorized read access to the msLAPS-Password attribute.",
+  "roles": [
+    "Mailbox",
+    "Edge"
+  ]
+}

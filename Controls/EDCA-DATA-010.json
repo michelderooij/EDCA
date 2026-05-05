@@ -1,0 +1,49 @@
+{
+  "id": "EDCA-DATA-010",
+  "title": "TLS insecure renegotiation values hardened",
+  "description": "TLS renegotiation is a feature that allows the parameters of an established TLS session to be updated mid-connection; insecure renegotiation (without the RFC 5746 renegotiation_info extension) allows an attacker to splice a new handshake into an active session. Each Exchange server MUST have SCHANNEL insecure renegotiation disabled for both client and server roles. Permitting insecure renegotiation allows a man-in-the-middle attacker to inject data into an established TLS session (CVE-2009-3555).",
+  "verify": true,
+  "subject": "Server",
+  "category": "Data Security",
+  "severity": "Medium",
+  "severityWeight": 7,
+  "frameworks": [
+    "Best Practice",
+    "NIS2",
+    "ANSSI",
+    "BSI",
+    "ISM"
+  ],
+  "references": [
+    {
+      "name": "CSS TLS hardening checks",
+      "url": "https://aka.ms/HC-TLSConfigDocs"
+    },
+    {
+      "name": "ENISA / NIS2 Directive (EU) 2022/2555 - Article 21(2)(h): cryptography and encryption policies - Section 9, 6.7, 6.3, 6.6",
+      "url": "https://eur-lex.europa.eu/eli/dir/2022/2555/oj"
+    },
+    {
+      "name": "ANSSI - Recommandations de sécurité relatives à TLS (v1.2, 2020)",
+      "url": "https://messervices.cyber.gouv.fr/guides/recommandations-de-securite-relatives-tls"
+    },
+    {
+      "name": "BSI APP.5.2.A11 — Absicherung der Kommunikation zwischen Exchange-Systemen",
+      "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/06_APP_Anwendungen/APP_5_2_Microsoft_Exchange_und_Outlook_Edition_2023.pdf?__blob=publicationFile"
+    },
+    {
+      "name": "ISM: Guidelines for Cryptography (ISM-1370, ISM-1553)",
+      "url": "https://www.cyber.gov.au/resources-business-and-government/essential-cyber-security/ism/cyber-security-guidelines/guidelines-for-cryptography"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Configure TLS versions consistently across Exchange servers. Set Client and Server Enabled and DisabledByDefault DWORD values under HKLM\\SYSTEM\\CurrentControlSet\\Control\\SecurityProviders\\SCHANNEL\\Protocols for each TLS version. Also configure SystemDefaultTlsVersions and SchUseStrongCrypto in .NET Framework registry paths. TLS 1.2 must be enabled; TLS 1.3 must be disabled for Exchange.",
+    "scriptTemplate": "Set-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\SecurityProviders\\SCHANNEL' -Name AllowInsecureRenegoClients -Type DWord -Value 0; Set-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\SecurityProviders\\SCHANNEL' -Name AllowInsecureRenegoServers -Type DWord -Value 0"
+  },
+  "considerations": "TLS renegotiation settings affect all TLS connections on the server at the Schannel layer. Disabling insecure renegotiation prevents certain downgrade attacks but may break connectivity with clients that require renegotiation for session resumption. Test with monitoring and SMTP partner systems before enforcing.",
+  "roles": [
+    "Mailbox",
+    "Edge"
+  ]
+}

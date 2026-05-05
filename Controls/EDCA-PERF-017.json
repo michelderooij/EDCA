@@ -1,0 +1,33 @@
+{
+  "id": "EDCA-PERF-017",
+  "title": "VMware NSX Introspection drivers are not running",
+  "description": "VMware Tools includes two kernel-mode filter drivers that are installed as part of the NSX Guest Introspection feature:\n• vsepflt — file system introspection driver (intercepts file I/O)\n• vnetflt — network introspection driver (intercepts network packets)\n\nWhen these drivers are active they insert themselves into the I/O path and introduce latency on every network packet and file operation. The network introspection driver (vnetflt) is harmful for Exchange: on high-throughput Mailbox servers the cumulative per-packet delay can reproduce the same 200 ms latency pattern caused by delayed ACK, severely degrading Outlook Online mode client response times.\n\nOn Exchange servers that are not running a third-party endpoint security product requiring NSX introspection, these drivers must be stopped and disabled.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Performance",
+  "severity": "Medium",
+  "severityWeight": 6,
+  "frameworks": [
+    "Best Practice"
+  ],
+  "references": [
+    {
+      "name": "VMware Guest Introspection and Exchange latency",
+      "url": "https://www.wardvissers.nl/2019/05/15/vsepflt-vnetflt-exchange-latency/"
+    },
+    {
+      "name": "VMware KB: Disable Guest Introspection drivers",
+      "url": "https://knowledge.broadcom.com/external/article?legacyId=2148778"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Stop and disable the vsepflt and/or vnetflt services on the Exchange server. Verify with the security team that no endpoint security product (such as VMware Carbon Black or a third-party NGAV integrated with NSX) relies on these drivers before disabling them. A reboot is not required to stop the services, but disabling them prevents them from starting on the next boot.",
+    "scriptTemplate": "# Stop and disable VMware NSX Introspection drivers\nforeach ($svcName in @('vsepflt', 'vnetflt')) {\n    $svc = Get-Service -Name $svcName -ErrorAction SilentlyContinue\n    if ($null -eq $svc) {\n        Write-Host \"Service '$svcName' not found; skipping.\"\n        continue\n    }\n    if ($svc.Status -eq 'Running') {\n        Stop-Service -Name $svcName -Force -ErrorAction SilentlyContinue\n        Write-Host \"Stopped service: $svcName\"\n    } else {\n        Write-Host \"Service '$svcName' is already stopped (Status: $($svc.Status)).\"\n    }\n    Set-Service -Name $svcName -StartupType Disabled -ErrorAction SilentlyContinue\n    Write-Host \"Disabled service: $svcName\"\n}\nWrite-Host 'Done. Reboot is not required to take effect.'"
+  },
+  "considerations": "• Before disabling the introspection drivers, confirm with the security team that no endpoint protection product installed on the server requires NSX Guest Introspection. Disabling the drivers while a third-party security product depends on them may leave the server unprotected without raising an obvious alert.\n• The vsepflt and vnetflt drivers are installed automatically when VMware Tools is installed with the NSX components option. Upgrading VMware Tools may re-enable disabled services; verify the drivers remain disabled after any VMware Tools update.\n• If the introspection capability is required for security compliance, consider whether the Exchange server should be moved to a host or cluster segment where the NSX policy does not apply, rather than disabling drivers on a per-VM basis.\n• The performance impact of vnetflt is most visible under high connection rates (large numbers of Outlook Online mode clients or active MAPI connections). Environments with a predominantly cached-mode Outlook client population or smaller mailbox counts may observe less pronounced latency improvement after disabling the driver.",
+  "roles": [
+    "Mailbox",
+    "Edge"
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "id": "EDCA-TLS-019",
+  "title": "Exchange global recipient count limit is set",
+  "description": "The Exchange global recipient count limit (MaxRecipientEnvelopeLimit) places an organization-wide cap on the number of envelope recipients that any single message may carry, regardless of connector-level or mailbox-level limits; this prevents abuse of the mail infrastructure for large-scale spam campaigns and limits the blast radius of accidental mass-mailing events. The Exchange Global Recipient Count Limit MUST be set. A global recipient count limit on outbound messages restricts the maximum number of recipients per message and prevents abuse of the mail infrastructure for large-scale spam campaigns or accidental mass mailing.",
+  "verify": true,
+  "subject": "Organization",
+  "category": "Transport Security",
+  "severity": "Low",
+  "severityWeight": 3,
+  "frameworks": [
+    "DISA"
+  ],
+  "references": [
+    {
+      "name": "DISA STIG EX19-MB-000142: The Exchange Global Recipient Count Limit must be set (V-259693)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259693"
+    },
+    {
+      "name": "Set-TransportConfig cmdlet",
+      "url": "https://learn.microsoft.com/powershell/module/exchange/set-transportconfig"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Set MaxRecipientEnvelopeLimit in global transport configuration.",
+    "scriptTemplate": "Set-TransportConfig -MaxRecipientEnvelopeLimit 5000"
+  },
+  "considerations": "Setting this limit too low may prevent legitimate bulk internal communications (e.g., company-wide alerts). Establish the limit based on organizational requirements, typically between 200 and 5000 recipients per message.",
+  "roles": [
+    "Mailbox"
+  ]
+}

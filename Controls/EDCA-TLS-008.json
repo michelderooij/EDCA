@@ -1,0 +1,33 @@
+{
+  "id": "EDCA-TLS-008",
+  "title": "Organization-wide maximum send message size is 25 MB or less",
+  "description": "The MaxSendSize transport configuration setting places an organization-wide upper bound on the size of messages that can be sent. The CIS benchmark recommends a maximum of 25 MB (26214400 bytes) to limit mail queue pressure, reduce the risk of DoS via large message floods, and align with common internet limits.",
+  "verify": true,
+  "subject": "Organization",
+  "category": "Transport Security",
+  "severity": "Low",
+  "severityWeight": 3,
+  "frameworks": [
+    "Best Practice",
+    "CIS"
+  ],
+  "references": [
+    {
+      "name": "CIS 2.2.2 (L1): Ensure MaxSendSize is set to 25 MB",
+      "url": "https://www.cisecurity.org/benchmark/microsoft_exchange_server"
+    },
+    {
+      "name": "Message size limits in Exchange Server",
+      "url": "https://learn.microsoft.com/exchange/mail-flow/message-size-limits"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Set the organization-wide MaxSendSize to 25 MB.",
+    "scriptTemplate": "# Set organization-wide maximum send size to 25 MB.\nSet-TransportConfig -MaxSendSize 25MB"
+  },
+  "considerations": "Reducing MaxSendSize below the current value will cause existing clients sending large attachments to receive NDRs. Communicate the change and advise users to use SharePoint or OneDrive links for large file transfers instead of email attachments.",
+  "roles": [
+    "Mailbox"
+  ]
+}

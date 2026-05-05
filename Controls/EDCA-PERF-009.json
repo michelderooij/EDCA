@@ -1,0 +1,29 @@
+{
+  "id": "EDCA-PERF-009",
+  "title": "Sleepy NIC baseline",
+  "description": "Windows network adapter power management allows the OS or device driver to reduce power to the NIC during periods of low traffic, which on server-class systems can cause the adapter to drop packets or briefly disconnect when transitioning from a low-power state. NIC power management sleep/power-down settings MUST be disabled on all active adapters. Adapter power-down under low traffic causes intermittent connectivity interruptions for Exchange clients.",
+  "verify": false,
+  "subject": "Server",
+  "category": "Performance",
+  "severity": "Medium",
+  "severityWeight": 6,
+  "frameworks": [
+    "Best Practice"
+  ],
+  "references": [
+    {
+      "name": "CSS SleepyNICCheck",
+      "url": "https://microsoft.github.io/CSS-Exchange/Diagnostics/HealthChecker/SleepyNICCheck/"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Disable NIC power-saving by setting the PnPCapabilities DWORD value to 24 or 280 under HKLM\\SYSTEM\\CurrentControlSet\\Control\\Class\\{4D36E972-E325-11CE-BFC1-08002bE10318} for each affected network adapter.",
+    "scriptTemplate": "Set-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Class\\{4D36E972-E325-11CE-BFC1-08002bE10318}\\NNNN' -Name PnPCapabilities -Value 24 -Type DWord"
+  },
+  "considerations": "Disabling sleep and power-saving settings on network adapters prevents idle disconnects but may marginally increase power consumption. This setting is almost always the correct configuration for production Exchange servers. Requires testing after changing NIC advanced settings.",
+  "roles": [
+    "Mailbox",
+    "Edge"
+  ]
+}

@@ -1,0 +1,34 @@
+{
+  "id": "EDCA-DATA-019",
+  "title": "SchUseStrongCrypto is enabled for .NET Framework",
+  "description": "SchUseStrongCrypto is a .NET Framework registry setting that forces the .NET TLS client implementation to restrict negotiation to TLS 1.2 or later and to exclude weak cipher suites, overriding the framework's permissive defaults that allow legacy TLS versions and ciphers. .NET Framework 4.x on each Exchange server MUST have SchUseStrongCrypto set to 1 in both the 64-bit and 32-bit (WoW6432Node) registry hives. Without this setting, .NET client code defaults to weak ciphers and older TLS versions for outbound connections, undermining TLS security enforced at the SCHANNEL layer.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Data Security",
+  "severity": "Medium",
+  "severityWeight": 7,
+  "frameworks": [
+    "Best Practice",
+    "DISA"
+  ],
+  "references": [
+    {
+      "name": "Microsoft — Transport Layer Security (TLS) best practices with .NET Framework",
+      "url": "https://learn.microsoft.com/dotnet/framework/network-programming/tls"
+    },
+    {
+      "name": "DISA STIG EX19-MB-000207: Exchange must have the SchUseStrongCrypto registry value set (V-259577)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_edge_server/2024-12-06/finding/V-259577"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Set SchUseStrongCrypto to 1 in both the 64-bit and WoW6432Node .NET Framework v4.0.30319 registry paths.",
+    "scriptTemplate": "foreach ($path in @(\n    'HKLM:\\SOFTWARE\\Microsoft\\.NetFramework\\v4.0.30319',\n    'HKLM:\\SOFTWARE\\Wow6432Node\\Microsoft\\.NetFramework\\v4.0.30319'\n)) {\n    New-Item -Path $path -Force | Out-Null\n    Set-ItemProperty -Path $path -Name SchUseStrongCrypto -Type DWord -Value 1\n}"
+  },
+  "considerations": "SchUseStrongCrypto affects all .NET applications on the server, not just Exchange. Setting it to 1 restricts .NET code to TLS 1.2+ and strong cipher suites for outbound connections. This may break connectivity with legacy services that do not support TLS 1.2. Test dependent integrations before enforcing.",
+  "roles": [
+    "Mailbox",
+    "Edge"
+  ]
+}

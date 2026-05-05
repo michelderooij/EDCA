@@ -1,0 +1,39 @@
+{
+  "id": "EDCA-TLS-013",
+  "title": "Receive connector maximum message size is 25 MB or less",
+  "description": "The MaxMessageSize property on each receive connector MUST be set to 25 MB or less. Restricting inbound message size reduces the risk of storage exhaustion and denial-of-service attacks.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Transport Security",
+  "severity": "Low",
+  "severityWeight": 3,
+  "frameworks": [
+    "Best Practice",
+    "CIS",
+    "DISA"
+  ],
+  "references": [
+    {
+      "name": "CIS 2.2.5 (L1): Ensure Maximum receive size Connector level is set to 25",
+      "url": "https://www.cisecurity.org/benchmark/microsoft_exchange_server"
+    },
+    {
+      "name": "Message size limits in Exchange Server",
+      "url": "https://learn.microsoft.com/exchange/mail-flow/message-size-limits"
+    },
+    {
+      "name": "DISA STIG EX19-MB-000124: Exchange Message size restrictions must be controlled on Receive connectors (V-259677)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259677"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Set MaxMessageSize to 25 MB or less on all receive connectors.",
+    "scriptTemplate": "# Set the receive size limit on all receive connectors on this server.\nGet-ReceiveConnector -Server $env:COMPUTERNAME | Set-ReceiveConnector -MaxMessageSize 25MB"
+  },
+  "considerations": "Reducing the connector-level limit may cause some inbound emails to be rejected. Ensure the value aligns with the organisation-level MaxReceiveSize setting.",
+  "roles": [
+    "Mailbox",
+    "Edge"
+  ]
+}

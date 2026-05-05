@@ -1,0 +1,33 @@
+{
+  "id": "EDCA-SEC-001",
+  "title": "MAPI over HTTP is enabled",
+  "description": "MAPI over HTTP is the Exchange client connectivity protocol that encapsulates MAPI communication inside standard HTTPS sessions, replacing the legacy MAPI/RPC over TCP transport and enabling Outlook clients to traverse HTTP proxies and firewalls without special port requirements. MAPI over HTTP (MapiHttpEnabled) MUST be enabled on all Exchange servers. Required for Outlook 2013+ and Exchange 2016+ connectivity; MAPI/RPC over TCP is deprecated and no longer supported in modern configurations.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Platform Security",
+  "severity": "Medium",
+  "severityWeight": 6,
+  "frameworks": [
+    "Best Practice",
+    "CISA"
+  ],
+  "references": [
+    {
+      "name": "MAPI over HTTP in Exchange Server",
+      "url": "https://learn.microsoft.com/exchange/clients/mapi-over-http/mapi-over-http"
+    },
+    {
+      "name": "CIS 2.1.1 (L1): Ensure MAPI over HTTP is Enabled",
+      "url": "https://www.cisecurity.org/benchmark/microsoft_exchange_server"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Enable and validate MAPI over HTTP configuration for applicable virtual directories and clients.",
+    "scriptTemplate": "# Diagnose: Check MAPI over HTTP status\nGet-OrganizationConfig | Select-Object MapiHttpEnabled\nGet-MapiVirtualDirectory -Server $env:COMPUTERNAME | Select-Object Server, Name, InternalUrl, ExternalUrl, IISAuthenticationMethods"
+  },
+  "considerations": "If MAPI over HTTP is enabled for the first time in an existing environment, connected Outlook clients may require a profile restart or re-creation. Test with a pilot group before rolling out to all users. Ensure no client access rules are blocking MAPI over HTTP before enabling.",
+  "roles": [
+    "Mailbox"
+  ]
+}

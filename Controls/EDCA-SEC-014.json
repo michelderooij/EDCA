@@ -1,0 +1,56 @@
+{
+  "id": "EDCA-SEC-014",
+  "title": "Extended Protection enabled on Exchange virtual directories",
+  "description": "Extended Protection for Authentication (EPA) is an IIS security feature that binds authentication tokens to the TLS channel via a Channel Binding Token (CBT), preventing NTLM relay attacks that capture and replay credentials from one TLS session into another. Each Exchange server MUST have Extended Protection for Authentication (EPA) enabled on all Exchange IIS virtual directories where supported.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Platform Security",
+  "severity": "High",
+  "severityWeight": 10,
+  "frameworks": [
+    "Best Practice",
+    "NIS2",
+    "BSI",
+    "CIS",
+    "CISA"
+  ],
+  "references": [
+    {
+      "name": "Microsoft Exchange Extended Protection guidance",
+      "url": "https://learn.microsoft.com/exchange/plan-and-deploy/post-installation-tasks/security-best-practices/exchange-extended-protection"
+    },
+    {
+      "name": "ENISA / NIS2 Directive (EU) 2022/2555 - Article 21(2)(i)(j): access control and multi-factor authentication - Section 11.5-11.7, 11.3, 10, 2.2",
+      "url": "https://eur-lex.europa.eu/eli/dir/2022/2555/oj"
+    },
+    {
+      "name": "CIS Microsoft Exchange Server Benchmark",
+      "url": "https://www.cisecurity.org/benchmark/microsoft_exchange_server"
+    },
+    {
+      "name": "CIS Microsoft Exchange Server 2019 Benchmark v1.0.0: Ensure Extended Protection is Enabled on Exchange virtual directories",
+      "url": "https://www.cisecurity.org/benchmark/microsoft_exchange_server"
+    },
+    {
+      "name": "CISA AA21-062A: Mitigate Microsoft Exchange Server Vulnerabilities - enable Extended Protection for Authentication on all Exchange virtual directories",
+      "url": "https://www.cisa.gov/news-events/cybersecurity-advisories/aa21-062a"
+    },
+    {
+      "name": "BSI APP.5.2.A9 — Sichere Konfiguration von Exchange-Servern",
+      "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/06_APP_Anwendungen/APP_5_2_Microsoft_Exchange_und_Outlook_Edition_2023.pdf?__blob=publicationFile"
+    },
+    {
+      "name": "BSI APP.5.2.A12 — Einsatz von Outlook Anywhere, MAPI over HTTP und Outlook im Web",
+      "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/06_APP_Anwendungen/APP_5_2_Microsoft_Exchange_und_Outlook_Edition_2023.pdf?__blob=publicationFile"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Use the ExchangeExtendedProtectionManagement.ps1 script from the CSS-Exchange toolkit (https://microsoft.github.io/CSS-Exchange/Security/ExchangeExtendedProtectionManagement/) from an elevated Exchange Management Shell (EMS) with Organization Management permissions. Before enabling, disable SSL Offloading for Outlook Anywhere if applicable (Exchange 2019 CU14+ does this automatically). Use -ShowExtendedProtection to view current configuration, -PrerequisitesCheckOnly to validate prerequisites, or run without arguments to enable on all servers.",
+    "scriptTemplate": "# Download latest script:\n# Invoke-WebRequest -Uri 'https://github.com/microsoft/CSS-Exchange/releases/latest/download/ExchangeExtendedProtectionManagement.ps1' -OutFile '.\\ExchangeExtendedProtectionManagement.ps1'\n\n# View current Extended Protection configuration:\n.\\ExchangeExtendedProtectionManagement.ps1 -ShowExtendedProtection\n\n# Check prerequisites without making changes:\n.\\ExchangeExtendedProtectionManagement.ps1 -PrerequisitesCheckOnly\n\n# Enable Extended Protection on all Exchange servers (recommended):\n.\\ExchangeExtendedProtectionManagement.ps1\n\n# Enable on specific servers only:\n.\\ExchangeExtendedProtectionManagement.ps1 -ExchangeServerNames Server1, Server2\n\n# Modern Hybrid (skip EWS Front End on Hybrid Agent servers):\n.\\ExchangeExtendedProtectionManagement.ps1 -ExchangeServerNames HybridServer1 -ExcludeVirtualDirectories EWSFrontEnd\n\n# Before enabling, disable SSL Offloading for Outlook Anywhere if applicable:\nSet-OutlookAnywhere -Identity 'Server\\Rpc (Default Web Site)' -SSLOffloading $false -InternalClientAuthenticationMethod NTLM -ExternalClientAuthenticationMethod NTLM"
+  },
+  "considerations": "• Enabling Extended Protection can break Outlook connectivity in some older hybrid configurations and may require configuration changes to specific virtual directories (e.g., EWS, AutoDiscover). Microsoft recommends thorough testing in a non-production environment first. Some older Outlook clients and third-party EWS integrations may not be compatible with Extended Protection.\n• SSL Offloading is incompatible with Extended Protection: if a load balancer terminates TLS and forwards plain HTTP to Exchange (SSL Offloading), the Channel Binding Token check will fail and all client connections will be blocked after Extended Protection is enabled. SSL Offloading must be disabled before enabling Extended Protection. SSL Bridging (re-encrypt at the load balancer using the same certificate as Exchange) is supported. Exchange 2019 CU14 and later automatically disables SSL Offloading for Outlook Anywhere during setup.\n• Extended Protection is incompatible with NTLMv1: Channel Binding Tokens (CBT) used by Extended Protection are not supported by NTLMv1. Any client or Exchange server configured to use NTLMv1 will receive repeated password prompts with no way to authenticate successfully once Extended Protection is enabled. Before enabling Extended Protection, ensure NTLMv1 is disabled on all clients and Exchange servers by setting the LmCompatibilityLevel registry value (HKLM\\System\\CurrentControlSet\\Control\\Lsa) to at least 3 (Send NTLMv2 response only); the recommended value is 5 (Send NTLMv2 response only. Refuse LM & NTLM). This can be managed centrally via Group Policy (Computer Configuration > Windows Settings > Security Settings > Local Policies > Security Options > Network security: LAN Manager authentication level). See EDCA-SEC-047 for the related NTLMv1 disabled control.",
+  "roles": [
+    "Mailbox"
+  ]
+}

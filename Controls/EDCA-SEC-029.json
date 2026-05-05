@@ -1,0 +1,29 @@
+{
+  "id": "EDCA-SEC-029",
+  "title": "MSMQ feature not installed on Exchange hosts",
+  "description": "Microsoft Message Queuing (MSMQ) is a Windows optional feature that provides asynchronous message-based communication between applications; it is not required by any Exchange Server component but is sometimes present due to legacy application deployments or automated server builds. Each Exchange server MUST have MSMQ-related Windows features removed. MSMQ is not required for Exchange 2016, 2019, or Exchange SE and increases the attack surface without operational benefit.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Platform Security",
+  "severity": "Low",
+  "severityWeight": 4,
+  "frameworks": [
+    "Best Practice"
+  ],
+  "references": [
+    {
+      "name": "CSS MSMQ feature check",
+      "url": "https://github.com/microsoft/CSS-Exchange/blob/main/Diagnostics/HealthChecker/HealthChecker.ps1"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Review dependency impact and remove MSMQ-related Windows features if not explicitly required.",
+    "scriptTemplate": "# Diagnose: Check if MSMQ Windows feature is installed\nGet-WindowsFeature MSMQ* | Select-Object Name, DisplayName, Installed\n# MSMQ is not required by Exchange. Uninstall if no other workload depends on it:\n# Uninstall-WindowsFeature MSMQ"
+  },
+  "considerations": "MSMQ on Exchange servers is not typically required and can introduce attack surface. Removing the MSMQ Windows feature requires a server reboot. Verify no Exchange services or third-party products depend on MSMQ before removing it.",
+  "roles": [
+    "Mailbox",
+    "Edge"
+  ]
+}

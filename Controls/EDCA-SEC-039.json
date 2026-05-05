@@ -1,0 +1,50 @@
+{
+  "id": "EDCA-SEC-039",
+  "title": "Exchange built-in Malware Agent is properly configured for the Exchange version",
+  "description": "The Exchange built-in malware agent MUST be configured as defined for the installed Exchange version. For Exchange 2019 and Exchange SE, the FIP-FS malware scanning agent must be ENABLED and configured for automatic signature updates to detect and block malicious content in transport. Exception: For Exchange 2016, the DISA STIG requires the built-in malware agent to be DISABLED when an approved third-party or enterprise antimalware solution is protecting Exchange transport.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Platform Security",
+  "severity": "Medium",
+  "severityWeight": 7,
+  "frameworks": [
+    "DISA",
+    "BSI",
+    "ISM"
+  ],
+  "references": [
+    {
+      "name": "DISA STIG EX19-MB-000146: Exchange antimalware agent must be enabled and configured (V-259694)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259694"
+    },
+    {
+      "name": "DISA STIG EX19-MB-000147: The Exchange malware scanning agent must be configured for automatic updates (V-259695)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259695"
+    },
+    {
+      "name": "Malware protection in Exchange Server",
+      "url": "https://learn.microsoft.com/exchange/antispam-and-antimalware/malware-protection/malware-protection"
+    },
+    {
+      "name": "BSI SYS.1.1.A9 — Einsatz von Virenschutz-Programmen auf Servern",
+      "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/07_SYS_IT_Systeme/SYS_1_1_Allgemeiner_Server_Edition_2023.pdf?__blob=publicationFile"
+    },
+    {
+      "name": "BSI APP.5.2.A9 — Sichere Konfiguration von Exchange-Servern",
+      "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/06_APP_Anwendungen/APP_5_2_Microsoft_Exchange_und_Outlook_Edition_2023.pdf?__blob=publicationFile"
+    },
+    {
+      "name": "ISM: Guidelines for Email (ISM-1234)",
+      "url": "https://www.cyber.gov.au/resources-business-and-government/essential-cyber-security/ism/cyber-security-guidelines/guidelines-for-email"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Enable and configure the malware filtering agent on Exchange 2019 and Exchange SE. On Exchange 2016, disable the built-in agent only when a compliant third-party antimalware solution is actively protecting Exchange transport.",
+    "scriptTemplate": "# Exchange 2019 and Exchange SE: enable malware filtering agent\r\n# Enable-TransportAgent -Identity 'Malware Agent'\r\n# Set-MalwareFilteringServer $env:COMPUTERNAME -BypassFiltering $false\r\n# & \"$env:ExchangeInstallPath\\Scripts\\Enable-AntimalwareScanning.ps1\"\r\n\r\n# Exchange 2016 exception: disable built-in agent when third-party AV covers Exchange transport\r\n# & \"$env:ExchangeInstallPath\\Scripts\\Disable-AntimalwareScanning.ps1\""
+  },
+  "considerations": "For Exchange 2019 and Exchange SE, verify the FIP-FS engine is healthy before enabling automatic updates -- see EX-BP-042 for engine version health checks. For Exchange 2016, do NOT disable the malware agent unless a compliant third-party solution is actively protecting Exchange transport; disabling without a replacement leaves mail flow unprotected.",
+  "roles": [
+    "Mailbox"
+  ]
+}

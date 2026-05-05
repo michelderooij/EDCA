@@ -1,0 +1,33 @@
+{
+  "id": "EDCA-TLS-028",
+  "title": "Accepted domains publish a valid TLS-RPT record",
+  "description": "Each accepted domain SHOULD publish a valid TLS-RPT DNS TXT record at _smtp._tls.<domain> with the value v=TLSRPTv1 and a reporting endpoint (rua). TLS Reporting (RFC 8460) allows receiving domains to collect reports from sending servers about TLS negotiation failures, enabling operators to detect MTA-STS or DANE misconfigurations. BSI APP.5.3.A13 (Standard, erhöhter Schutzbedarf) requires TLS-Reporting for domains with elevated protection needs.",
+  "verify": true,
+  "subject": "Organization",
+  "category": "Transport Security",
+  "severity": "Low",
+  "severityWeight": 3,
+  "frameworks": [
+    "BSI",
+    "Best Practice"
+  ],
+  "references": [
+    {
+      "name": "RFC 8460 - SMTP TLS Reporting",
+      "url": "https://www.rfc-editor.org/rfc/rfc8460"
+    },
+    {
+      "name": "BSI IT-Grundschutz Kompendium 2023 - APP.5.3.A13: TLS-Reporting (Standard, erhöhter Schutzbedarf)",
+      "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/06_APP_Anwendungen/APP_5_3_Allgemeiner_E-Mail-Client_und_-Server_Edition_2023.pdf?__blob=publicationFile"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Publish a TXT record at _smtp._tls.<domain> with content v=TLSRPTv1; rua=mailto:<reporting-address>.",
+    "scriptTemplate": "# Diagnose: Check TLS-RPT DNS records for all accepted domains\n$domains = Get-AcceptedDomain | Where-Object { $_.DomainType -eq 'Authoritative' }\nforeach ($domain in $domains) {\n    $domainName = [string]$domain.DomainName\n    $tlsrpt = Resolve-DnsName -Name \"_smtp._tls.$domainName\" -Type TXT -ErrorAction SilentlyContinue\n    $value = if ($tlsrpt) { ($tlsrpt | ForEach-Object { $_.Strings -join '' }) -join '; ' } else { $null }\n    $status = if ($value -and ($value -match 'v=TLSRPTv1')) { 'OK' } elseif ($value) { 'INVALID' } else { 'MISSING' }\n    Write-Host \"$domainName : $status$(if ($value) { '  ' + $value })\"\n}"
+  },
+  "considerations": "TLS-RPT only collects diagnostic reports; it does not enforce any policy itself. It is most useful in combination with MTA-STS (EDCA-TLS-025) and DANE (EDCA-TLS-024), where TLS negotiation failures would otherwise be silent. The reporting address (rua) must be an active mailbox capable of receiving aggregate report emails from external senders. TLS-RPT applies only to domains that use MTA-STS or DANE; publishing it for domains without either protocol has no operational effect.",
+  "roles": [
+    "Mailbox"
+  ]
+}

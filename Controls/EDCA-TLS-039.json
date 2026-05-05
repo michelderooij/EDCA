@@ -1,0 +1,33 @@
+{
+  "id": "EDCA-TLS-039",
+  "title": "Edge internal Receive connectors require TLS encryption",
+  "description": "Internal Receive connectors on the Edge Transport server (those accepting connections from internal Hub/Mailbox servers) MUST require TLS. Without mandatory TLS, internal mail can traverse the network segment between Mailbox and Edge servers in cleartext, exposing message content to interception.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Transport Security",
+  "severity": "High",
+  "severityWeight": 9,
+  "frameworks": [
+    "Best Practice",
+    "DISA"
+  ],
+  "references": [
+    {
+      "name": "Microsoft — Receive connectors",
+      "url": "https://learn.microsoft.com/exchange/mail-flow/connectors/receive-connectors"
+    },
+    {
+      "name": "DISA STIG EX19-ED-000131: The Exchange internal Receive connectors must require encryption (V-259641)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_edge_server/2024-12-06/finding/V-259641"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Ensure AuthMechanism on internal Receive connectors includes Tls. Set-ReceiveConnector -Identity <name> -AuthMechanism Tls -RequireTLS $true.",
+    "scriptTemplate": "# Diagnose: identify internal Receive connectors on this Edge server.\n# Internal connectors are identified by ExchangeServer in AuthMechanism (set by EdgeSync during subscription).\n$serverName = $env:COMPUTERNAME\n$internalRc = Get-ReceiveConnector -Server $serverName | Where-Object {\n    [string]$_.AuthMechanism -match '\\bExchangeServer\\b'\n}\n$internalRc | Select-Object Identity, AuthMechanism, RequireTLS, Bindings\n\n# Fix: require TLS on each internal Receive connector that does not already enforce it.\nforeach ($rc in ($internalRc | Where-Object { -not $_.RequireTLS })) {\n    Set-ReceiveConnector -Identity $rc.Identity -RequireTLS $true\n    Write-Host \"RequireTLS enabled on $($rc.Identity).\"\n}"
+  },
+  "considerations": "The internal Receive connector on an Edge server is used by Mailbox servers to relay outbound mail to the Edge for internet delivery. Requiring TLS on this connector means Mailbox servers must present a valid certificate. The default Exchange transport certificate satisfies this requirement.",
+  "roles": [
+    "Edge"
+  ]
+}

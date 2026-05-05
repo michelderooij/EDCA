@@ -1,0 +1,29 @@
+{
+  "id": "EDCA-SEC-007",
+  "title": "Visual C++ redistributable version baseline",
+  "description": "The Microsoft Visual C++ Redistributable packages install shared runtime libraries (MSVCR*.dll, MSVCP*.dll) required by applications compiled with specific versions of Visual C++; Exchange Server components depend on both the 2012 and 2013 x64 versions for search indexing and transport processing. Visual C++ 2012 x64 and Visual C++ 2013 x64 redistributable runtimes MUST both be installed. Both are required by Exchange components; missing runtimes cause Exchange search and transport failures.",
+  "verify": false,
+  "subject": "Server",
+  "category": "Platform Security",
+  "severity": "Medium",
+  "severityWeight": 6,
+  "frameworks": [
+    "Best Practice"
+  ],
+  "references": [
+    {
+      "name": "CSS VisualCRedistributableVersionCheck",
+      "url": "https://microsoft.github.io/CSS-Exchange/Diagnostics/HealthChecker/VisualCRedistributableVersionCheck/"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Install the latest Visual C++ Redistributable version required for the installed Exchange server role from the Microsoft Visual C++ Redistributable Latest Supported Downloads page.",
+    "scriptTemplate": "# Diagnose: List installed Visual C++ Redistributable versions\n@('HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*','HKLM:\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*') | ForEach-Object { Get-ItemProperty $_ -ErrorAction SilentlyContinue } | Where-Object { $_.DisplayName -like '*Visual C++*' } | Select-Object DisplayName, DisplayVersion | Sort-Object DisplayName"
+  },
+  "considerations": "Updating Visual C++ redistributables typically does not require downtime but may require a server reboot. Only install versions validated by the Exchange Cumulative Update prerequisites documentation for the installed Exchange build.",
+  "roles": [
+    "Mailbox",
+    "Edge"
+  ]
+}

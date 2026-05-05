@@ -1,0 +1,32 @@
+{
+  "id": "EDCA-RES-007",
+  "title": "Exchange circular logging is disabled",
+  "description": "Exchange circular logging is a database engine mode that reuses transaction log files once their contents have been committed to the database, discarding older logs rather than retaining them for incremental backup and point-in-time recovery. Exchange circular logging MUST be disabled. Circular logging overwrites transaction log files, destroying data required for point-in-time recovery and full backup restore operations. Disabling circular logging ensures all transaction logs are retained until a successful backup has been completed.",
+  "verify": true,
+  "subject": "Database",
+  "category": "Resilience",
+  "severity": "Low",
+  "severityWeight": 3,
+  "frameworks": [
+    "DISA"
+  ],
+  "references": [
+    {
+      "name": "DISA STIG EX19-MB-000042: Exchange circular logging must be disabled (V-259658)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259658"
+    },
+    {
+      "name": "Set-MailboxDatabase cmdlet",
+      "url": "https://learn.microsoft.com/powershell/module/exchange/set-mailboxdatabase"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Disable circular logging on all mailbox databases.",
+    "scriptTemplate": "# Disable circular logging on a specific mailbox database.\n# To target a specific database: replace 'DatabaseName' with the actual database name.\nSet-MailboxDatabase -Identity 'DatabaseName' -CircularLoggingEnabled $false"
+  },
+  "considerations": "Disabling circular logging requires a dedicated storage allocation for transaction logs. Ensure log volumes have adequate capacity and log backup processes are in place. For DAG members, circular logging changes require a database dismount and remount.",
+  "roles": [
+    "Mailbox"
+  ]
+}

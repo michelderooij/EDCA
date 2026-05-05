@@ -1,0 +1,33 @@
+{
+  "id": "EDCA-TLS-017",
+  "title": "Exchange outbound connection limit per domain is controlled",
+  "description": "The MaxPerDomainOutboundConnections setting limits the number of simultaneous outbound SMTP connections that can be established to any single remote domain, preventing one high-volume destination from monopolizing the transport service's connection pool and starving delivery to all other domains. The Exchange Outbound Connection Limit per Domain Count MUST be controlled. Restricting the number of simultaneous outbound connections to a single domain prevents a single remote domain from consuming all available transport resources and limits the impact of outbound delivery queues growing uncontrolled.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Transport Security",
+  "severity": "Low",
+  "severityWeight": 3,
+  "frameworks": [
+    "DISA"
+  ],
+  "references": [
+    {
+      "name": "DISA STIG EX19-MB-000131: The Exchange Outbound Connection Limit per Domain Count must be controlled (V-259684)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259684"
+    },
+    {
+      "name": "Set-TransportService cmdlet",
+      "url": "https://learn.microsoft.com/powershell/module/exchange/set-transportservice"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Set MaxPerDomainOutboundConnections to 20 on the transport service.",
+    "scriptTemplate": "Set-TransportService -Identity $env:COMPUTERNAME -MaxPerDomainOutboundConnections 20"
+  },
+  "considerations": "Setting this limit too low may slow delivery to high-volume partner domains. Review typical delivery volumes per domain before applying strict limits.",
+  "roles": [
+    "Mailbox",
+    "Edge"
+  ]
+}

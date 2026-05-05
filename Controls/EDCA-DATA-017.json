@@ -1,0 +1,37 @@
+{
+  "id": "EDCA-DATA-017",
+  "title": "Exchange database/log volumes are BitLocker-protected",
+  "description": "All volumes hosting Exchange mailbox database and transaction log files MUST be protected with BitLocker Drive Encryption. BitLocker prevents unauthorized access to Exchange data if physical storage media is removed or stolen.",
+  "verify": false,
+  "subject": "Server",
+  "category": "Data Security",
+  "severity": "Medium",
+  "severityWeight": 6,
+  "frameworks": [
+    "Best Practice",
+    "ISM"
+  ],
+  "references": [
+    {
+      "name": "Exchange Server Preferred Architecture: Server component requirements",
+      "url": "https://learn.microsoft.com/en-us/exchange/plan-and-deploy/deployment-ref/preferred-architecture-2019"
+    },
+    {
+      "name": "BitLocker overview",
+      "url": "https://learn.microsoft.com/en-us/windows/security/operating-system-security/data-protection/bitlocker/"
+    },
+    {
+      "name": "ISM: Guidelines for Cryptography (ISM-0459, ISM-1080)",
+      "url": "https://www.cyber.gov.au/resources-business-and-government/essential-cyber-security/ism/cyber-security-guidelines/guidelines-for-cryptography"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Enable BitLocker Drive Encryption on all volumes that host Exchange database and transaction log files. Use Enable-BitLocker or BitLocker Drive Encryption in the Windows Server GUI. Store recovery keys securely in Active Directory before enabling.",
+    "scriptTemplate": "Get-BitLockerVolume | Select-Object MountPoint, VolumeStatus, ProtectionStatus | Format-Table -AutoSize"
+  },
+  "considerations": "Enabling BitLocker on an existing Exchange volume requires a recovery key stored in Active Directory or a key management solution. The initial encryption pass increases I/O load but does not require an offline maintenance window for an already-mounted volume.",
+  "roles": [
+    "Mailbox"
+  ]
+}

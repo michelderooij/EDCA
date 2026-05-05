@@ -1,0 +1,29 @@
+{
+  "id": "EDCA-PERF-016",
+  "title": "TcpAckFrequency is at its default value on all IP-enabled network adapters",
+  "description": "The Windows TCP/IP stack uses a delayed acknowledgement (delayed ACK) algorithm by default. Rather than sending an ACK for every segment received, it sends one ACK per two segments or after a 200 ms timeout — whichever comes first. This keeps ACK traffic low and is the correct behaviour for Exchange workloads. The registry entry TcpAckFrequency, configured per network adapter under HKLM:\\SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters\\Interfaces\\<GUID>, controls this threshold. The default value is 2, and Microsoft states it should not be changed without careful study of the environment.\n\nThird-party troubleshooting articles recommend setting TcpAckFrequency=1 to resolve Outlook Online mode latency. This advice is incorrect — setting it to 1 is bad practice and introduces its own performance problems (see Considerations). The actual cause of the 200 ms delay pattern in VMware environments is the NSX Guest Introspection network driver (vnetflt); the correct fix is to remove that driver (see EDCA-PERF-017).\n\nThis control evaluates as Warning when TcpAckFrequency=1 (delayed ACK disabled), as Risk when the value is 3 or above (delayed ACK extended beyond default), and as Pass when the key is absent or set to 2.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Performance",
+  "severity": "Medium",
+  "severityWeight": 6,
+  "frameworks": [
+    "Best Practice"
+  ],
+  "references": [
+    {
+      "name": "Microsoft KB 328890: Registry entry for controlling TCP Acknowledgment behavior",
+      "url": "https://learn.microsoft.com/en-us/troubleshoot/windows-server/networking/registry-entry-control-tcp-acknowledgment-behavior"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Remove the TcpAckFrequency registry value from each IP-enabled network adapter to restore the Windows delayed ACK default. Removing the value is preferred over setting it to 2 — an absent key and the value 2 are equivalent, and removing it avoids a stale override. No reboot is required; the change takes effect for new TCP connections immediately.",
+    "scriptTemplate": "# Restore default delayed ACK behaviour by removing TcpAckFrequency override\n$nicConfigs = @(Get-CimInstance -ClassName Win32_NetworkAdapterConfiguration | Where-Object { $_.IPEnabled })\nforeach ($nic in $nicConfigs) {\n    $guid    = [string]$nic.SettingID\n    $regPath = 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters\\Interfaces\\' + $guid\n    if (Test-Path -Path $regPath) {\n        $val = (Get-ItemProperty -Path $regPath -Name TcpAckFrequency -ErrorAction SilentlyContinue).TcpAckFrequency\n        if ($null -ne $val -and [int]$val -ne 2) {\n            Remove-ItemProperty -Path $regPath -Name TcpAckFrequency -Force\n            Write-Host ('Removed TcpAckFrequency={2} from adapter: {0} ({1})' -f $nic.Description, $guid, $val)\n        } else {\n            $display = if ($null -eq $val) { 'not set (default)' } else { [string]$val }\n            Write-Host ('TcpAckFrequency={2} on adapter: {0} ({1}); no action needed.' -f $nic.Description, $guid, $display)\n        }\n    } else {\n        Write-Warning ('Registry path not found for adapter: {0} ({1})' -f $nic.Description, $guid)\n    }\n}\nWrite-Host 'Done. No reboot required; existing connections resume correct behaviour after reconnection.'"
+  },
+  "considerations": "Setting TcpAckFrequency = 1 turns off delayed ACKs, so the system sends an ACK for every single TCP segment. That creates a lot of tiny packets, drives up NIC interrupts, and increases CPU load on both Exchange and the clients. And because it applies to the whole adapter, the extra noise affects all TCP traffic, not just MAPI.\n\nIt also doesn't solve Outlook latency issues. The well-known 200 ms delay—especially in certain VMware environments—comes from the NSX vnetflt introspection driver pausing packets, not from delayed ACK. Changing TcpAckFrequency just adds overhead without fixing the real problem. The proper fix is documented in EDCA-PERF-017.\n\nGoing the other direction isn't better. Values 3 or higher hold ACKs even longer than the default 200 ms, which slows down interactive protocols like MAPI and makes Outlook feel less responsive.\n\nAnd there's no point setting it to 2. According to Microsoft, \"missing key,\" \"0,\" and \"2\" all behave the same. The cleanest option is simply to remove the key entirely.\n\nMicrosoft does not recommend configuring this unless you've studied the environment very carefully.",
+  "roles": [
+    "Mailbox",
+    "Edge"
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "id": "EDCA-SEC-040",
+  "title": "Exchange database/log volumes are formatted with ReFS",
+  "description": "All volumes hosting Exchange mailbox database and transaction log files SHOULD be formatted with ReFS (Resilient File System). ReFS provides improved resiliency, integrity, and performance for Exchange workloads compared to NTFS and is required by the Microsoft Preferred Architecture.",
+  "verify": false,
+  "subject": "Server",
+  "category": "Platform Security",
+  "severity": "Low",
+  "severityWeight": 3,
+  "frameworks": [
+    "Best Practice"
+  ],
+  "references": [
+    {
+      "name": "Exchange Server Preferred Architecture: Storage design",
+      "url": "https://learn.microsoft.com/en-us/exchange/plan-and-deploy/deployment-ref/preferred-architecture-2019"
+    },
+    {
+      "name": "Resilient File System (ReFS) overview",
+      "url": "https://learn.microsoft.com/en-us/windows-server/storage/refs/refs-overview"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Format Exchange database and transaction log volumes with ReFS. ReFS cannot be applied in-place; volumes must be re-initialized. Plan a database move to an alternate DAG copy, reformat the volume with ReFS, and move the database back.",
+    "scriptTemplate": "Get-Volume | Where-Object { $_.DriveType -eq 'Fixed' } | Select-Object DriveLetter, FileSystem, FileSystemLabel | Format-Table -AutoSize"
+  },
+  "considerations": "Converting an existing NTFS Exchange volume to ReFS requires offline reformatting and a planned database failover. NTFS remains a supported filesystem (see EX-BP-016); this control enforces the stricter Preferred Architecture recommendation. For new deployments, format all Exchange data volumes with ReFS during initial volume preparation before database creation.",
+  "roles": [
+    "Mailbox"
+  ]
+}

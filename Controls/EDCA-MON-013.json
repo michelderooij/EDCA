@@ -1,0 +1,51 @@
+{
+  "id": "EDCA-MON-013",
+  "title": "Windows Advanced Audit Policy is configured",
+  "description": "Windows Advanced Audit Policy subcategories MUST be configured on Exchange servers to capture security-relevant events. The following subcategories must be set to Success and/or Failure logging: Logon (Success/Failure), Account Logon (Success/Failure), Account Management (Success/Failure), Special Logon (Success), and Process Creation (Success). ANSSI recommends activating Windows advanced audit policy subcategories rather than relying on legacy basic audit settings.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Monitoring",
+  "severity": "High",
+  "severityWeight": 8,
+  "frameworks": [
+    "ANSSI",
+    "BSI",
+    "ISM"
+  ],
+  "references": [
+    {
+      "name": "Advanced security audit policy settings",
+      "url": "https://learn.microsoft.com/windows/security/threat-protection/auditing/advanced-security-audit-policy-settings"
+    },
+    {
+      "name": "auditpol command-line tool",
+      "url": "https://learn.microsoft.com/windows-server/administration/windows-commands/auditpol"
+    },
+    {
+      "name": "ANSSI - Sécuriser la journalisation dans un environnement Microsoft Active Directory (2022)",
+      "url": "https://messervices.cyber.gouv.fr/guides/securiser-la-journalisation-dans-un-environnement-microsoft-active-directory"
+    },
+    {
+      "name": "BSI SYS.1.1.A10 — Protokollierung",
+      "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/07_SYS_IT_Systeme/SYS_1_1_Allgemeiner_Server_Edition_2023.pdf?__blob=publicationFile"
+    },
+    {
+      "name": "BSI APP.2.2.A7 — Umsetzung sicherer Verwaltungsmethoden für Active Directory",
+      "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/06_APP_Anwendungen/APP_2_2_Active_Directory_Domain_Services_Edition_2023.pdf?__blob=publicationFile"
+    },
+    {
+      "name": "ISM: Guidelines for System Hardening (ISM-0582)",
+      "url": "https://www.cyber.gov.au/resources-business-and-government/essential-cyber-security/ism/cyber-security-guidelines/guidelines-for-system-hardening"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Configure Advanced Audit Policy subcategories using auditpol or Group Policy to ensure Logon, Account Logon, Account Management, Special Logon, and Process Creation events are audited.",
+    "scriptTemplate": "# Check current Advanced Audit Policy subcategory settings\nauditpol /get /category:\"Logon/Logoff\",\"Account Logon\",\"Account Management\",\"Detailed Tracking\" 2>&1\n\n# Apply recommended subcategory settings (Success/Failure where appropriate)\n# Logon\nauditpol /set /subcategory:\"Logon\" /success:enable /failure:enable\n# Account Logon\nauditpol /set /subcategory:\"Credential Validation\" /success:enable /failure:enable\n# Account Management\nauditpol /set /subcategory:\"User Account Management\" /success:enable /failure:enable\nauditpol /set /subcategory:\"Security Group Management\" /success:enable /failure:enable\n# Special Logon\nauditpol /set /subcategory:\"Special Logon\" /success:enable\n# Process Creation\nauditpol /set /subcategory:\"Process Creation\" /success:enable"
+  },
+  "considerations": "Enabling advanced audit subcategories increases Security event log volume on Exchange servers. Ensure the event log size and retention policy (Security log maximum size and Archive policy) are set appropriately before enabling. In environments using Group Policy for audit settings, ensure the 'Audit: Force audit policy subcategory settings' policy is enabled so that subcategory settings override legacy category settings. High-volume servers may require a SIEM or log forwarding pipeline to handle the increased event rate.",
+  "roles": [
+    "Mailbox",
+    "Edge"
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "id": "EDCA-TLS-022",
+  "title": "Exchange receive connectors control the number of recipients per message",
+  "description": "Exchange receive connectors MUST limit the number of recipients per message to prevent misuse of inbound relay paths for large-scale bulk delivery or directed spam campaigns. For Exchange 2019 and Exchange SE, global per-message recipient limits are enforced at the transport level (see EX-BP-141); per-connector limits are recommended for all Exchange versions.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Transport Security",
+  "severity": "Low",
+  "severityWeight": 3,
+  "frameworks": [
+    "DISA"
+  ],
+  "references": [
+    {
+      "name": "DISA STIG EX16-MB-000360: Exchange Receive connectors must control the number of recipients per message (V-228383)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2016_mailbox_server/2023-12-18/finding/V-228383"
+    },
+    {
+      "name": "Set-ReceiveConnector cmdlet",
+      "url": "https://learn.microsoft.com/powershell/module/exchange/set-receiveconnector"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Set MaxRecipientsPerMessage on receive connectors. Align with the global recipient count limit defined in EX-BP-141.",
+    "scriptTemplate": "# Check current per-message recipient limits on receive connectors\r\nGet-ReceiveConnector | Select-Object Name, MaxRecipientsPerMessage\r\n\r\n# Set limit on all receive connectors\r\n# (Exchange 2016: explicit STIG requirement; Exchange 2019/SE: best practice)\r\n# Get-ReceiveConnector | Set-ReceiveConnector -MaxRecipientsPerMessage 5000"
+  },
+  "considerations": "Exchange 2016 has an explicit DISA STIG rule requiring per-connector recipient limits. For Exchange 2019 and Exchange SE, global transport recipient limits (see EX-BP-141) are the primary STIG control; per-connector limits are also recommended. Setting this too low may reject legitimate bulk internal communications -- align with EX-BP-141.",
+  "roles": [
+    "Mailbox",
+    "Edge"
+  ]
+}

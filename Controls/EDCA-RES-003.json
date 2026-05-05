@@ -1,0 +1,33 @@
+{
+  "id": "EDCA-RES-003",
+  "title": "Replication health checks pass",
+  "description": "When a DAG is deployed, all replication health checks MUST pass. Replication failures indicate log shipping, seeding, or network problems that increase the risk of data loss during a failover.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Resilience",
+  "severity": "Medium",
+  "severityWeight": 6,
+  "frameworks": [
+    "Best Practice",
+    "NIS2"
+  ],
+  "references": [
+    {
+      "name": "Test-ReplicationHealth command",
+      "url": "https://learn.microsoft.com/powershell/module/exchange/test-replicationhealth"
+    },
+    {
+      "name": "ENISA / NIS2 Directive (EU) 2022/2555 - Article 21(2)(c): business continuity and crisis management - Section 6.3, 6.4, 3.2-3.4",
+      "url": "https://eur-lex.europa.eu/eli/dir/2022/2555/oj"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Investigate and resolve failed DAG replication checks.",
+    "scriptTemplate": "# Diagnose: Run DAG replication health checks and review database copy status\nTest-ReplicationHealth -Server $env:COMPUTERNAME | Sort-Object CheckDescription | Format-Table CheckDescription, Result, Error -AutoSize\nGet-MailboxDatabaseCopyStatus -Server $env:COMPUTERNAME | Select-Object Name, Status, CopyQueueLength, ReplayQueueLength, ContentIndexState | Format-Table -AutoSize"
+  },
+  "considerations": "Replication failures may have causes beyond configuration - including storage latency, network connectivity, or witness server unavailability. Do not make DAG configuration changes during active failovers or when the DAG is already in a degraded state. Follow the resolution steps appropriate for each specific replication health check failure.",
+  "roles": [
+    "Mailbox"
+  ]
+}

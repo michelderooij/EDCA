@@ -1,0 +1,37 @@
+{
+  "id": "EDCA-PERF-014",
+  "title": "Memory meets Exchange version and role requirements",
+  "description": "Exchange Server has published minimum and maximum memory requirements by version and role. Falling below the minimum results in an unsupported configuration with degraded performance and risk of service failure under load. Exceeding the maximum is outside the tested configuration envelope.\n\nRequirements:\n• Exchange 2016 Mailbox: minimum 8 GB, maximum 192 GB\n• Exchange 2016 Edge Transport: minimum 4 GB\n• Exchange 2019 / Exchange SE Mailbox: minimum 32 GB, maximum 256 GB\n• Exchange 2019 / Exchange SE Edge Transport: minimum 8 GB\n\nOn virtual hosts, the full RAM allocation must be statically reserved; memory overcommit, oversubscription, and dynamic memory features such as Hyper-V Dynamic Memory or VMware memory ballooning are not supported.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Performance",
+  "severity": "High",
+  "severityWeight": 8,
+  "frameworks": [
+    "Best Practice"
+  ],
+  "references": [
+    {
+      "name": "Exchange Server 2019 and Exchange SE system requirements",
+      "url": "https://learn.microsoft.com/en-us/exchange/plan-and-deploy/system-requirements"
+    },
+    {
+      "name": "Exchange Server virtualization: memory requirements and recommendations",
+      "url": "https://learn.microsoft.com/en-us/exchange/plan-and-deploy/virtualization#exchange-memory-requirements-and-recommendations"
+    },
+    {
+      "name": "Exchange Server role requirements calculator",
+      "url": "https://www.microsoft.com/en-us/download/details.aspx?id=102123"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Add physical or virtual memory until the server meets the minimum for its Exchange version and role. For virtual machines, ensure the hypervisor memory reservation equals the full vRAM allocation and that dynamic memory / memory ballooning is disabled. Use the Exchange Server role requirements calculator (https://aka.ms/Exchange2019Calc) to size Mailbox servers based on actual mailbox count, message profile, and availability requirements before provisioning.",
+    "scriptTemplate": "# Report current installed memory and evaluate against Exchange requirements\n$cs     = Get-CimInstance Win32_ComputerSystem\n$ramGB  = [math]::Round($cs.TotalPhysicalMemory / 1GB, 2)\nWrite-Host ('Installed RAM: {0} GB' -f $ramGB)\n\n$exSrv  = Get-ExchangeServer -Identity $env:COMPUTERNAME -ErrorAction SilentlyContinue\n$ver    = if ($null -ne $exSrv) { [string]$exSrv.AdminDisplayVersion } else { 'Unknown' }\n$isEdge = ($null -ne $exSrv) -and ([string]$exSrv.ServerRole -like '*Edge*')\nWrite-Host ('Version: {0}' -f $ver)\nWrite-Host ('Role   : {0}' -f (if ($isEdge) { 'Edge Transport' } else { 'Mailbox' }))\n\n# Requirements table\n$minGB = 0; $maxGB = $null\nif ($ver -match 'Version 15\\.1') {\n    $minGB = if ($isEdge) { 4 } else { 8 }\n    $maxGB = if ($isEdge) { $null } else { 192 }\n} elseif ($ver -match 'Version 15\\.2') {\n    $minGB = if ($isEdge) { 8 } else { 32 }\n    $maxGB = if ($isEdge) { $null } else { 256 }\n}\n\nif ($ramGB -lt $minGB) { Write-Warning ('RAM {0} GB is below the {1} GB minimum.' -f $ramGB, $minGB) }\nelseif ($null -ne $maxGB -and $ramGB -gt $maxGB) { Write-Warning ('RAM {0} GB exceeds the {1} GB maximum.' -f $ramGB, $maxGB) }\nelse { Write-Host 'RAM is within the supported range.' }"
+  },
+  "considerations": "Adding physical memory to a server requires downtime; plan capacity changes in advance using the Exchange Server role requirements calculator (https://aka.ms/Exchange2019Calc). On virtual machines, increasing vRAM typically requires powering off the VM; enabling a 100% hypervisor memory reservation may prevent the hypervisor from overcommitting memory to other guests - coordinate with the platform team before making changes. Disabling dynamic memory features (Hyper-V Dynamic Memory or VMware memory ballooning) may require a reboot to take full effect. Note that memory overcommit at the hypervisor layer can cause the guest OS to report a higher RAM total than is actually guaranteed, resulting in a falsely compliant assessment; verify hypervisor-level reservations alongside any reported values. The maximum RAM limits for Mailbox servers (192 GB for Exchange 2016, 256 GB for Exchange 2019/SE) represent the upper boundary of Microsoft’s tested configurations; address larger mailbox populations by adding servers rather than exceeding the documented ceiling.",
+  "roles": [
+    "Mailbox",
+    "Edge"
+  ]
+}

@@ -1,0 +1,47 @@
+{
+  "id": "EDCA-SEC-043",
+  "title": "SMB packet signing is required on server and client",
+  "description": "SMB packet signing is a security feature of the Server Message Block protocol that cryptographically signs each SMB packet to guarantee integrity and origin, preventing man-in-the-middle attackers from intercepting or modifying SMB traffic such as DAG log replication, file share witness access, and SYSVOL traversal. SMB packet signing MUST be required (not merely enabled) on both the SMB server service (LanmanServer) and the SMB client service (LanmanWorkstation) on Exchange servers. Without mandatory SMB signing, an attacker performing a man-in-the-middle attack can intercept and modify SMB traffic including DAG log shipping, file share witness access, and SYSVOL/NETLOGON traversal, enabling NTLM relay attacks. ANSSI and the CIS Benchmark require SMB signing to be enforced. Setting RequireSecuritySignature=1 ensures that connections that cannot negotiate signing are rejected.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Platform Security",
+  "severity": "High",
+  "severityWeight": 8,
+  "frameworks": [
+    "ANSSI",
+    "BSI",
+    "CIS"
+  ],
+  "references": [
+    {
+      "name": "Overview of Server Message Block signing",
+      "url": "https://learn.microsoft.com/windows-server/storage/file-server/smb-signing-overview"
+    },
+    {
+      "name": "Configure SMB signing with confidence",
+      "url": "https://learn.microsoft.com/windows-server/storage/file-server/configure-smb-signing"
+    },
+    {
+      "name": "ANSSI - Recommandations pour l'administration sécurisée des SI reposant sur AD (2023)",
+      "url": "https://messervices.cyber.gouv.fr/guides/recommandations-pour-ladministration-securisee-des-si-reposant-sur-ad"
+    },
+    {
+      "name": "BSI SYS.1.2.3.A5 — Sichere Authentisierung und Autorisierung in Windows Server",
+      "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/07_SYS_IT_Systeme/SYS_1_2_3_Windows_Server_Edition_2023.pdf?__blob=publicationFile"
+    },
+    {
+      "name": "CIS Microsoft Windows Server 2019/2022/2025 Benchmarks — 2.3.8/2.3.9 SMB signing",
+      "url": "https://www.cisecurity.org/benchmark/microsoft_windows_server"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Set RequireSecuritySignature=1 for both LanmanServer (SMB server) and LanmanWorkstation (SMB client) via registry or Group Policy (Security Options: 'Microsoft network server: Digitally sign communications (always)' and 'Microsoft network client: Digitally sign communications (always)').",
+    "scriptTemplate": "# Group Policy equivalent:\n# Computer Configuration > Windows Settings > Security Settings > Local Policies > Security Options\n#   Microsoft network server: Digitally sign communications (always) = Enabled\n#   Microsoft network client: Digitally sign communications (always) = Enabled\n#\n# Check SMB server signing (LanmanServer)\n$serverPath = 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\LanmanServer\\Parameters'\n$serverReq = (Get-ItemProperty $serverPath -Name RequireSecuritySignature -ErrorAction SilentlyContinue).RequireSecuritySignature\n\"SMB Server RequireSecuritySignature: $(if ($null -eq $serverReq) { 'not set (default: 0 - not required)' } else { $serverReq })\"\n\n# Check SMB client signing (LanmanWorkstation)\n$clientPath = 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\LanmanWorkstation\\Parameters'\n$clientReq = (Get-ItemProperty $clientPath -Name RequireSecuritySignature -ErrorAction SilentlyContinue).RequireSecuritySignature\n\"SMB Client RequireSecuritySignature: $(if ($null -eq $clientReq) { 'not set (default: 0 - not required)' } else { $clientReq })\"\n\n# Require SMB signing on server and client (1 = required)\nSet-ItemProperty -Path $serverPath -Name RequireSecuritySignature -Type DWord -Value 1\nSet-ItemProperty -Path $clientPath -Name RequireSecuritySignature -Type DWord -Value 1\nWrite-Host 'SMB signing required on server and client. No restart required; applies to new connections.'"
+  },
+  "considerations": "Requiring SMB signing affects all SMB connections on the Exchange server: DAG log file replication, file share witness connections, administrative share access, and SYSVOL/NETLOGON traversal. All supported Windows SMB clients negotiate signing automatically — modern Windows versions (Vista and later) all support SMB signing. Requiring signing on the SMB client (LanmanWorkstation) means this Exchange server will refuse to connect to SMB targets that do not offer signing; verify that all SMB targets (file share witnesses, backup targets) support signing before enforcing the client setting. This control is complementary to EDCA-SEC-023 (SMBv1 disabled) — SMBv1 does not support mandatory signing and should already be disabled.",
+  "roles": [
+    "Mailbox",
+    "Edge"
+  ]
+}

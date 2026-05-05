@@ -1,0 +1,36 @@
+{
+  "id": "EDCA-IAC-027",
+  "title": "Exchange computer accounts do not have unconstrained Kerberos delegation",
+  "description": "Unconstrained Kerberos delegation is an Active Directory computer account attribute (TRUSTED_FOR_DELEGATION) that permits the server to receive and cache Kerberos Ticket Granting Tickets (TGTs) from any authenticating user and reuse them to impersonate those users against any service in the domain. Exchange server computer accounts in Active Directory SHOULD NOT have the TRUSTED_FOR_DELEGATION flag set in userAccountControl (bit 19, value 0x80000). Unconstrained Kerberos delegation permits the Exchange server to impersonate any authenticated user against any Kerberos service in the domain. If an Exchange server with unconstrained delegation is compromised, all Kerberos TGTs presented to it can be captured and replayed, enabling full domain compromise via Pass-the-Ticket attacks. ANSSI prohibits unconstrained delegation on member servers. Exchange 2016, 2019, and Exchange SE do not require unconstrained delegation for any current functionality.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Identity and Access Control",
+  "severity": "High",
+  "severityWeight": 9,
+  "frameworks": [
+    "ANSSI"
+  ],
+  "references": [
+    {
+      "name": "Kerberos constrained delegation overview",
+      "url": "https://learn.microsoft.com/windows-server/security/kerberos/kerberos-constrained-delegation-overview"
+    },
+    {
+      "name": "Configure Kerberos constrained delegation (S4U2Proxy)",
+      "url": "https://learn.microsoft.com/windows-server/security/kerberos/configuring-kerberos-constrained-delegation"
+    },
+    {
+      "name": "ANSSI - Recommandations pour l'administration sécurisée des SI reposant sur AD (2023)",
+      "url": "https://messervices.cyber.gouv.fr/guides/recommandations-pour-ladministration-securisee-des-si-reposant-sur-ad"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Remove the TRUSTED_FOR_DELEGATION flag from Exchange computer accounts in Active Directory using Set-ADComputer or the Active Directory Users and Computers console (Account tab: clear 'Trust this computer for delegation to any service (Kerberos only)'). If delegation is required for a specific integration, configure constrained delegation targeting only the required SPNs.",
+    "scriptTemplate": "# Check if this Exchange server's computer account has unconstrained Kerberos delegation\ntry {\n    $computer = Get-ADComputer -Identity $env:COMPUTERNAME -Properties userAccountControl, TrustedForDelegation -ErrorAction Stop\n    $unconstrained = $computer.TrustedForDelegation\n    \"Computer: $($computer.Name)\"\n    \"TrustedForDelegation (unconstrained): $unconstrained\"\n    if ($unconstrained) {\n        Write-Warning 'UNCONSTRAINED delegation is ENABLED - this is a HIGH severity finding.'\n    } else {\n        Write-Host 'TrustedForDelegation is not set - compliant.'\n    }\n} catch {\n    \"Unable to query Active Directory: $($_.Exception.Message)\"\n    \"Ensure the ActiveDirectory PowerShell module is available (RSAT or AD DS role).\"\n}\n\n# To remediate (requires Domain Admin or delegated rights on the computer object):\n# Set-ADComputer -Identity $env:COMPUTERNAME -TrustedForDelegation $false"
+  },
+  "considerations": "Exchange Server does not require unconstrained delegation for Exchange 2016, 2019, or Exchange SE mail flow, client connectivity, or DAG operations. If unconstrained delegation is found enabled, it is likely a historical misconfiguration or was set during an older Exchange setup process. Remediation (removing TrustedForDelegation) does not affect Exchange functionality. If a specific third-party integration requires Kerberos delegation, configure resource-based constrained delegation (RBCD) or S4U2Proxy constrained delegation scoped to the specific service SPNs instead.",
+  "roles": [
+    "Mailbox"
+  ]
+}

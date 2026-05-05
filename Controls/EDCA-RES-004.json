@@ -1,0 +1,33 @@
+{
+  "id": "EDCA-RES-004",
+  "title": "Mailbox database deleted item retention is at least 14 days",
+  "description": "The Recoverable Items folder (also known as the dumpster) is the hidden mailbox folder where deleted items are staged after removal from the Deleted Items folder, providing a recovery window before permanent purge. The DeletedItemRetention on each mailbox database controls how long deleted items are retained in the dumpster before permanent removal. DeletedItemRetention MUST be set to a minimum of 14 days so that accidentally deleted items can be recovered without requiring a backup restore.",
+  "verify": true,
+  "subject": "Database",
+  "category": "Resilience",
+  "severity": "Medium",
+  "severityWeight": 5,
+  "frameworks": [
+    "Best Practice",
+    "CIS"
+  ],
+  "references": [
+    {
+      "name": "CIS 2.1.2 (L1): Ensure Keep deleted items for the specified number of days is set to 14",
+      "url": "https://www.cisecurity.org/benchmark/microsoft_exchange_server"
+    },
+    {
+      "name": "Configure deleted item retention and recoverable items quotas",
+      "url": "https://learn.microsoft.com/en-us/exchange/recipients/mailbox-databases/configure-deleted-item-retention-and-recoverable-items-quotas"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Set DeletedItemRetention to at least 14 days on every mailbox database.",
+    "scriptTemplate": "# Set deleted item retention to 14 days on a specific mailbox database.\n# To target a specific database: replace 'DatabaseName' with the actual database name.\nSet-MailboxDatabase -Identity 'DatabaseName' -DeletedItemRetention 14.00:00:00"
+  },
+  "considerations": "Increasing the retention period will consume additional storage in the Recoverable Items folder. Review mailbox database storage capacity before extending the retention period significantly beyond the recommended minimum.",
+  "roles": [
+    "Mailbox"
+  ]
+}

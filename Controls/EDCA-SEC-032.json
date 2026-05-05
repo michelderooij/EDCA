@@ -1,0 +1,32 @@
+{
+  "id": "EDCA-SEC-032",
+  "title": "P2 FROM header manipulation detection is not disabled",
+  "description": "Exchange P2 FROM header manipulation detection is a transport security feature that identifies messages where the RFC 5322 From header (P2, the visible sender) does not align with the SMTP envelope sender (P1), appending a disclaimer or rejecting the message to reduce display name spoofing. The Exchange P2 FROM header manipulation detection MUST remain enabled and MUST NOT be suppressed through setting overrides.",
+  "verify": true,
+  "subject": "Organization",
+  "category": "Platform Security",
+  "severity": "High",
+  "severityWeight": 8,
+  "frameworks": [
+    "CISA"
+  ],
+  "references": [
+    {
+      "name": "Exchange non-RFC compliant P2 FROM header detection",
+      "url": "https://learn.microsoft.com/exchange/plan-and-deploy/post-installation-tasks/security-best-practices/exchange-non-compliant-p2from-detection"
+    },
+    {
+      "name": "CISA AA21-062A: Mitigate Microsoft Exchange Server Vulnerabilities - enable P2 FROM header manipulation detection to reduce spoofing risk",
+      "url": "https://www.cisa.gov/news-events/cybersecurity-advisories/aa21-062a"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Remove Exchange setting overrides that disable P2 FROM detection disclaimer/header actions.",
+    "scriptTemplate": "Get-SettingOverride | Where-Object { $_.Name -match 'DisableP2FromRegexMatch' } | Remove-SettingOverride -Confirm:$false; Get-ExchangeDiagnosticInfo -Process Microsoft.Exchange.Directory.TopologyService -Component VariantConfiguration -Argument Refresh; Restart-Service -Name MSExchangeTransport"
+  },
+  "considerations": "Enabling P2 FROM header detection may cause some forwarded messages or messages from systems that rewrite headers to be rejected. Test with monitoring enabled (log-only mode if supported) before enforcement. This control reduces spoofing risk but must be validated against legitimate internal forwarding scenarios.",
+  "roles": [
+    "Mailbox"
+  ]
+}

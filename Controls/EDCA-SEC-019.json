@@ -1,0 +1,52 @@
+{
+  "id": "EDCA-SEC-019",
+  "title": "Microsoft Defender antivirus exclusions configured for Exchange",
+  "description": "When Microsoft Defender real-time protection is active on an Exchange server, the recommended folder and process exclusions MUST be configured to prevent Defender from interfering with Exchange databases, transport queues, and critical processes. The following folder exclusions are checked (per Microsoft documentation and CSS-Exchange Set-ExchAVExclusions.ps1):\n\n• \\Mailbox\n• \\ClientAccess\\OAB\n• \\FIP-FS\n• \\GroupMetrics\n• \\Logging\n• \\TransportRoles\\Data\\Queue\n• \\TransportRoles\\Data\\SenderReputation\n• \\TransportRoles\\Data\\Temp\n• \\TransportRoles\\Logs\n• \\Working\\OleConverter\n\nExchange 2016 additionally requires:\n\n• \\UnifiedMessaging\\Grammars\n• \\UnifiedMessaging\\Prompts\n• \\UnifiedMessaging\\Temp\n• \\UnifiedMessaging\\Voicemail\n\nCISA recommends configuring Microsoft Defender antivirus with the correct Exchange-specific exclusions.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Platform Security",
+  "severity": "High",
+  "severityWeight": 8,
+  "frameworks": [
+    "Best Practice",
+    "CISA",
+    "DISA",
+    "BSI"
+  ],
+  "references": [
+    {
+      "name": "Running Windows antivirus software on Exchange servers",
+      "url": "https://learn.microsoft.com/exchange/antispam-and-antimalware/windows-antivirus-software"
+    },
+    {
+      "name": "CISA AA21-062A: Mitigate Microsoft Exchange Server Vulnerabilities - configure Microsoft Defender antivirus with correct Exchange-specific exclusions",
+      "url": "https://www.cisa.gov/news-events/cybersecurity-advisories/aa21-062a"
+    },
+    {
+      "name": "DISA STIG EX19-MB-000134 (HIGH): Exchange servers must have an approved DOD email-aware virus protection software installed (V-259686)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259686"
+    },
+    {
+      "name": "CSS-Exchange Set-ExchAVExclusions script",
+      "url": "https://microsoft.github.io/CSS-Exchange/Setup/Set-ExchAVExclusions/"
+    },
+    {
+      "name": "BSI SYS.1.1.A9 — Einsatz von Virenschutz-Programmen auf Servern",
+      "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/07_SYS_IT_Systeme/SYS_1_1_Allgemeiner_Server_Edition_2023.pdf?__blob=publicationFile"
+    },
+    {
+      "name": "BSI APP.5.2.A9 — Sichere Konfiguration von Exchange-Servern",
+      "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/06_APP_Anwendungen/APP_5_2_Microsoft_Exchange_und_Outlook_Edition_2023.pdf?__blob=publicationFile"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Use the CSS-Exchange Set-ExchAVExclusions.ps1 script to automatically configure all required Microsoft Defender exclusions for the installed Exchange version. Run from an elevated Exchange Management Shell on each Exchange server:\n\n  .\\Set-ExchAVExclusions.ps1\n\nThe script auto-detects the Exchange install path and version and sets all recommended folder and process exclusions. To list all expected exclusions without applying them, use the -ListRecommendedExclusions switch:\n\n  .\\Set-ExchAVExclusions.ps1 -ListRecommendedExclusions\n\nTo test whether exclusions are correctly applied, use the separate Test-ExchAVExclusions.ps1 script (https://microsoft.github.io/CSS-Exchange/Diagnostics/Test-ExchAVExclusions/).\n\nThe script is available from https://aka.ms/ExchAVExclusions. Alternatively, add exclusions manually using Set-MpPreference or Add-MpPreference - verify paths match the Exchange install path for the installed version.",
+    "scriptTemplate": "# Download and run Set-ExchAVExclusions.ps1 (requires elevated Exchange Management Shell)\n# https://aka.ms/ExchAVExclusions\n\n# List all expected exclusions without applying them:\n# .\\Set-ExchAVExclusions.ps1 -ListRecommendedExclusions\n\n# Test whether exclusions are properly applied (separate script):\n# .\\Test-ExchAVExclusions.ps1  # https://microsoft.github.io/CSS-Exchange/Diagnostics/Test-ExchAVExclusions/\n\n# Apply all recommended exclusions:\n# .\\Set-ExchAVExclusions.ps1\n\n# Review currently configured exclusions:\nGet-MpPreference | Select-Object -ExpandProperty ExclusionPath\nGet-MpPreference | Select-Object -ExpandProperty ExclusionProcess"
+  },
+  "considerations": "Microsoft Defender antivirus exclusions for Exchange must be kept current as Exchange paths evolve across Cumulative Updates. EDCA checks the specific folder paths listed in the Microsoft documentation; a parent-folder exclusion (e.g. excluding the entire \\TransportRoles tree) is treated as covering all required subdirectories. The CSS-Exchange Set-ExchAVExclusions.ps1 script resolves individual database and log paths dynamically, so running that script on a server with default database locations will satisfy the \\Mailbox check. Exclusions should be validated against the current Microsoft-recommended list for the installed Exchange version.",
+  "roles": [
+    "Mailbox",
+    "Edge"
+  ]
+}

@@ -1,0 +1,44 @@
+{
+  "id": "EDCA-TLS-021",
+  "title": "Exchange internal receive connectors require encryption",
+  "description": "Exchange internal receive connectors accepting connections from internal mail servers MUST require TLS encryption to protect data in transit. This control applies to all Exchange versions.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Transport Security",
+  "severity": "Medium",
+  "severityWeight": 6,
+  "frameworks": [
+    "DISA",
+    "BSI",
+    "NIS2",
+    "ISM"
+  ],
+  "references": [
+    {
+      "name": "DISA STIG EX16-MB-000220: Exchange internal Receive connectors must require encryption (V-228375)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2016_mailbox_server/2023-12-18/finding/V-228375"
+    },
+    {
+      "name": "Set-ReceiveConnector cmdlet",
+      "url": "https://learn.microsoft.com/powershell/module/exchange/set-receiveconnector"
+    },
+    {
+      "name": "BSI APP.5.2.A11 — Absicherung der Kommunikation zwischen Exchange-Systemen",
+      "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/06_APP_Anwendungen/APP_5_2_Microsoft_Exchange_und_Outlook_Edition_2023.pdf?__blob=publicationFile"
+    },
+    {
+      "name": "ISM: Guidelines for Email (ISM-0567)",
+      "url": "https://www.cyber.gov.au/resources-business-and-government/essential-cyber-security/ism/cyber-security-guidelines/guidelines-for-email"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Set RequireTLS on internal receive connectors to ensure all internal SMTP connections are encrypted.",
+    "scriptTemplate": "# Verify TLS requirements on internal receive connectors\r\nGet-ReceiveConnector | Where-Object { $_.TransportRole -ne 'FrontendTransport' } |\r\n    Select-Object Name, RequireTLS, AuthMechanism\r\n\r\n# Apply RequireTLS on internal connectors\r\n# Get-ReceiveConnector | Where-Object { $_.Name -like '*Internal*' } | Set-ReceiveConnector -RequireTLS $true"
+  },
+  "considerations": "The formal DISA STIG rule requires this for Exchange 2016. For Exchange 2019 and Exchange SE, RequireTLS on internal receive connectors is enforced as a best practice. Enabling RequireTLS requires that all internal sending sources (other Exchange servers, applications, scan-to-mail devices) support TLS -- verify compatibility before enabling or inbound delivery from those sources will fail.",
+  "roles": [
+    "Mailbox",
+    "Edge"
+  ]
+}

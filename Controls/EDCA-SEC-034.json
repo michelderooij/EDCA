@@ -1,0 +1,46 @@
+{
+  "id": "EDCA-SEC-034",
+  "title": "Exchange anti-spam filtering is installed, enabled, and configured",
+  "description": "Exchange MUST have anti-spam filtering installed, enabled, and configured. Four transport agents are required: Content Filter Agent (controlled via Get-/Set-ContentFilterConfig), Sender Filter Agent (Get-/Set-SenderFilterConfig), Sender Id Agent (Get-/Set-SenderIdConfig), and Protocol Analysis Agent (Get-/Set-SenderReputationConfig). On Mailbox servers these agents are not installed by default and must be added by running the Install-AntiSpamAgents.ps1 script included with Exchange. On Edge Transport servers all four agents are present from initial installation. Each agent must be present, enabled at the transport layer (Enable-TransportAgent), and have filtering enabled in its corresponding configuration.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Platform Security",
+  "severity": "Medium",
+  "severityWeight": 6,
+  "frameworks": [
+    "DISA",
+    "BSI"
+  ],
+  "references": [
+    {
+      "name": "DISA STIG EX19-MB-000137: Exchange must have anti-spam filtering installed (V-259689)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259689"
+    },
+    {
+      "name": "DISA STIG EX19-MB-000138: Exchange must have anti-spam filtering enabled (V-259690)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259690"
+    },
+    {
+      "name": "DISA STIG EX19-MB-000139: Exchange must have anti-spam filtering configured (V-259691)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259691"
+    },
+    {
+      "name": "Anti-spam protection in Exchange Server",
+      "url": "https://learn.microsoft.com/exchange/antispam-and-antimalware/antispam-protection/antispam-protection"
+    },
+    {
+      "name": "BSI APP.5.2.A9 — Sichere Konfiguration von Exchange-Servern",
+      "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/06_APP_Anwendungen/APP_5_2_Microsoft_Exchange_und_Outlook_Edition_2023.pdf?__blob=publicationFile"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "On Mailbox servers, run the Install-AntiSpamAgents.ps1 script provided with Exchange to install the anti-spam transport agents, then restart the Microsoft Exchange Transport service. Enable each agent using Enable-TransportAgent and verify filtering is enabled using the corresponding configuration cmdlet: Set-ContentFilterConfig -Enabled $true, Set-SenderFilterConfig -Enabled $true, Set-SenderIdConfig -Enabled $true, Set-SenderReputationConfig -Enabled $true. On Edge Transport servers the agents are installed by default; only the enabled state needs verification.",
+    "scriptTemplate": "# Check transport agent state\nGet-TransportAgent | Where-Object { $_.Identity -in 'Content Filter Agent', 'Sender Filter Agent', 'Sender Id Agent', 'Protocol Analysis Agent' } | Select-Object Identity, Enabled\n\n# Check config-level enabled state for each agent\nGet-ContentFilterConfig    | Select-Object Enabled\nGet-SenderFilterConfig     | Select-Object Enabled\nGet-SenderIdConfig         | Select-Object Enabled\nGet-SenderReputationConfig | Select-Object Enabled\n\n# Install anti-spam agents on a Mailbox server (not required on Edge Transport — agents are present by default)\n# Run Install-AntiSpamAgents.ps1 from the Exchange Management Shell on the Mailbox server\n\n# Restart the transport service after installation\nRestart-Service MSExchangeTransport\n\n# Enable each required anti-spam agent at the transport layer\nEnable-TransportAgent -Identity 'Content Filter Agent'\nEnable-TransportAgent -Identity 'Sender Filter Agent'\nEnable-TransportAgent -Identity 'Sender Id Agent'\nEnable-TransportAgent -Identity 'Protocol Analysis Agent'\n\n# Enable filtering at the configuration level\nSet-ContentFilterConfig    -Enabled $true\nSet-SenderFilterConfig     -Enabled $true\nSet-SenderIdConfig         -Enabled $true\nSet-SenderReputationConfig -Enabled $true\n\n# Example: specify internal SMTP relay servers that should bypass spam filtering\n# Set-TransportConfig -InternalSMTPServers @{Add = '10.0.0.1', '10.0.0.2'}"
+  },
+  "considerations": "Anti-spam agents are not installed by default on Mailbox servers. In hybrid deployments using EOP or Defender for Office 365 for cloud-based spam filtering, on-premises anti-spam may be intentionally disabled. Document the anti-spam technology in use and ensure it meets DISA requirements if these agents are not used.",
+  "roles": [
+    "Mailbox",
+    "Edge"
+  ]
+}

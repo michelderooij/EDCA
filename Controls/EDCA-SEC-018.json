@@ -1,0 +1,44 @@
+{
+  "id": "EDCA-SEC-018",
+  "title": "LLMNR disabled by policy",
+  "description": "Link-Local Multicast Name Resolution (LLMNR) is a Windows name resolution protocol that uses multicast DNS-like queries on the local network segment to resolve hostnames when DNS fails; it is commonly exploited in NTLM relay attacks because it responds to any host name query on the subnet. Each Exchange server MUST have LLMNR (Link-Local Multicast Name Resolution) disabled. LLMNR enables spoofing and NTLM downgrade attacks against domain-joined hosts.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Platform Security",
+  "severity": "Medium",
+  "severityWeight": 6,
+  "frameworks": [
+    "Best Practice",
+    "CIS",
+    "ANSSI",
+    "BSI"
+  ],
+  "references": [
+    {
+      "name": "CIS Microsoft Windows Server Benchmark",
+      "url": "https://www.cisecurity.org/benchmark/microsoft_windows_server"
+    },
+    {
+      "name": "CIS 18.5.4.2 (L1): Ensure 'Turn off multicast name resolution' (LLMNR) is set to 'Enabled'",
+      "url": "https://www.cisecurity.org/benchmark/microsoft_windows_server"
+    },
+    {
+      "name": "ANSSI - Mise en œuvre sécurisée d'un serveur Windows membre AD DS (2025)",
+      "url": "https://messervices.cyber.gouv.fr/guides/mise-en-oeuvre-securisee-dun-serveur-windows"
+    },
+    {
+      "name": "BSI APP.2.2.A3 — Planung der Gruppenrichtlinien unter Windows",
+      "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/06_APP_Anwendungen/APP_2_2_Active_Directory_Domain_Services_Edition_2023.pdf?__blob=publicationFile"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Disable LLMNR using DNS client policy registry key.",
+    "scriptTemplate": "# Group Policy equivalent:\n# Computer Configuration > Administrative Templates > Network > DNS Client\n#   Turn off Multicast Name Resolution = Enabled\n#\nNew-Item -Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows NT\\DNSClient' -Force | Out-Null; Set-ItemProperty -Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows NT\\DNSClient' -Name EnableMulticast -Type DWord -Value 0"
+  },
+  "considerations": "Disabling LLMNR requires a Group Policy change. This affects all Windows name resolution on the network segment, not just Exchange. LLMNR is commonly exploited in NTLM relay attack scenarios (e.g., Responder). Disabling LLMNR is low-risk for environments with properly configured DNS.",
+  "roles": [
+    "Mailbox",
+    "Edge"
+  ]
+}

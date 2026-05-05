@@ -1,0 +1,34 @@
+{
+  "id": "EDCA-SEC-024",
+  "title": "Vulnerability baseline",
+  "description": "Exchange version MUST be at Exchange SE lifecycle baseline. Exchange 2016 and Exchange 2019 reached end of mainstream support and represent lifecycle-based vulnerability exposure that requires migration to Exchange SE.",
+  "verify": false,
+  "subject": "Server",
+  "category": "Platform Security",
+  "severity": "High",
+  "severityWeight": 9,
+  "frameworks": [
+    "Best Practice",
+    "DISA"
+  ],
+  "references": [
+    {
+      "name": "CSS VulnerabilityCheck",
+      "url": "https://microsoft.github.io/CSS-Exchange/Diagnostics/HealthChecker/VulnerabilityCheck/"
+    },
+    {
+      "name": "DISA STIG EX19-MB-000283: Exchange must be configured in accordance with DOD security configuration settings based on STIGs, NSA guides, CTOs, and DTMs (V-259712)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259712"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Apply the latest Exchange security updates to remediate known vulnerabilities. Address specific CVEs flagged by the check including SMBv3 (CVE-2020-0796), .NET (CVE-2020-1147), and download domain issues (CVE-2021-1730).",
+    "scriptTemplate": "# Diagnose: Check Exchange build version and SMBv1 status\nGet-ExchangeServer | Select-Object Name, AdminDisplayVersion, Edition | Format-Table -AutoSize\n# Compare build numbers at: https://learn.microsoft.com/exchange/new-features/build-numbers\nGet-SmbServerConfiguration | Select-Object EnableSMB1Protocol\n# SMBv1 should be disabled - Exchange does not require it."
+  },
+  "considerations": "Applying Exchange security patches requires scheduled downtime and thorough regression testing. Patches may change default configuration, IIS bindings, or service behavior. Use DAG maintenance mode and test mail flow and client connectivity after each patch.",
+  "roles": [
+    "Mailbox",
+    "Edge"
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "id": "EDCA-PERF-010",
+  "title": "TCP/IP settings baseline",
+  "description": "The TCP KeepAliveTime registry setting controls how long an idle TCP connection is maintained before the OS sends keepalive probes to verify the remote endpoint is still reachable, determining when stale or dead connections are detected and released. TCP KeepAliveTime registry value MUST be within the recommended exchange range of 900000 to 1800000 ms (15 to 30 minutes). Values outside this range (including the OS default 2-hour value) allow stale TCP connections to persist.",
+  "verify": false,
+  "subject": "Server",
+  "category": "Performance",
+  "severity": "Medium",
+  "severityWeight": 6,
+  "frameworks": [
+    "Best Practice"
+  ],
+  "references": [
+    {
+      "name": "CSS TCPIPSettingsCheck",
+      "url": "https://microsoft.github.io/CSS-Exchange/Diagnostics/HealthChecker/TCPIPSettingsCheck/"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Set the KeepAliveTime DWORD value under HKLM\\SYSTEM\\CurrentControlSet\\Services\\TcpIp\\Parameters to between 900000 and 1800000 milliseconds (15 to 30 minutes) to prevent idle TCP connections from being dropped prematurely.",
+    "scriptTemplate": "Set-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters' -Name KeepAliveTime -Value 900000 -Type DWord"
+  },
+  "considerations": "TCP/IP stack changes (Chimney Offload, Large Send Offload, etc.) affect all network traffic on the server, not just Exchange. Some settings require a reboot. Verify that the current NIC driver supports the target configuration. Changes should be tested in a staging environment first.",
+  "roles": [
+    "Mailbox",
+    "Edge"
+  ]
+}

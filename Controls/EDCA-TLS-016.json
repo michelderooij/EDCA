@@ -1,0 +1,33 @@
+{
+  "id": "EDCA-TLS-016",
+  "title": "Exchange transport service maximum outbound connections is 1000",
+  "description": "The MaxOutboundConnections setting on the Exchange Transport service controls the total number of concurrent outbound SMTP connections that the Transport service may hold open simultaneously across all send connectors and destination domains; this cap prevents the transport worker from exhausting system socket resources during delivery storms or targeted flooding. The Exchange transport service MaxOutboundConnections MUST be set to 1000. Limiting the total number of concurrent outbound connections on the transport service prevents resource exhaustion and reduces exposure during mail flood scenarios.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Transport Security",
+  "severity": "Low",
+  "severityWeight": 3,
+  "frameworks": [
+    "DISA"
+  ],
+  "references": [
+    {
+      "name": "DISA STIG EX19-MB-000126: The Exchange send connector connections count must be limited (V-259679)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259679"
+    },
+    {
+      "name": "Set-TransportService cmdlet",
+      "url": "https://learn.microsoft.com/powershell/module/exchange/set-transportservice"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Set MaxOutboundConnections to 1000 on the transport service.",
+    "scriptTemplate": "Set-TransportService -Identity $env:COMPUTERNAME -MaxOutboundConnections 1000"
+  },
+  "considerations": "Setting connection limits too low may throttle outbound mail flow, particularly during peak delivery times. Review connector usage and balance security with operational mail flow requirements.",
+  "roles": [
+    "Mailbox",
+    "Edge"
+  ]
+}

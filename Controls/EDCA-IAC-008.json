@@ -1,0 +1,37 @@
+{
+  "id": "EDCA-IAC-008",
+  "title": "Exchange split permissions are enabled",
+  "description": "Exchange split permissions SHOULD be enabled to separate Active Directory and Exchange administration duties and reduce over-privileged access.",
+  "verify": true,
+  "subject": "Organization",
+  "category": "Identity and Access Control",
+  "severity": "High",
+  "severityWeight": 8,
+  "frameworks": [
+    "CISA",
+    "ISM"
+  ],
+  "references": [
+    {
+      "name": "Exchange split permissions",
+      "url": "https://learn.microsoft.com/exchange/permissions/split-permissions"
+    },
+    {
+      "name": "CISA AA21-062A: Mitigate Microsoft Exchange Server Vulnerabilities - enable Exchange split permissions to limit Exchange Server's Active Directory write access",
+      "url": "https://www.cisa.gov/news-events/cybersecurity-advisories/aa21-062a"
+    },
+    {
+      "name": "ISM: Guidelines for System Hardening (ISM-1833)",
+      "url": "https://www.cyber.gov.au/resources-business-and-government/essential-cyber-security/ism/cyber-security-guidelines/guidelines-for-system-hardening"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Enable Exchange AD Split Permissions by re-running Exchange Setup with /PrepareAD /ActiveDirectorySplitPermissions:true. This cannot be applied via a PowerShell cmdlet post-installation.",
+    "scriptTemplate": "# Diagnose: Check if Exchange role groups currently hold mail recipient and security group creation rights\nGet-ManagementRoleAssignment | Where-Object { $_.Role -match 'Mail Recipient Creation|Security Group Creation' } | Select-Object Role, RoleAssignee, RoleAssigneeType | Format-Table -AutoSize\n# If Exchange role groups appear above, AD split permissions are NOT currently enabled.\n# To enable (IRREVERSIBLE without re-running /PrepareAD - plan carefully):\n# .\\Setup.exe /PrepareAD /ActiveDirectorySplitPermissions:true /IAcceptExchangeServerLicenseTerms"
+  },
+  "considerations": "Enabling Exchange split permissions removes Exchange administrators ability to directly modify Active Directory user and group objects. This is an organizational change requiring coordination with the Active Directory team. After enabling, Exchange provisioning workflows must be updated to use AD admin procedures for security group management.",
+  "roles": [
+    "Mailbox"
+  ]
+}

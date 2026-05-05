@@ -1,0 +1,29 @@
+{
+  "id": "EDCA-PERF-006",
+  "title": "Processor socket count and logical core baseline",
+  "description": "Exchange servers MUST NOT exceed the recommended processor socket and logical core limits. No more than 2 physical processor sockets are recommended; logical processor count must not exceed 24 for Exchange 2016 or 48 for Exchange 2019/SE. Exceeding these thresholds can cause unexpected performance degradation.",
+  "verify": false,
+  "subject": "Server",
+  "category": "Performance",
+  "severity": "Medium",
+  "severityWeight": 6,
+  "frameworks": [
+    "Best Practice"
+  ],
+  "references": [
+    {
+      "name": "CSS ProcessorCheck",
+      "url": "https://microsoft.github.io/CSS-Exchange/Diagnostics/HealthChecker/ProcessorCheck/"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Reduce the number of processor sockets to no more than 2, or reduce logical processors to within the supported maximum (24 for Exchange 2016, 48 for Exchange 2019/SE). If the CPU is throttled, verify the Power Plan is set to High Performance and change it immediately if not.",
+    "scriptTemplate": "# Diagnose: Check processor socket count, clock speeds, and logical processor counts\nGet-WmiObject -Class Win32_Processor | Select-Object Name, MaxClockSpeed, CurrentClockSpeed, NumberOfCores, NumberOfLogicalProcessors\n\"Total sockets: $((Get-WmiObject -Class Win32_Processor | Measure-Object).Count)\"\n\"Total logical processors: $([System.Environment]::ProcessorCount)\"\n# If CurrentClockSpeed is significantly below MaxClockSpeed, review BIOS power and performance settings."
+  },
+  "considerations": "Processor socket count and logical core limits are a hardware sizing concern addressed at deployment time. On VMware, the socket count maps to vCPU socket configuration rather than physical sockets; reducing vCPU sockets requires a VM power-off. On physical hardware, reducing socket count requires hardware maintenance. Processor replacement or configuration changes require hardware maintenance windows and potential load redistribution across the DAG.",
+  "roles": [
+    "Mailbox",
+    "Edge"
+  ]
+}

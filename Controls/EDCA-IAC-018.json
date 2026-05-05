@@ -1,0 +1,33 @@
+{
+  "id": "EDCA-IAC-018",
+  "title": "Mobile device mailbox policy limits maximum failed password attempts to 10 or fewer",
+  "description": "The MaxPasswordFailedAttempts property on the default mobile device mailbox policy MUST be 10 or less. Limiting the number of failed attempts before device wipe or lockout reduces the risk of brute-force attacks against mobile device credentials. The CIS benchmark requires a maximum of 10 failed attempts.",
+  "verify": true,
+  "subject": "Organization",
+  "category": "Identity and Access Control",
+  "severity": "Medium",
+  "severityWeight": 5,
+  "frameworks": [
+    "Best Practice",
+    "CIS"
+  ],
+  "references": [
+    {
+      "name": "CIS 3.5 (L1): Ensure Number of attempts allowed is set to 10",
+      "url": "https://www.cisecurity.org/benchmark/microsoft_exchange_server"
+    },
+    {
+      "name": "Mobile device mailbox policies in Exchange Server",
+      "url": "https://learn.microsoft.com/exchange/clients/exchange-activesync/mobile-device-mailbox-policies"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Set maximum failed password attempts to 10 in the default mobile device mailbox policy.",
+    "scriptTemplate": "# Limit failed password attempts to 10 in the default mobile device mailbox policy.\nSet-MobileDeviceMailboxPolicy -Identity Default -MaxPasswordFailedAttempts 10"
+  },
+  "considerations": "Setting a low value (e.g., 4-5) may result in accidental device wipes. A value of 10 balances security and usability. Ensure users are aware of the wipe policy.",
+  "roles": [
+    "Mailbox"
+  ]
+}

@@ -1,0 +1,51 @@
+{
+  "id": "EDCA-TLS-027",
+  "title": "DKIM signing is enabled for all accepted domains",
+  "description": "Each accepted domain MUST have DKIM signing configured with valid selector keys published in DNS. DKIM (DomainKeys Identified Mail) cryptographically signs outbound messages, enabling receivers to verify message authenticity and prevent spoofing. Exchange Server on-premises does not natively support DKIM signing on any version; a third-party appliance, SaaS service, or signing agent is always required. Detection probes well-known selectors for the following platforms: Exchange Online / Microsoft 365 (selector1, selector2), Google Workspace (google), Mimecast, Proofpoint (proofpoint), Amazon SES, SendGrid (s1, s2), Postmark (pm), Mailchimp / Mandrill (k1, k2), Klaviyo (k1, k2), Mailgun, SparkPost, Mailjet, SocketLabs, Salesforce Marketing Cloud, Symantec Email Security.cloud, and generic self-hosted signers (default, mail, dkim).",
+  "verify": true,
+  "subject": "Organization",
+  "category": "Transport Security",
+  "severity": "Medium",
+  "severityWeight": 7,
+  "frameworks": [
+    "BSI",
+    "Best Practice",
+    "CISA",
+    "ISM"
+  ],
+  "references": [
+    {
+      "name": "RFC 6376 - DomainKeys Identified Mail (DKIM) Signatures",
+      "url": "https://www.rfc-editor.org/rfc/rfc6376"
+    },
+    {
+      "name": "BSI IT-Grundschutz Kompendium 2023 - APP.5.3.A9: Erweiterte Sicherheitsmaßnahmen auf dem E-Mail-Server (Standard)",
+      "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/06_APP_Anwendungen/APP_5_3_Allgemeiner_E-Mail-Client_und_-Server_Edition_2023.pdf?__blob=publicationFile"
+    },
+    {
+      "name": "CISA BOD 18-01 (2017): Enhance Email and Web Security - §d(2): Deploy DKIM for all domains",
+      "url": "https://www.cisa.gov/binding-operational-directive-18-01"
+    },
+    {
+      "name": "Exchange DKIM Signer - Open-source DKIM signing agent for Exchange Server",
+      "url": "https://github.com/pro/dkim-exchange"
+    },
+    {
+      "name": "EmailArchitect – DKIM for Exchange Server for Exchange Server",
+      "url": "https://www.emailarchitect.net/domainkeys/"
+    },
+    {
+      "name": "ISM: Guidelines for Email (ISM-0861, ISM-1026, ISM-1027)",
+      "url": "https://www.cyber.gov.au/resources-business-and-government/essential-cyber-security/ism/cyber-security-guidelines/guidelines-for-email"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Configure DKIM signing via a third-party signing agent (e.g., Exchange DKIM Signer), a secure email gateway, or a cloud email security service, and publish selector TXT records in DNS.",
+    "scriptTemplate": "# DKIM DNS records — Exchange Online (Microsoft 365) example\n# The exact selector name and record value depend on the DKIM-supporting appliance or service in use.\n# For other platforms (Exchange DKIM Signer, Mimecast, Proofpoint, etc.) refer to that platform's\n# documentation for the correct selector and record value to publish in external DNS.\n#\n# Exchange Online requires two CNAME records per domain:\n#   selector1._domainkey.<domain>  CNAME  selector1-<domain-dots-as-hyphens>._domainkey.<tenant>.onmicrosoft.com\n#   selector2._domainkey.<domain>  CNAME  selector2-<domain-dots-as-hyphens>._domainkey.<tenant>.onmicrosoft.com\n#\n# Example for contoso.com with tenant contoso.onmicrosoft.com:\n#   selector1._domainkey.contoso.com  CNAME  selector1-contoso-com._domainkey.contoso.onmicrosoft.com\n#   selector2._domainkey.contoso.com  CNAME  selector2-contoso-com._domainkey.contoso.onmicrosoft.com\n\n# Verify existing CNAME records resolve correctly:\n$domains = Get-AcceptedDomain | Where-Object { $_.DomainType -eq 'Authoritative' }\nforeach ($domain in $domains) {\n    $domainName = [string]$domain.DomainName\n    Write-Host \"`n--- $domainName ---\"\n    foreach ($selector in @('selector1', 'selector2')) {\n        $name   = \"$selector._domainkey.$domainName\"\n        $result = Resolve-DnsName -Name $name -Type CNAME -ErrorAction SilentlyContinue\n        $cname  = if ($result) { ($result | Where-Object { $_.Type -eq 'CNAME' } | ForEach-Object { $_.NameHost }) -join ' -> ' } else { $null }\n        Write-Host \"  $name : $(if ($cname) { \"CNAME -> $cname\" } else { 'NOT FOUND' })\"\n    }\n}"
+  },
+  "considerations": "Exchange Server on-premises does not natively support DKIM signing on any version. For on-premises mail flow, DKIM signing must be handled externally — for example via Exchange DKIM Signer (https://github.com/pro/dkim-exchange), an open-source transport agent compatible with all Exchange Server versions. DNS selector records must be published at the external DNS provider before DKIM signing is activated, otherwise outbound messages will fail DKIM validation. DKIM must be fully deployed before enforcing DMARC p=reject (see EDCA-TLS-023).",
+  "roles": [
+    "Mailbox"
+  ]
+}

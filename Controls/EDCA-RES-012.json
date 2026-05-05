@@ -1,0 +1,32 @@
+{
+  "id": "EDCA-RES-012",
+  "title": "DAG members span at least two Active Directory sites",
+  "description": "Each Database Availability Group (DAG) MUST have member servers distributed across at least two Active Directory sites. Multi-site DAG placement ensures that a complete site failure does not result in loss of mailbox service or data.",
+  "verify": false,
+  "subject": "Organization",
+  "category": "Resilience",
+  "severity": "High",
+  "severityWeight": 8,
+  "frameworks": [
+    "Best Practice"
+  ],
+  "references": [
+    {
+      "name": "Exchange Server Preferred Architecture: DAG design",
+      "url": "https://learn.microsoft.com/en-us/exchange/plan-and-deploy/deployment-ref/preferred-architecture-2019"
+    },
+    {
+      "name": "Database availability groups (DAGs)",
+      "url": "https://learn.microsoft.com/en-us/exchange/high-availability/database-availability-groups/database-availability-groups"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Extend the DAG by adding member servers in a second Active Directory site. Configure Active Manager for site-aware failover and place the file share witness appropriately for the resulting quorum model.",
+    "scriptTemplate": "# Diagnose: Show DAG membership and AD site per Exchange server\nGet-ExchangeServer | Select-Object Name, MemberOfDAG, Site | Format-Table -AutoSize"
+  },
+  "considerations": "Deploying DAG members across multiple AD sites requires inter-site network connectivity with sufficient bandwidth for continuous database replication. A file share witness or alternate witness server must be placed correctly for the resulting quorum model. In single-site lab or small environments where site resilience is not a requirement, this control may not be applicable.",
+  "roles": [
+    "Mailbox"
+  ]
+}

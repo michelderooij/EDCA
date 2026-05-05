@@ -1,0 +1,33 @@
+{
+  "id": "EDCA-SEC-036",
+  "title": "Exchange email application does not share a partition with another application",
+  "description": "The Exchange email application MUST NOT share a partition with another application. Installing Exchange on a volume that also hosts other server applications creates resource contention and increases the risk that another application's failure will impact Exchange availability. Exchange binaries must reside on a dedicated partition.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Platform Security",
+  "severity": "Medium",
+  "severityWeight": 5,
+  "frameworks": [
+    "DISA"
+  ],
+  "references": [
+    {
+      "name": "DISA STIG EX19-MB-000229: The Exchange email application must not share a partition with another application (V-259704)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259704"
+    },
+    {
+      "name": "Exchange Server deployment best practices",
+      "url": "https://learn.microsoft.com/exchange/plan-and-deploy/deployment-ref/preferred-architecture"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Ensure Exchange is installed on a volume not shared with other application binaries. Review installed applications on Exchange servers.",
+    "scriptTemplate": "# Diagnose: Identify the Exchange install drive and list top-level directories not part of Exchange or Windows.\n$exchDrive = Split-Path $exinstall -Qualifier\nGet-ChildItem $exchDrive -Directory -ErrorAction SilentlyContinue |\n    Where-Object { $_.Name -notin @('Exchange', 'ExchangeSetupLogs', 'Program Files', 'Program Files (x86)', 'Windows', 'Users', 'PerfLogs', 'inetpub') } |\n    Select-Object FullName\n# Unexpected directories on the Exchange volume may indicate other applications are co-located."
+  },
+  "considerations": "Migrating Exchange to a different volume is a complex operation that may require reinstallation. In many environments this is a planning concern addressed at deployment time. Document deviations with a risk acceptance if remediation is not feasible.",
+  "roles": [
+    "Mailbox",
+    "Edge"
+  ]
+}

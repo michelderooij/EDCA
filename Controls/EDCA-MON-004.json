@@ -1,0 +1,46 @@
+{
+  "id": "EDCA-MON-004",
+  "title": "Transport connectivity logging is enabled",
+  "description": "Exchange transport connectivity logging records the sequence of SMTP connection events (connect, authenticate, TLS negotiation, disconnect) for every inbound and outbound mail flow session handled by the Transport service, separate from the per-message protocol log. Each Exchange server MUST have transport connectivity logging enabled. Connectivity logs record SMTP connection details for both outbound send and inbound receive, supporting troubleshooting and audit trail requirements.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Monitoring",
+  "severity": "Medium",
+  "severityWeight": 6,
+  "frameworks": [
+    "DISA",
+    "ANSSI"
+  ],
+  "references": [
+    {
+      "name": "Get-TransportService cmdlet",
+      "url": "https://learn.microsoft.com/powershell/module/exchange/get-transportservice"
+    },
+    {
+      "name": "Set-TransportService cmdlet",
+      "url": "https://learn.microsoft.com/powershell/module/exchange/set-transportservice"
+    },
+    {
+      "name": "DISA STIG EX19-MB-000031: Exchange connectivity logging must be enabled (V-259652)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259652"
+    },
+    {
+      "name": "DISA STIG EX19-ED-000031: Exchange connectivity logging must be enabled (V-259582)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_edge_server/2024-12-06/finding/V-259582"
+    },
+    {
+      "name": "ANSSI - Sécuriser la journalisation dans un environnement Microsoft Active Directory (2022)",
+      "url": "https://messervices.cyber.gouv.fr/guides/securiser-la-journalisation-dans-un-environnement-microsoft-active-directory"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Enable transport connectivity logging.",
+    "scriptTemplate": "Set-TransportService -Identity $env:COMPUTERNAME -ConnectivityLogEnabled $true"
+  },
+  "considerations": "Transport connectivity logging generates log files that can grow rapidly on high-traffic servers. Ensure the connectivity log volume has adequate capacity and that log cleanup is configured. Connectivity logs may be required for support investigations into mail flow issues.",
+  "roles": [
+    "Mailbox",
+    "Edge"
+  ]
+}

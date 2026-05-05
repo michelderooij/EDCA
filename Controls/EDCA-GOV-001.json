@@ -1,0 +1,28 @@
+{
+  "id": "EDCA-GOV-001",
+  "title": "Shared mailbox type consistency",
+  "description": "Shared-resource mailboxes MUST be provisioned as RecipientTypeDetails=SharedMailbox (or RoomMailbox or EquipmentMailbox). Mismatched mailbox types can create unintended licensing requirements and security exposure.",
+  "verify": true,
+  "subject": "Mailbox",
+  "category": "Governance",
+  "severity": "Low",
+  "severityWeight": 4,
+  "frameworks": [
+    "Best Practice"
+  ],
+  "references": [
+    {
+      "name": "Convert a mailbox in Exchange Server",
+      "url": "https://learn.microsoft.com/exchange/recipients-in-exchange-online/manage-user-mailboxes/convert-a-mailbox"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Disable the Active Directory account for each non-user mailbox that has an enabled account.",
+    "scriptTemplate": "# Diagnose: Find non-user mailboxes (Shared, Room, Equipment) with enabled accounts\nGet-Mailbox -ResultSize Unlimited | Where-Object { $_.RecipientTypeDetails -ne 'UserMailbox' -and -not $_.AccountDisabled } | Select-Object DisplayName, RecipientTypeDetails, PrimarySmtpAddress | Sort-Object RecipientTypeDetails, DisplayName\n# To fix:\n# Disable-MailboxAccount -Identity <alias> -Confirm:$false"
+  },
+  "considerations": "Disabling the account on a shared or resource mailbox does not affect mailbox access via delegation. Verify that no service accounts, automations, or applications authenticate using the mailbox's AD account before disabling it. In hybrid environments, account state is synchronized from on-premises AD to Entra ID - disabling the account on-premises also disables the cloud identity.",
+  "roles": [
+    "Mailbox"
+  ]
+}

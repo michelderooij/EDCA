@@ -1,0 +1,52 @@
+{
+  "id": "EDCA-MON-002",
+  "title": "PowerShell Script Block Logging enabled",
+  "description": "PowerShell Script Block Logging is a Windows feature that writes the full text of every executed PowerShell script block — including dynamically generated and obfuscated code — to the Windows event log (Microsoft-Windows-PowerShell/Operational), enabling detection of malicious PowerShell activity. Each Exchange server MUST have PowerShell Script Block Logging enabled. Script Block Logging captures PowerShell commands and scripts for detection and audit purposes.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Monitoring",
+  "severity": "Medium",
+  "severityWeight": 7,
+  "frameworks": [
+    "CIS",
+    "ANSSI",
+    "BSI",
+    "ISM"
+  ],
+  "references": [
+    {
+      "name": "CIS Microsoft Windows Server 2019 Benchmark v3.0.0",
+      "url": "https://www.cisecurity.org/benchmark/microsoft_windows_server"
+    },
+    {
+      "name": "PowerShell Group Policy settings",
+      "url": "https://learn.microsoft.com/powershell/module/microsoft.powershell.core/about/about_group_policy_settings"
+    },
+    {
+      "name": "CIS 18.9.104.1.2 (L1): Ensure 'Turn on PowerShell Script Block Logging' is set to 'Enabled'",
+      "url": "https://www.cisecurity.org/benchmark/microsoft_windows_server"
+    },
+    {
+      "name": "ANSSI - Sécuriser la journalisation dans un environnement Microsoft Active Directory (2022)",
+      "url": "https://messervices.cyber.gouv.fr/guides/securiser-la-journalisation-dans-un-environnement-microsoft-active-directory"
+    },
+    {
+      "name": "BSI SYS.1.2.3.A7 — Verwendung der Windows PowerShell",
+      "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/07_SYS_IT_Systeme/SYS_1_2_3_Windows_Server_Edition_2023.pdf?__blob=publicationFile"
+    },
+    {
+      "name": "ISM: Guidelines for System Hardening (ISM-0582)",
+      "url": "https://www.cyber.gov.au/resources-business-and-government/essential-cyber-security/ism/cyber-security-guidelines/guidelines-for-system-hardening"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Enable Script Block Logging via PowerShell policy registry.",
+    "scriptTemplate": "New-Item -Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\PowerShell\\ScriptBlockLogging' -Force | Out-Null; Set-ItemProperty -Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\PowerShell\\ScriptBlockLogging' -Name EnableScriptBlockLogging -Type DWord -Value 1"
+  },
+  "considerations": "Enabling PowerShell Script Block Logging generates detailed logs of all executed script blocks in the Security and Windows PowerShell event logs. This can produce high log volume on active systems. Ensure log retention and collection capacity are adequate before enabling on production Exchange servers.",
+  "roles": [
+    "Mailbox",
+    "Edge"
+  ]
+}

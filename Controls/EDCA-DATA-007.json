@@ -1,0 +1,56 @@
+{
+  "id": "EDCA-DATA-007",
+  "title": "TLS 1.3 is disabled for Exchange compatibility",
+  "description": "Each Exchange server MUST have TLS 1.3 disabled at the SCHANNEL server level. Exchange Server does not support TLS 1.3 for SMTP transport; enabling it causes transport failures. Microsoft CSS has documented compatibility risks with TLS 1.3 on Exchange servers.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Data Security",
+  "severity": "Medium",
+  "severityWeight": 7,
+  "frameworks": [
+    "Best Practice",
+    "NIS2",
+    "ANSSI",
+    "BSI"
+  ],
+  "references": [
+    {
+      "name": "TLS registry settings (Windows Server)",
+      "url": "https://learn.microsoft.com/windows-server/security/tls/tls-registry-settings"
+    },
+    {
+      "name": "ENISA / NIS2 Directive (EU) 2022/2555 - Article 21(2)(h): cryptography and encryption policies - Section 9, 6.7, 6.3, 6.6",
+      "url": "https://eur-lex.europa.eu/eli/dir/2022/2555/oj"
+    },
+    {
+      "name": "CIS Microsoft Windows Server Benchmark",
+      "url": "https://www.cisecurity.org/benchmark/microsoft_windows_server"
+    },
+    {
+      "name": "EDPB Guidelines, Recommendations, Best Practices",
+      "url": "https://www.edpb.europa.eu/our-work-tools/general-guidance/guidelines-recommendations-best-practices_en"
+    },
+    {
+      "name": "ANSSI - Recommandations de sécurité relatives à TLS (v1.2, 2020)",
+      "url": "https://messervices.cyber.gouv.fr/guides/recommandations-de-securite-relatives-tls"
+    },
+    {
+      "name": "ANSSI - Transition post-quantique de TLS 1.3 (2026)",
+      "url": "https://messervices.cyber.gouv.fr/guides/Transition-post-quantique-protocole-TLS-1-3"
+    },
+    {
+      "name": "BSI APP.5.2.A11 — Absicherung der Kommunikation zwischen Exchange-Systemen",
+      "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/06_APP_Anwendungen/APP_5_2_Microsoft_Exchange_und_Outlook_Edition_2023.pdf?__blob=publicationFile"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Disable TLS 1.3 server protocol in SCHANNEL on supported Windows Server versions for Exchange compatibility.",
+    "scriptTemplate": "New-Item -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\SecurityProviders\\SCHANNEL\\Protocols\\TLS 1.3\\Server' -Force | Out-Null; Set-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\SecurityProviders\\SCHANNEL\\Protocols\\TLS 1.3\\Server' -Name Enabled -Type DWord -Value 0; Set-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\SecurityProviders\\SCHANNEL\\Protocols\\TLS 1.3\\Server' -Name DisabledByDefault -Type DWord -Value 1"
+  },
+  "considerations": "TLS 1.3 is currently not supported by Exchange Server transport. Enabling TLS 1.3 at the OS Schannel level will not cause Exchange SMTP issues but Exchange will not use it for mail transport. IIS may use TLS 1.3 for HTTPS connections if IIS supports it, which is generally safe on Server 2022. Note (ANSSI tension, Feb 2026): ANSSI's post-quantum TLS transition guidance (Transition-post-quantique-protocole-TLS-1-3, 2026) recommends TLS 1.3 with hybrid post-quantum key exchange (e.g. X25519MLKEM768) as the forward-looking cryptographic baseline. This control reflects Exchange's current compatibility constraint — not an ANSSI recommendation to disable TLS 1.3 broadly. Organizations should monitor Microsoft's Exchange roadmap for native TLS 1.3 support and plan to re-enable it once compatibility is confirmed, particularly to benefit from post-quantum cipher suite support.",
+  "roles": [
+    "Mailbox",
+    "Edge"
+  ]
+}

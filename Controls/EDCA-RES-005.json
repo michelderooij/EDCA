@@ -1,0 +1,33 @@
+{
+  "id": "EDCA-RES-005",
+  "title": "Mailbox database deleted mailbox retention is at least 30 days",
+  "description": "A soft-deleted mailbox is a mailbox that has been removed from Active Directory but is temporarily retained in the mailbox database pending permanent purge. The MailboxRetention on each mailbox database controls how long a soft-deleted mailbox is retained. MailboxRetention MUST be set to a minimum of 30 days to support accidental deletion recovery without requiring a backup restore.",
+  "verify": true,
+  "subject": "Database",
+  "category": "Resilience",
+  "severity": "Medium",
+  "severityWeight": 5,
+  "frameworks": [
+    "Best Practice",
+    "CIS"
+  ],
+  "references": [
+    {
+      "name": "CIS 2.1.5 (L1): Ensure Keep deleted mailboxes for the specified number of days is set to 30",
+      "url": "https://www.cisecurity.org/benchmark/microsoft_exchange_server"
+    },
+    {
+      "name": "Configure deleted mailbox retention and manage mailbox restore requests",
+      "url": "https://learn.microsoft.com/en-us/exchange/recipients/mailbox-import-and-export/mailbox-restore-requests"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Set MailboxRetention to at least 30 days on every mailbox database.",
+    "scriptTemplate": "# Set deleted mailbox retention to 30 days on a specific mailbox database.\n# To target a specific database: replace 'DatabaseName' with the actual database name.\nSet-MailboxDatabase -Identity 'DatabaseName' -MailboxRetention 30.00:00:00"
+  },
+  "considerations": "Soft-deleted mailboxes consume database storage until permanently purged. Check available storage prior to extending the retention period.",
+  "roles": [
+    "Mailbox"
+  ]
+}

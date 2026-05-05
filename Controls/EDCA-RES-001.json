@@ -1,0 +1,34 @@
+{
+  "id": "EDCA-RES-001",
+  "title": "Core Exchange services are running",
+  "description": "All required Exchange Windows services (transport, information store, and helper services) MUST be in the Running state. Non-running required services cause mail flow interruptions and degraded functionality.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Resilience",
+  "severity": "High",
+  "severityWeight": 8,
+  "frameworks": [
+    "Best Practice",
+    "NIS2"
+  ],
+  "references": [
+    {
+      "name": "Microsoft Exchange services overview",
+      "url": "https://learn.microsoft.com/exchange/plan-and-deploy/deployment-ref/services-overview"
+    },
+    {
+      "name": "ENISA / NIS2 Directive (EU) 2022/2555 - Article 21(2)(c): business continuity and crisis management - Section 6.3, 6.4, 3.2-3.4",
+      "url": "https://eur-lex.europa.eu/eli/dir/2022/2555/oj"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Run Test-ServiceHealth to identify required Exchange services that are not running, then start them.",
+    "scriptTemplate": "# Diagnose: Check which required Exchange services are not running\nTest-ServiceHealth | Where-Object { -not $_.RequiredServicesRunning } | Select-Object Role, ServicesNotRunning\n\n# Remediate: Start services that are not running\nTest-ServiceHealth | Where-Object { -not $_.RequiredServicesRunning } | ForEach-Object { $_.ServicesNotRunning | ForEach-Object { Start-Service -Name $_ -ErrorAction SilentlyContinue } }"
+  },
+  "considerations": "Restarting Exchange services disrupts active client sessions and mail flow. Always use DAG maintenance mode or scheduled maintenance windows when restarting services on production servers.",
+  "roles": [
+    "Mailbox",
+    "Edge"
+  ]
+}

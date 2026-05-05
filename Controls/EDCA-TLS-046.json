@@ -1,0 +1,33 @@
+{
+  "id": "EDCA-TLS-046",
+  "title": "Edge content filter is enabled",
+  "description": "The Edge Transport server MUST have the content filter (spam confidence level evaluation) enabled. The content filter assigns a Spam Confidence Level (SCL) to each message; messages that exceed the SCL threshold are blocked, quarantined, or tagged. Disabling the content filter allows spam and phishing messages to pass without SCL classification.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Transport Security",
+  "severity": "Medium",
+  "severityWeight": 6,
+  "frameworks": [
+    "Best Practice",
+    "DISA"
+  ],
+  "references": [
+    {
+      "name": "Microsoft — Content filtering on Edge Transport servers",
+      "url": "https://learn.microsoft.com/exchange/antispam-and-antimalware/antispam-protection/content-filtering"
+    },
+    {
+      "name": "DISA STIG EX19-ED-000102: The Exchange content filter must be enabled (V-259617)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_edge_server/2024-12-06/finding/V-259617"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Enable the content filter: Set-ContentFilterConfig -Enabled $true.",
+    "scriptTemplate": "Get-ContentFilterConfig | Select-Object Enabled, SCLDeleteEnabled, SCLDeleteThreshold, SCLQuarantineEnabled, SCLRejectEnabled\n# To enable:\n# Set-ContentFilterConfig -Enabled $true"
+  },
+  "considerations": "The content filter uses Intelligent Message Filter (IMF) heuristics. After enabling, monitor SCL thresholds to ensure legitimate mail is not incorrectly classified. False positives can be reduced by adding trusted senders to the safe sender list.",
+  "roles": [
+    "Edge"
+  ]
+}

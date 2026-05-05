@@ -1,0 +1,46 @@
+{
+  "id": "EDCA-IAC-004",
+  "title": "Modern Authentication is configured",
+  "description": "Modern Authentication (OAuth 2.0) MUST be configured on Exchange for clients to use token-based authentication rather than Basic Authentication. Two on-premises configurations are supported:\n\n• Hybrid Modern Authentication (HMA) - uses Microsoft Entra ID (Azure AD / EvoSTS) as the Security Token Service. Requires Classic Full Hybrid (Hybrid Configuration Wizard). Supported on Exchange 2013 CU19+, Exchange 2016 CU8+, Exchange 2019 RTM+, Exchange SE RTM+. The auth server AuthMetadataUrl points to https://login.windows.net/<tenant>/federationmetadata/2007-06/federationmetadata.xml.\n• AD FS Modern Authentication - uses an on-premises Active Directory Federation Services (AD FS 2019 or later) server as the Security Token Service. Does not require Exchange Hybrid or Entra ID. Supported on Exchange 2019 CU13+ and Exchange SE only (Exchange 2016 and 2013 are not supported). The auth server AuthMetadataUrl points to https://<adfs-fqdn>/FederationMetadata/2007-06/FederationMetadata.xml.\n\nEDCA verifies the following prerequisites (applicable to both methods):\n\n• OAuth2ClientProfileEnabled = True (Set-OrganizationConfig)\n• An auth server has IsDefaultAuthorizationEndpoint = True with a configured AuthMetadataUrl - the URL pattern identifies the method (Entra/HMA vs AD FS)\n• SSL Offloading is disabled on Outlook Anywhere connectors (incompatible with Modern Authentication)\n• OAuthAuthentication = True on EWS and Autodiscover virtual directories (Set-MapiVirtualDirectory and Set-ActiveSyncVirtualDirectory do not expose this parameter)",
+  "verify": true,
+  "subject": "Organization",
+  "category": "Identity and Access Control",
+  "severity": "High",
+  "severityWeight": 8,
+  "frameworks": [
+    "Best Practice",
+    "CISA",
+    "ISM"
+  ],
+  "references": [
+    {
+      "name": "Enabling Modern Auth in Exchange on-premises (AD FS)",
+      "url": "https://learn.microsoft.com/en-us/exchange/plan-and-deploy/post-installation-tasks/enable-modern-auth-in-exchange-server-on-premises"
+    },
+    {
+      "name": "Configure Exchange Server on-premises to use Hybrid Modern Authentication (HMA)",
+      "url": "https://learn.microsoft.com/microsoft-365/enterprise/configure-exchange-server-for-hybrid-modern-authentication"
+    },
+    {
+      "name": "Hybrid Modern Authentication overview and prerequisites",
+      "url": "https://learn.microsoft.com/microsoft-365/enterprise/hybrid-modern-auth-overview"
+    },
+    {
+      "name": "CISA MS Exchange Security Best Practices",
+      "url": "https://www.cisa.gov/sites/default/files/publications/CSI_MS_Exchange_Security_Best_Practices_Final.pdf"
+    },
+    {
+      "name": "ISM: Guidelines for System Hardening (ISM-1919)",
+      "url": "https://www.cyber.gov.au/resources-business-and-government/essential-cyber-security/ism/cyber-security-guidelines/guidelines-for-system-hardening"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Enable all Modern Authentication prerequisites on-premises. Additional AD FS or Azure AD / Exchange Online configuration steps must be completed separately.",
+    "scriptTemplate": "# === DIAGNOSTICS ===\n# Check OAuth2ClientProfileEnabled\nGet-OrganizationConfig | Select-Object OAuth2ClientProfileEnabled\n\n# Check auth servers (Type, IsDefaultAuthorizationEndpoint, AuthMetadataUrl)\nGet-AuthServer | Select-Object Name, Type, Enabled, IsDefaultAuthorizationEndpoint, AuthMetadataUrl | Format-List\n\n# Check SSL Offloading on Outlook Anywhere connectors\nGet-OutlookAnywhere | Select-Object Identity, SSLOffloading\n\n# Check OAuthAuthentication on virtual directories\nGet-MapiVirtualDirectory | Select-Object Identity, OAuthAuthentication\nGet-WebServicesVirtualDirectory | Select-Object Identity, OAuthAuthentication\nGet-ActiveSyncVirtualDirectory | Select-Object Identity, OAuthAuthentication\nGet-AutodiscoverVirtualDirectory | Select-Object Identity, OAuthAuthentication\n\n# === REMEDIATION — Common steps (both HMA and AD FS) ===\n# 1. Enable Modern Authentication at the organization level\nSet-OrganizationConfig -OAuth2ClientProfileEnabled $true\n\n# 2. Disable SSL Offloading on Outlook Anywhere connectors\nGet-OutlookAnywhere | Set-OutlookAnywhere -SSLOffloading $false\n\n# 3. Enable OAuth on virtual directories that support the parameter\n# NOTE: Set-MapiVirtualDirectory and Set-ActiveSyncVirtualDirectory do not expose -OAuthAuthentication.\nGet-WebServicesVirtualDirectory | Set-WebServicesVirtualDirectory -OAuthAuthentication $true\nGet-AutodiscoverVirtualDirectory | Set-AutodiscoverVirtualDirectory -OAuthAuthentication $true\n\n# 4. Restart IIS to apply virtual directory changes\nIISReset /noforce\n\n# === FOR HMA (Entra/Azure AD) — Requires Classic Full Hybrid ===\n# Set EvoSTS as the default authorization endpoint (replace 'EvoSts' if named differently):\nSet-AuthServer -Identity 'EvoSts' -IsDefaultAuthorizationEndpoint $true\n# NOTE: Full HMA setup requires running the Hybrid Configuration Wizard and Azure AD steps. See:\n# https://learn.microsoft.com/microsoft-365/enterprise/configure-exchange-server-for-hybrid-modern-authentication\n\n# === FOR AD FS — Requires Exchange 2019 CU13+ or Exchange SE, and AD FS 2019+ ===\n# Create an auth server pointing to the AD FS federation metadata URL:\nNew-AuthServer -Type ADFS -Name 'MyADFSServer' -AuthMetadataUrl 'https://<adfs-fqdn>/FederationMetadata/2007-06/FederationMetadata.xml'\nSet-AuthServer -Identity 'MyADFSServer' -IsDefaultAuthorizationEndpoint $true\n# NOTE: Full AD FS setup requires configuring ADFS application groups, scopes, and client policies. See:\n# https://learn.microsoft.com/en-us/exchange/plan-and-deploy/post-installation-tasks/enable-modern-auth-in-exchange-server-on-premises"
+  },
+  "considerations": "• HMA (Entra/Azure AD): requires Classic Full Hybrid configuration (Hybrid Configuration Wizard with Full option). Modern Hybrid (Hybrid Agent) does not support HMA. Minimum Exchange versions: 2013 CU19, 2016 CU8, 2019 RTM, SE RTM.\n• AD FS Modern Authentication: does not require Exchange Hybrid or Entra ID. Supported only on Exchange 2019 CU13+ and Exchange SE. Exchange 2016 and 2013 are not supported for AD FS modern auth. Requires AD FS on Windows Server 2019 or later. AD FS cannot be installed on the Exchange server.\n• The AuthMetadataUrl of the default auth server identifies the method: URLs containing login.windows.net or login.microsoftonline.com indicate HMA; on-premises FQDN URLs indicate AD FS.\n• SSL Offloading is incompatible with Modern Authentication: disabling SSL Offloading changes how Outlook Anywhere authenticates and may require reconfiguring load balancer TLS termination to SSL Bridging.\n• Disabling SSL Offloading and enabling Extended Protection should be coordinated - see EDCA-SEC-014.\n• IISReset briefly interrupts OWA, ECP, EWS, and Autodiscover. Schedule during a maintenance window.\n• For AD FS, Outlook for Windows requires build 16327.20200 or later (Outlook 365 Current Channel 2304+). Outlook 2021 Volume License and Outlook 2016/2019 (any version) do not support AD FS modern auth.\n• Pilot with a subset of users before enabling Modern Authentication broadly. Use authentication policies (New-AuthenticationPolicy) to selectively enable or block Modern Auth per user.\n• Rolling back Modern Auth requires setting OAuth2ClientProfileEnabled back to $false, resetting the auth server IsDefaultAuthorizationEndpoint, then restarting IIS.",
+  "roles": [
+    "Mailbox"
+  ]
+}

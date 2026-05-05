@@ -1,0 +1,49 @@
+{
+  "id": "EDCA-SEC-022",
+  "title": "PowerShell execution policy is not unrestricted",
+  "description": "PowerShell execution policy MUST NOT be set to Unrestricted or Bypass on Exchange servers. Permissive execution policies allow unsigned scripts to run freely, increasing risk of malicious script execution.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Platform Security",
+  "severity": "Low",
+  "severityWeight": 4,
+  "frameworks": [
+    "Best Practice",
+    "NIS2",
+    "DISA",
+    "ANSSI",
+    "BSI"
+  ],
+  "references": [
+    {
+      "name": "DISA STIG EX19-MB-000061: Exchange local machine policy must require signed scripts (V-259664)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259664"
+    },
+    {
+      "name": "ENISA / NIS2 Directive (EU) 2022/2555 - Article 21(2)(i)(j): access control and multi-factor authentication - Section 11.5-11.7, 11.3, 10, 2.2",
+      "url": "https://eur-lex.europa.eu/eli/dir/2022/2555/oj"
+    },
+    {
+      "name": "ANSSI - Mise en œuvre sécurisée d'un serveur Windows membre AD DS (2025)",
+      "url": "https://messervices.cyber.gouv.fr/guides/mise-en-oeuvre-securisee-dun-serveur-windows"
+    },
+    {
+      "name": "BSI SYS.1.2.3.A7 — Verwendung der Windows PowerShell",
+      "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/07_SYS_IT_Systeme/SYS_1_2_3_Windows_Server_Edition_2023.pdf?__blob=publicationFile"
+    },
+    {
+      "name": "about_Execution_Policies",
+      "url": "https://learn.microsoft.com/powershell/module/microsoft.powershell.core/about/about_execution_policies"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Set local machine execution policy to RemoteSigned.",
+    "scriptTemplate": "# Group Policy equivalent:\n# Computer Configuration > Administrative Templates > Windows Components > Windows PowerShell\n#   Turn on Script Execution = Enabled (Allow only signed scripts / Allow local scripts and remote signed scripts)\n#\nSet-ExecutionPolicy -Scope LocalMachine -ExecutionPolicy RemoteSigned -Force"
+  },
+  "considerations": "Changing the PowerShell execution policy to AllSigned or RemoteSigned will prevent unsigned scripts from running. Audit all scripts used for Exchange management and automation before enforcing a restrictive policy. Scripts used by monitoring tools or automation systems may fail if not properly signed.",
+  "roles": [
+    "Mailbox",
+    "Edge"
+  ]
+}

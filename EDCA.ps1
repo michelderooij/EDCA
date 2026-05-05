@@ -34,8 +34,8 @@
 .PARAMETER ThrottleLimit
     Maximum number of parallel collection jobs (default: 4; range 1–128).
 
-.PARAMETER ControlFile
-    Path to the JSON controls library (default: .\Config\controls.json).
+.PARAMETER ControlsPath
+    Path to the directory containing control files (default: .\Controls).
 
 .PARAMETER OutputPath
     Directory for analysis JSON and remediation script output files (default: .\Output).
@@ -106,7 +106,7 @@ param(
     [ValidateRange(1, 128)]
     [int]$ThrottleLimit = 4,
 
-    [string]$ControlFile = '.\Config\controls.json',
+    [string]$ControlsPath = '.\Controls',
 
     [Parameter(ParameterSetName = 'Default')]
     [Parameter(ParameterSetName = 'Report')]
@@ -127,7 +127,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-$EDCAVersion = 'v0.92 Preview'
+$EDCAVersion = 'v0.93 Preview'
 
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 
@@ -147,24 +147,26 @@ Write-Host ('=============================================================' )
 
 $resolvedDataPath = Resolve-EDCAPath -Path $DataPath -BasePath $scriptRoot
 $resolvedOutputPath = Resolve-EDCAPath -Path $OutputPath -BasePath $scriptRoot
-$resolvedControlFile = Resolve-EDCAPath -Path $ControlFile -BasePath $scriptRoot
+$resolvedControlsPath = Resolve-EDCAPath -Path $ControlsPath -BasePath $scriptRoot
 New-EDCADirectoryIfMissing -Path $resolvedDataPath
 
 Write-Verbose ('Collect: {0}; Report: {1}' -f $doCollect, $doReport)
-Write-Verbose ('Resolved control file: {0}' -f $resolvedControlFile)
+Write-Verbose ('Resolved controls path: {0}' -f $resolvedControlsPath)
 Write-Verbose ('Resolved data path: {0}' -f $resolvedDataPath)
 Write-Verbose ('Resolved output path: {0}' -f $resolvedOutputPath)
 Write-Verbose ('Collection throttle limit: {0}' -f $ThrottleLimit)
 
-if (-not (Test-Path -Path $resolvedControlFile)) {
-    throw ('Control file not found: {0}' -f $resolvedControlFile)
+if (-not (Test-Path -Path $resolvedControlsPath -PathType Container)) {
+    throw ('Controls directory not found: {0}' -f $resolvedControlsPath)
 }
 
-$controls = Get-Content -Path $resolvedControlFile -Raw | ConvertFrom-Json
-if ($null -eq $controls -or @($controls).Count -eq 0) {
-    throw 'No controls loaded from control file.'
+$controls = @(Get-ChildItem -Path $resolvedControlsPath -Filter '*.json' | Sort-Object Name | ForEach-Object {
+    Get-Content -Path $_.FullName -Raw | ConvertFrom-Json
+})
+if ($controls.Count -eq 0) {
+    throw ('No control JSON files found in: {0}' -f $resolvedControlsPath)
 }
-Write-Verbose ('Loaded {0} control definition(s).' -f @($controls).Count)
+Write-Verbose ('Loaded {0} control definition(s).' -f $controls.Count)
 
 if ($Framework -and $Framework.Count -gt 0) {
     $filteredForOutput = @($controls | Where-Object {

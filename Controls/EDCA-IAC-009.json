@@ -1,0 +1,46 @@
+{
+  "id": "EDCA-IAC-009",
+  "title": "Basic Authentication is disabled after Modern Authentication rollout",
+  "description": "The Exchange organization MUST have Basic Authentication disabled across all tracked protocols after Modern Authentication is confirmed as operational. This control evaluates the AllowBasicAuth* properties of the authentication policy referenced by Get-OrganizationConfig DefaultAuthenticationPolicy. All 13 tracked protocol properties must be set to $false (blocking enabled) for the control to pass.",
+  "verify": true,
+  "subject": "Organization",
+  "category": "Identity and Access Control",
+  "severity": "High",
+  "severityWeight": 8,
+  "frameworks": [
+    "CISA",
+    "BSI",
+    "ISM"
+  ],
+  "references": [
+    {
+      "name": "Enable Modern Authentication in Exchange on-premises",
+      "url": "https://learn.microsoft.com/exchange/plan-and-deploy/post-installation-tasks/enable-modern-auth-in-exchange-server-on-premises"
+    },
+    {
+      "name": "Disabling Legacy Authentication in Exchange Server 2019",
+      "url": "https://techcommunity.microsoft.com/blog/exchange/disabling-legacy-authentication-in-exchange-server-2019/712048"
+    },
+    {
+      "name": "CISA AA21-062A: Mitigate Microsoft Exchange Server Vulnerabilities - disable Basic Authentication after Modern Authentication is fully deployed",
+      "url": "https://www.cisa.gov/news-events/cybersecurity-advisories/aa21-062a"
+    },
+    {
+      "name": "BSI APP.5.2.A3 — Berechtigungsmanagement und Zugriffsrechte",
+      "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/06_APP_Anwendungen/APP_5_2_Microsoft_Exchange_und_Outlook_Edition_2023.pdf?__blob=publicationFile"
+    },
+    {
+      "name": "ISM: Guidelines for System Hardening (ISM-1603, ISM-1919)",
+      "url": "https://www.cyber.gov.au/resources-business-and-government/essential-cyber-security/ism/cyber-security-guidelines/guidelines-for-system-hardening"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Create or update the organization's default authentication policy to block Basic Authentication for all tracked protocols (ActiveSync, Autodiscover, IMAP, MAPI, OfflineAddressBook, OutlookService, POP, ReportingWebServices, REST, RPC, SMTP, WebServices, WindowsLiveId). Validate that Modern Authentication (EX-BP-049) is fully functional for all clients before blocking Basic Authentication to prevent access outages.",
+    "scriptTemplate": "# Check the current default authentication policy\n$orgConfig = Get-OrganizationConfig\n$policyName = [string]$orgConfig.DefaultAuthenticationPolicy\n\n$params = @{\n    AllowBasicAuthActiveSync           = $false\n    AllowBasicAuthAutodiscover         = $false\n    AllowBasicAuthImap                 = $false\n    AllowBasicAuthMapi                 = $false\n    AllowBasicAuthOfflineAddressBook   = $false\n    AllowBasicAuthOutlookService       = $false\n    AllowBasicAuthPop                  = $false\n    AllowBasicAuthReportingWebServices = $false\n    AllowBasicAuthRest                 = $false\n    AllowBasicAuthRpc                  = $false\n    AllowBasicAuthSmtp                 = $false\n    AllowBasicAuthWebServices          = $false\n    AllowBasicAuthWindowsLiveId        = $false\n}\n\nif (-not [string]::IsNullOrWhiteSpace($policyName)) {\n    # Update the existing default policy to block Basic Auth for all tracked protocols\n    Set-AuthenticationPolicy -Identity $policyName @params\n} else {\n    # No default policy exists: create one that blocks all Basic Auth and assign it as the org default\n    New-AuthenticationPolicy -Name 'Block Basic Auth' @params\n    Set-OrganizationConfig -DefaultAuthenticationPolicy 'Block Basic Auth'\n}"
+  },
+  "considerations": "Disabling Basic Authentication will immediately break any client or application still using Basic Auth for SMTP, EWS, WebDAV, or remote PowerShell connections. Perform a comprehensive audit of all application authentication methods before disabling. Applications that cannot be migrated to Modern Authentication require alternative integration approaches.",
+  "roles": [
+    "Mailbox"
+  ]
+}

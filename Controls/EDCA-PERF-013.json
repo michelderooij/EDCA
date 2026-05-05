@@ -1,0 +1,37 @@
+{
+  "id": "EDCA-PERF-013",
+  "title": "Page file initial and maximum size match Exchange version baseline",
+  "description": "Exchange Server requires a fixed-size page file with equal Initial and Maximum values. A dynamic page file (InitialSize ≠ MaximumSize) causes fragmentation and degrades performance under memory pressure.\n• Exchange 2016: both values = RAM in MB + 10, capped at 32778 MB for servers with 32 GB or more RAM\n• Exchange 2019 / Exchange SE: both values = 25% of total RAM, rounded up to the nearest MB",
+  "verify": true,
+  "subject": "Server",
+  "category": "Performance",
+  "severity": "Medium",
+  "severityWeight": 5,
+  "frameworks": [
+    "Best Practice"
+  ],
+  "references": [
+    {
+      "name": "Microsoft CSS Exchange HealthChecker: PagefileSizeCheck",
+      "url": "https://microsoft.github.io/CSS-Exchange/Diagnostics/HealthChecker/PagefileSizeCheck/"
+    },
+    {
+      "name": "Exchange Server performance recommendations: page file",
+      "url": "https://aka.ms/HC-PerfSize"
+    },
+    {
+      "name": "Exchange Server preferred architecture",
+      "url": "https://learn.microsoft.com/en-us/exchange/plan-and-deploy/deployment-ref/preferred-architecture"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Set the page file to a fixed size equal to the Exchange version target. For Exchange 2016: if total RAM is 32 GB or more, set Initial and Maximum to 32778 MB; otherwise set both to RAM in MB + 10. For Exchange 2019 / Exchange SE: set both to 25% of total RAM rounded up to the nearest MB. After changing the page file size a reboot is required for the new values to take effect.",
+    "scriptTemplate": "# Inspect current page file configuration\n$cs    = Get-CimInstance Win32_ComputerSystem\n$pfCfg = Get-CimInstance Win32_PageFileSetting\n$ramGB = [math]::Round($cs.TotalPhysicalMemory / 1GB, 2)\n$ramMB = [int][math]::Round($ramGB * 1024)\nWrite-Host ('Total RAM: {0} GB ({1} MB)' -f $ramGB, $ramMB)\n$pfCfg | Format-Table Name, InitialSize, MaximumSize -AutoSize\n\n# Determine target based on Exchange version\n$adminDisplayVersion = (Get-ExchangeServer -Identity $env:COMPUTERNAME).AdminDisplayVersion\nif ($adminDisplayVersion -match 'Version 15\\.1') {\n    $targetMB = if ($ramMB -ge 32768) { 32778 } else { $ramMB + 10 }\n} else {\n    # Exchange 2019 / Exchange SE: 25% of RAM\n    $targetMB = [int][math]::Ceiling($ramMB * 0.25)\n}\nWrite-Host ('Target page file size: {0} MB' -f $targetMB)\n\n# Disable automatic page file management if currently enabled\nif ($cs.AutomaticManagedPagefile) {\n    Set-CimInstance -InputObject $cs -Property @{ AutomaticManagedPagefile = $false }\n    Write-Host 'Automatic page file management disabled.'\n}\n\n# Apply fixed size (uncomment to execute -- requires reboot)\n# $pfCfg | Set-CimInstance -Property @{ InitialSize = $targetMB; MaximumSize = $targetMB }\n# Write-Host ('Page file set to {0} MB fixed. Reboot required.' -f $targetMB)\n# Restart-Computer -Force"
+  },
+  "considerations": "Applying this change requires a reboot; schedule during a maintenance window. If Windows Automatic Managed Page File is enabled, disable it before setting explicit values - the InitialSize and MaximumSize values in Win32_PageFileSetting are disregarded while automatic management is active. The 32778 MB cap for Exchange 2016 applies regardless of how much additional RAM is installed beyond 32 GB. For Exchange 2019 and Exchange SE the 25% rule scales with RAM; verify the system drive has sufficient free space before applying, particularly on high-memory servers. On virtual machines, an oversized page file consumes datastore capacity without a performance benefit; review available storage alongside any planned RAM changes.",
+  "roles": [
+    "Mailbox",
+    "Edge"
+  ]
+}

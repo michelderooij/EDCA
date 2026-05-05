@@ -1,0 +1,38 @@
+{
+  "id": "EDCA-DATA-014",
+  "title": "S/MIME is enabled for Outlook Web App",
+  "description": "The SMimeEnabled property on OWA virtual directories SHOULD be True. Enabling S/MIME in OWA allows users to send and receive digitally signed and encrypted messages through the browser, supporting end-to-end email security.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Data Security",
+  "severity": "Low",
+  "severityWeight": 3,
+  "frameworks": [
+    "Best Practice",
+    "CIS",
+    "ISM"
+  ],
+  "references": [
+    {
+      "name": "CIS 2.3.5 (L1): Ensure Enable S/MIME for OWA is set to True",
+      "url": "https://www.cisecurity.org/benchmark/microsoft_exchange_server"
+    },
+    {
+      "name": "S/MIME for message signing and encryption in Exchange Server",
+      "url": "https://learn.microsoft.com/exchange/policy-and-compliance/smime/smime"
+    },
+    {
+      "name": "ISM: Guidelines for Cryptography (ISM-0490)",
+      "url": "https://www.cyber.gov.au/resources-business-and-government/essential-cyber-security/ism/cyber-security-guidelines/guidelines-for-cryptography"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Enable S/MIME on all OWA virtual directories.",
+    "scriptTemplate": "# Enable S/MIME on all OWA virtual directories on this server.\nGet-OwaVirtualDirectory -Server $env:COMPUTERNAME | Set-OwaVirtualDirectory -SMIMEEnabled $true"
+  },
+  "considerations": "S/MIME requires end-user certificates to be provisioned and users must install the S/MIME control in their browser. Enabling this setting does not automatically configure certificates for users.",
+  "roles": [
+    "Mailbox"
+  ]
+}

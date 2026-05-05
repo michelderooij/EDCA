@@ -1,0 +1,47 @@
+{
+  "id": "EDCA-IAC-026",
+  "title": "Kerberos AES encryption is enforced; RC4 and DES are disabled",
+  "description": "The Windows Kerberos supported encryption types registry setting controls which cipher algorithms the Kerberos client and server on this machine will offer and accept when requesting or issuing service tickets, ranging from legacy DES and RC4 to modern AES variants. The Exchange server's Kerberos supported encryption types MUST be restricted to AES128-CTS-HMAC-SHA1-96 and AES256-CTS-HMAC-SHA1-96 (SupportedEncryptionTypes=24). RC4-HMAC and DES encryption types must be disabled. RC4-based Kerberos tickets are vulnerable to offline brute-force and Kerberoasting attacks because RC4 session keys are derived from NT password hashes, enabling hash-equivalent attacks against service accounts. ANSSI prohibits RC4 and DES Kerberos encryption on all member servers. The registry value 24 (binary 11000) enables AES128 (bit 3, value 8) and AES256 (bit 4, value 16) only.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Identity and Access Control",
+  "severity": "High",
+  "severityWeight": 8,
+  "frameworks": [
+    "ANSSI",
+    "BSI",
+    "ISM"
+  ],
+  "references": [
+    {
+      "name": "Network security: Configure encryption types allowed for Kerberos",
+      "url": "https://learn.microsoft.com/windows/security/threat-protection/security-policy-settings/network-security-configure-encryption-types-allowed-for-kerberos"
+    },
+    {
+      "name": "Decrypting the selection of supported Kerberos encryption types",
+      "url": "https://learn.microsoft.com/archive/blogs/openspecification/decrypting-the-selection-of-supported-kerberos-encryption-types"
+    },
+    {
+      "name": "ANSSI - Recommandations pour l'administration sécurisée des SI reposant sur AD (2023)",
+      "url": "https://messervices.cyber.gouv.fr/guides/recommandations-pour-ladministration-securisee-des-si-reposant-sur-ad"
+    },
+    {
+      "name": "BSI APP.2.2.A9 — Schutz der Authentisierung beim Einsatz von AD DS",
+      "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/06_APP_Anwendungen/APP_2_2_Active_Directory_Domain_Services_Edition_2023.pdf?__blob=publicationFile"
+    },
+    {
+      "name": "ISM: Guidelines for System Hardening (ISM-2010)",
+      "url": "https://www.cyber.gov.au/resources-business-and-government/essential-cyber-security/ism/cyber-security-guidelines/guidelines-for-system-hardening"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Set SupportedEncryptionTypes to 24 (AES128 + AES256 only) under HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System\\Kerberos\\Parameters via Group Policy (Computer Configuration > Windows Settings > Security Settings > Local Policies > Security Options: 'Network security: Configure encryption types allowed for Kerberos'). A reboot is required for the change to take full effect.",
+    "scriptTemplate": "# Check current Kerberos supported encryption types\n$kerbPath = 'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System\\Kerberos\\Parameters'\n$val = (Get-ItemProperty $kerbPath -Name SupportedEncryptionTypes -ErrorAction SilentlyContinue).SupportedEncryptionTypes\nif ($null -eq $val) {\n    \"SupportedEncryptionTypes: not set (system default - RC4 is included)\"\n} else {\n    $types = @()\n    if ($val -band 1)  { $types += 'DES-CBC-CRC' }\n    if ($val -band 2)  { $types += 'DES-CBC-MD5' }\n    if ($val -band 4)  { $types += 'RC4-HMAC' }\n    if ($val -band 8)  { $types += 'AES128-CTS-HMAC-SHA1' }\n    if ($val -band 16) { $types += 'AES256-CTS-HMAC-SHA1' }\n    \"SupportedEncryptionTypes: $val - Enabled: $($types -join ', ')\"\n}\n\n# Set AES128 + AES256 only (24 = 8 + 16)\nNew-Item -Path $kerbPath -Force | Out-Null\nSet-ItemProperty -Path $kerbPath -Name SupportedEncryptionTypes -Type DWord -Value 24\nWrite-Host 'Kerberos SupportedEncryptionTypes set to 24 (AES128 + AES256 only). A reboot is required.'"
+  },
+  "considerations": "Disabling RC4 Kerberos requires that all Kerberos service principals the Exchange server authenticates against also have AES keys. Domain controllers on Windows Server 2008 R2 and later support AES Kerberos by default. Service accounts that have never had their password changed since AES support was introduced in the domain may only have RC4 keys in their msDS-SupportedEncryptionTypes attribute; those accounts must have their passwords reset before AES-only is enforced. Before setting SupportedEncryptionTypes=24 on Exchange servers, verify that all domain controllers in the AD site list AES in their computer account msDS-SupportedEncryptionTypes. After the change, reboot the Exchange server and monitor for Kerberos failures (Event ID 4769 failure code 0x17 = KDC_ERR_ETYPE_NOSUPP) in the Security event log.",
+  "roles": [
+    "Mailbox",
+    "Edge"
+  ]
+}

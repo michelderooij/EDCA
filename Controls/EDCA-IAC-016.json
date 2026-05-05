@@ -1,0 +1,33 @@
+{
+  "id": "EDCA-IAC-016",
+  "title": "Mobile device mailbox policy enforces password history of 4 or more",
+  "description": "The PasswordHistory property on the default mobile device mailbox policy MUST be 4 or greater. Enforcing a password history prevents users from reusing recent PINs or passwords, increasing resistance to credential reuse attacks. The CIS benchmark requires a password history of at least 4.",
+  "verify": true,
+  "subject": "Organization",
+  "category": "Identity and Access Control",
+  "severity": "Low",
+  "severityWeight": 3,
+  "frameworks": [
+    "Best Practice",
+    "CIS"
+  ],
+  "references": [
+    {
+      "name": "CIS 3.3 (L1): Ensure Enforce password history is set to 4 or greater",
+      "url": "https://www.cisecurity.org/benchmark/microsoft_exchange_server"
+    },
+    {
+      "name": "Mobile device mailbox policies in Exchange Server",
+      "url": "https://learn.microsoft.com/exchange/clients/exchange-activesync/mobile-device-mailbox-policies"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Set password history to 4 or more in the default mobile device mailbox policy.",
+    "scriptTemplate": "# Enforce a password history of 4 in the default mobile device mailbox policy.\nSet-MobileDeviceMailboxPolicy -Identity Default -PasswordHistory 4"
+  },
+  "considerations": "Password history enforcement requires devices to track previous passwords. Most modern smartphones support this feature.",
+  "roles": [
+    "Mailbox"
+  ]
+}

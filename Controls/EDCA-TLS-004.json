@@ -1,0 +1,46 @@
+{
+  "id": "EDCA-TLS-004",
+  "title": "Automatic forwarding to all remote domains is disabled",
+  "description": "The AutoForwardEnabled property on Exchange remote domains controls whether client-side inbox rules can automatically forward messages to recipients in that domain; when set to True on the default remote domain, any user's forwarding rule can silently redirect copies of all received messages to an external address without further restriction, creating a data exfiltration path. The AutoForwardEnabled property MUST be set to False on all remote domain entries, including the default domain entry ('*'). Enabling auto-forward on remote domains allows data exfiltration via client-side forwarding rules.",
+  "verify": true,
+  "subject": "Organization",
+  "category": "Transport Security",
+  "severity": "High",
+  "severityWeight": 8,
+  "frameworks": [
+    "Best Practice",
+    "CIS",
+    "DISA"
+  ],
+  "references": [
+    {
+      "name": "CIS 2.3.4 (L1): Ensure AutoForwardEnabled is set to False",
+      "url": "https://www.cisecurity.org/benchmark/microsoft_exchange_server"
+    },
+    {
+      "name": "Control automatic external email forwarding in Microsoft 365 and Exchange",
+      "url": "https://learn.microsoft.com/exchange/security-and-compliance/mail-flow-best-practices/remote-domains/remote-domains"
+    },
+    {
+      "name": "DISA STIG EX19-MB-000021: Exchange auto-forwarding email to remote domains must be disabled or restricted (V-259651)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259651"
+    },
+    {
+      "name": "DISA STIG EX19-MB-000116: Exchange email forwarding must be restricted (V-259672)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259672"
+    },
+    {
+      "name": "DISA STIG EX19-MB-000117: Exchange email-forwarding SMTP domains must be restricted (V-259673)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259673"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Set AutoForwardEnabled to False on all remote domains, especially the default domain.",
+    "scriptTemplate": "# Disable automatic forwarding to all remote domains.\nGet-RemoteDomain | Set-RemoteDomain -AutoForwardEnabled $false"
+  },
+  "considerations": "Disabling auto-forward breaks any legitimate auto-forward rules users have configured to external addresses. Communicate the change in advance and provide an alternative (e.g., distribution groups or consent-based forwarding via Transport Rules).",
+  "roles": [
+    "Mailbox"
+  ]
+}

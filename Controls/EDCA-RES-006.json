@@ -1,0 +1,38 @@
+{
+  "id": "EDCA-RES-006",
+  "title": "Mailbox database is not permanently deleted until it has been backed up",
+  "description": "The RetainDeletedItemsUntilBackup flag on a mailbox database instructs Exchange not to permanently purge deleted mailbox data until the database has been backed up. RetainDeletedItemsUntilBackup MUST be enabled so that items purged from the Recoverable Items folder remain recoverable via backup until the backup cycle completes.",
+  "verify": true,
+  "subject": "Database",
+  "category": "Resilience",
+  "severity": "Medium",
+  "severityWeight": 5,
+  "frameworks": [
+    "Best Practice",
+    "CIS",
+    "DISA"
+  ],
+  "references": [
+    {
+      "name": "CIS 2.1.6 (L1): Ensure Do not permanently delete items until the database has been backed up is set to True",
+      "url": "https://www.cisecurity.org/benchmark/microsoft_exchange_server"
+    },
+    {
+      "name": "Set-MailboxDatabase: RetainDeletedItemsUntilBackup parameter",
+      "url": "https://learn.microsoft.com/powershell/module/exchange/set-mailboxdatabase"
+    },
+    {
+      "name": "DISA STIG EX19-MB-000115: Exchange mailboxes must be retained until backups are complete (V-259671)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259671"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Enable the RetainDeletedItemsUntilBackup flag on every mailbox database.",
+    "scriptTemplate": "# Ensure mailbox database items are not permanently deleted before backup.\n# To target a specific database: replace 'DatabaseName' with the actual database name.\nSet-MailboxDatabase -Identity 'DatabaseName' -RetainDeletedItemsUntilBackup $true"
+  },
+  "considerations": "Enabling this setting requires a functioning and regularly executed backup solution. Without a backup program, Exchange will defer purging indefinitely and the Recoverable Items folder may grow without bound, consuming storage.",
+  "roles": [
+    "Mailbox"
+  ]
+}
