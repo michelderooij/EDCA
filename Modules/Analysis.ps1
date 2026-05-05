@@ -234,8 +234,20 @@ function Test-EDCAControl {
 
         switch ($Control.id) {
             'EDCA-SEC-032' {
+                # SettingOverrides are an organization-wide Exchange concept available only on
+                # Mailbox servers; Edge Transport servers have no access to Get-SettingOverride.
+                $mailboxServersForSec032 = @($CollectionData.Servers | Where-Object {
+                        ($_.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $_.Exchange -and
+                        ($_.Exchange.PSObject.Properties.Name -contains 'IsExchangeServer') -and [bool]$_.Exchange.IsExchangeServer -and
+                        -not (($_.Exchange.PSObject.Properties.Name -contains 'IsEdge') -and [bool]$_.Exchange.IsEdge)
+                    })
+                if ($mailboxServersForSec032.Count -eq 0) {
+                    $status = 'Skipped'
+                    $evidence = 'Edge Transport servers do not support Exchange setting overrides (Get-SettingOverride) — control not applicable.'
+                    break
+                }
                 $settingOverrides = $null
-                foreach ($srv in @($CollectionData.Servers)) {
+                foreach ($srv in $mailboxServersForSec032) {
                     if (($srv.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $srv.Exchange -and
                         ($srv.Exchange.PSObject.Properties.Name -contains 'SettingOverrides') -and
                         $null -ne $srv.Exchange.SettingOverrides) {
@@ -2124,10 +2136,13 @@ function Test-EDCAControl {
                         $evidence = ('IRM is not in use (InternalLicensingEnabled={0}; ExternalLicensingEnabled={1}; AzureRMSLicensingEnabled={2}); control is not applicable.' -f $internalEnabled, $externalEnabled, $azureEnabled)
                     }
                     else {
-                        # Check whether EnableEncryptionAlgorithmCBC override is present on any server.
+                        # Check whether EnableEncryptionAlgorithmCBC override is present on any Mailbox server.
+                        # Edge Transport servers do not support Get-SettingOverride; skip them.
                         $cbcOverridePresent = $false
                         if ($CollectionData.PSObject.Properties.Name -contains 'Servers') {
                             foreach ($srv in @($CollectionData.Servers)) {
+                                if (($srv.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $srv.Exchange -and
+                                    ($srv.Exchange.PSObject.Properties.Name -contains 'IsEdge') -and [bool]$srv.Exchange.IsEdge) { continue }
                                 if (($srv.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $srv.Exchange -and
                                     ($srv.Exchange.PSObject.Properties.Name -contains 'SettingOverrides') -and $null -ne $srv.Exchange.SettingOverrides -and
                                     ($srv.Exchange.SettingOverrides.PSObject.Properties.Name -contains 'Names') -and $null -ne $srv.Exchange.SettingOverrides.Names) {
@@ -2772,7 +2787,8 @@ function Test-EDCAControl {
 
     $exchangeBuilds = $null
     if ($Control.id -in @('EDCA-GOV-002', 'EDCA-SEC-038')) {
-        $exchangeBuildsPath = Join-Path -Path $PSScriptRoot -ChildPath '..\Config\exchange.builds.json'
+        $configDir = if ($script:EDCAModuleRoot) { Join-Path $script:EDCAModuleRoot 'Config' } else { Join-Path $PSScriptRoot '..\Config' }
+        $exchangeBuildsPath = Join-Path -Path $configDir -ChildPath 'exchange.builds.json'
         if (Test-Path -LiteralPath $exchangeBuildsPath) {
             try { $exchangeBuilds = Get-Content -LiteralPath $exchangeBuildsPath -Raw | ConvertFrom-Json } catch {}
         }
@@ -4705,6 +4721,11 @@ function Test-EDCAControl {
                 if (-not $isExchangeServer) {
                     $status = 'Skipped'
                     $evidence = 'Exchange not detected on this server; setting override baseline is not applicable.'
+                    break
+                }
+                if ($isEdge) {
+                    $status = 'Skipped'
+                    $evidence = 'Edge Transport servers do not support Exchange setting overrides (Get-SettingOverride) — control not applicable.'
                     break
                 }
 

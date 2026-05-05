@@ -211,8 +211,17 @@ function ConvertFrom-EDCAJson {
         return $InputObject | ConvertFrom-Json
     }
     catch {
-        if ($_.Exception.Message -notlike '*keys with different casing*') { throw }
-        return ConvertFrom-EDCAJsonHashTableNode ($InputObject | ConvertFrom-Json -AsHashtable)
+        if ($_.Exception.Message -notmatch 'duplicated keys|keys with different casing') { throw }
+        if ($PSVersionTable.PSVersion.Major -ge 6) {
+            # PS 6.2+ supports -AsHashtable, which tolerates duplicate case-variant keys.
+            return ConvertFrom-EDCAJsonHashTableNode ($InputObject | ConvertFrom-Json -AsHashtable)
+        }
+        # PS 5.1 fallback: JavaScriptSerializer (always present in .NET 4.x) absorbs
+        # duplicate case-variant keys via last-write-wins without throwing.
+        $null = [System.Reflection.Assembly]::LoadWithPartialName('System.Web.Extensions')
+        $jss = New-Object System.Web.Script.Serialization.JavaScriptSerializer
+        $jss.MaxJsonLength = [int]::MaxValue
+        return ConvertFrom-EDCAJsonHashTableNode ($jss.DeserializeObject($InputObject))
     }
 }
 

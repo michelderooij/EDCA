@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.0.0.0
+- First stable release — published to the PowerShell Gallery. Install with `Install-Module -Name EDCA`.
+- EDCA-SEC-032, EDCA-DATA-016: SettingOverride server loops now skip Edge Transport servers. When every server in the collection is an Edge Transport server, the control is reported as **Skipped** (Edge Transport servers do not support `Get-SettingOverride`).
+- EDCA-SEC-006: Added Edge Transport early-exit guard alongside the existing non-Exchange-server guard.
+- Fixed `ConvertFrom-Json` error when a JSON data file contains duplicate case-variant keys (e.g. `value` / `Value` produced by serialised `EnhancedTimeSpan` objects). On PS 7+ the parser falls back to `-AsHashtable`; on PS 5.1 it falls back to `JavaScriptSerializer`, which silently absorbs duplicate keys.
+
+## v0.9.4.0
+- EDCA is now distributed as a PowerShell module (`EDCA.psm1` / `EDCA.psd1`). Import with `Import-Module .\EDCA\EDCA.psd1`.
+- New cmdlet: `Invoke-EDCA` — single exported public function; accepts the same parameters as the previous `EDCA.ps1` script.
+- `EDCA.ps1` is now a thin wrapper that imports the module and delegates to `Invoke-EDCA`; all existing usages of `.\EDCA.ps1` continue to work unchanged.
+
 ## v0.93 Preview
 - Controls library split into individual JSON files: `Config/controls.json` has been replaced by a `Controls/` directory containing one JSON file per control, named after the control ID (e.g. `EDCA-DATA-001.json`). This makes individual controls easier to manage, review, and contribute to.
 - `-ControlFile` parameter renamed to `-ControlsPath`; it now accepts a directory path (default: `.\Controls`). EDCA loads all `*.json` files from that directory at startup.

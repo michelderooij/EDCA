@@ -5766,8 +5766,11 @@ function Invoke-EDCAParallelServerCollection {
     Write-Verbose ('Using parallel server collection for {0} target(s) with throttle {1} via {2}.' -f $targetServers.Count, $ThrottleLimit, $jobBackend)
     Write-EDCALog -Message ('Collecting data from {0} server(s).' -f $targetServers.Count)
 
-    $commonModulePath = Join-Path -Path $PSScriptRoot -ChildPath 'Common.ps1'
-    $collectionModulePath = Join-Path -Path $PSScriptRoot -ChildPath 'Collection.ps1'
+    # When running as a module, $PSScriptRoot points to the module root, not Modules/.
+    # Fall back to $PSScriptRoot only when running as a plain dot-sourced script.
+    $modulesDir = if ($script:EDCAModuleRoot) { Join-Path $script:EDCAModuleRoot 'Modules' } else { $PSScriptRoot }
+    $commonModulePath = Join-Path -Path $modulesDir -ChildPath 'Common.ps1'
+    $collectionModulePath = Join-Path -Path $modulesDir -ChildPath 'Collection.ps1'
 
     $jobScript = {
         param(

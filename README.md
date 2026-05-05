@@ -17,16 +17,36 @@ PowerShell-based tool to collect Exchange on-premises deployment data, evaluate 
 
 ## Installation
 
-No installation required. EDCA is a self-contained PowerShell script.
+### From the PowerShell Gallery (recommended)
+
+```powershell
+Install-Module -Name EDCA
+```
+
+Once installed, import and run:
+
+```powershell
+Import-Module EDCA
+Invoke-EDCA -Servers EX01,EX02
+```
+
+### From GitHub
 
 1. Clone or download this repository.
 2. If downloaded as a ZIP, unblock the scripts before running:
    ```powershell
    Get-ChildItem -Path .\EDCA -Recurse -File | Unblock-File
    ```
-3. Run `.\EDCA.ps1` from the `EDCA` folder.
+3. Import the module or run `EDCA.ps1` from the `EDCA` folder.
 
-Note: A PowerShell module version is planned for the near future after the first round of feedback.
+#### Module import from source
+
+```powershell
+Import-Module .\EDCA\EDCA.psd1
+Invoke-EDCA -Servers EX01,EX02
+```
+
+All parameters are identical to `EDCA.ps1`. The thin wrapper script (`EDCA.ps1`) continues to work unchanged and delegates to the module internally.
 
 ## Requirements
 
