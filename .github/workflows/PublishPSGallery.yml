@@ -70,7 +70,7 @@ jobs:
           }
 
           $version = $Matches.version
-          $manifest = Join-Path $PWD 'src/EDCA.psd1'
+          $manifest = Join-Path $PWD 'EDCA.psd1'
 
           if (-not (Test-Path $manifest)) {
             throw "Module manifest not found: $manifest"
