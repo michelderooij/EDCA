@@ -74,29 +74,27 @@ The account running EDCA needs the following access rights. Rights marked **requ
 
 ## Usage
 
-From the `EDCA` folder:
-
 ```powershell
 # Collect + analysis + HTML for all Exchange servers in current environment
-.\EDCA.ps1
+Invoke-EDCA
 
 # Collect + analysis + HTML (both phases run by default)
-.\EDCA.ps1 -Servers EXCH01,EXCH02
+Invoke-EDCA -Servers EXCH01,EXCH02
 
 # Collect + analysis + HTML for the local server only (Edge Transport)
-.\EDCA.ps1 -Local
+Invoke-EDCA -Local
 
 # Collect only (no report), limit parallel collection jobs
-.\EDCA.ps1 -Collect -Servers EXCH01,EXCH02 -ThrottleLimit 2
+Invoke-EDCA -Collect -Servers EXCH01,EXCH02 -ThrottleLimit 2
 
 # Collect with remediation script generation
-.\EDCA.ps1 -Servers EXCH01,EXCH02 -RemediationScript
+Invoke-EDCA -Servers EXCH01,EXCH02 -RemediationScript
 
 # Report mode using files from previously collected server and organization files
-.\EDCA.ps1 -Report
+Invoke-EDCA -Report
 
 # Analyse only against Best Practice (contains space, thus needs quotes) and CIS controls
-.\EDCA.ps1 -Servers EXCH01,EXCH02 -Framework 'Best Practice',CIS
+Invoke-EDCA -Servers EXCH01,EXCH02 -Framework 'Best Practice',CIS
 
 ```
 
@@ -109,7 +107,7 @@ Edge Transport servers are not domain-joined and therefore cannot be reached by 
 Log on to the Edge Transport server and run EDCA with `-Collect` and `-Local`:
 
 ```powershell
-.\EDCA.ps1 -Collect -Local
+Invoke-EDCA -Collect -Local
 ```
 
 This writes a `<fqdn>_<timestamp>.json` file to the `Data` folder.
@@ -124,10 +122,10 @@ On the Mailbox server, run the normal collect-and-report flow (or just `-Report`
 
 ```powershell
 # Collect from Mailbox servers and report, including the copied Edge data file
-.\EDCA.ps1
+Invoke-EDCA
 
 # Or, if Mailbox-server data is already collected, just generate the report
-.\EDCA.ps1 -Report
+Invoke-EDCA -Report
 ```
 
 Edge-specific controls (anti-spam agents, recipient validation, blank-sender blocking, send connector TLS, protocol logging, and SMTP certificate assignment) are only assessed for servers whose data is present. The report marks Edge servers with an **EDGE** badge and lists any Edge servers that were detected in the organisation topology but not collected as an environment notice.
