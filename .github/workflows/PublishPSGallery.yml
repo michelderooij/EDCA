@@ -55,9 +55,9 @@ jobs:
 
           $dirsToCopy = @(
             'Config',
-            'Private',
-            'Public',
-            'Strings'
+            'Controls',
+            'Docs',
+            'Modules'
           )
 
           foreach ($dir in $dirsToCopy) {
