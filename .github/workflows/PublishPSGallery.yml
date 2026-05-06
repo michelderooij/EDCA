@@ -7,8 +7,8 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version tag to publish (for example: v1.2.3 or v1.2.3-preview.1)'
-        required: true
+        description: 'Optional version tag to publish; if omitted, latest v* tag is used'
+        required: false
         type: string
 
 permissions:
@@ -26,11 +26,30 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set module version from tag
         shell: pwsh
         run: |
-          $tag = "${{ inputs.version || github.ref_name }}"
+          $tag = "${{ inputs.version }}"
+
+          if ([string]::IsNullOrWhiteSpace($tag)) {
+            $refType = "${{ github.ref_type }}"
+            $refName = "${{ github.ref_name }}"
+
+            if ($refType -eq 'tag' -and $refName -match '^v') {
+              $tag = $refName
+            }
+            else {
+              git fetch --tags --force | Out-Null
+              $tag = git tag --list 'v*' --sort=-v:refname | Select-Object -First 1
+            }
+          }
+
+          if ([string]::IsNullOrWhiteSpace($tag)) {
+            throw "No version tag was provided and no matching repository tag was found."
+          }
 
           if ($tag -notmatch '^v(?<version>\d+\.\d+\.\d+(-[0-9A-Za-z\.-]+)?)$') {
             throw "Tag '$tag' is not a valid supported version tag."
