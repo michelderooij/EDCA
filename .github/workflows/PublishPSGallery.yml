@@ -43,7 +43,21 @@ jobs:
             }
             else {
               git fetch --tags --force | Out-Null
-              $tag = git tag --list 'v*' --sort=-v:refname | Select-Object -First 1
+              $tag = git tag --list 'v*' |
+                Where-Object { $_ -match '^v' } |
+                ForEach-Object {
+                  $originalTag = $_
+                  $version = $_ -replace '^v', ''
+
+                  if ($version -match '^\d+\.\d+\.\d+(-[0-9A-Za-z\.-]+)?$') {
+                    [PSCustomObject]@{
+                      Tag = $originalTag
+                      Version = $version
+                    }
+                  }
+                } |
+                Sort-Object Version -Descending |
+                Select-Object -First 1 -ExpandProperty Tag
             }
           }
 
