@@ -29,6 +29,46 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Prepare module package
+        shell: pwsh
+        run: |
+          $stage = Join-Path $env:RUNNER_TEMP 'EDCA'
+
+          if (Test-Path $stage) {
+            Remove-Item $stage -Recurse -Force
+          }
+
+          New-Item -ItemType Directory -Path $stage | Out-Null
+
+          $filesToCopy = @(
+            'EDCA.psd1',
+            'EDCA.psm1',
+            'CHANGELOG.md',
+            'LICENSE'
+          )
+
+          foreach ($file in $filesToCopy) {
+            if (Test-Path $file) {
+              Copy-Item -Path $file -Destination $stage -Force
+            }
+          }
+
+          $dirsToCopy = @(
+            'Config',
+            'Private',
+            'Public',
+            'Strings'
+          )
+
+          foreach ($dir in $dirsToCopy) {
+            if (Test-Path $dir) {
+              Copy-Item -Path $dir -Destination $stage -Recurse -Force
+            }
+          }
+
+          "MODULE_STAGE=$stage" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          Write-Host "Module package prepared in $stage"
+
       - name: Set module version from tag
         shell: pwsh
         run: |
@@ -70,7 +110,7 @@ jobs:
           }
 
           $version = $Matches.version
-          $manifest = Join-Path $PWD 'EDCA.psd1'
+          $manifest = Join-Path $env:MODULE_STAGE 'EDCA.psd1'
 
           if (-not (Test-Path $manifest)) {
             throw "Module manifest not found: $manifest"
@@ -99,6 +139,6 @@ jobs:
           Import-Module Microsoft.PowerShell.PSResourceGet -Force
 
           Publish-PSResource `
-            -Path . `
+            -Path $env:MODULE_STAGE `
             -Repository PSGallery `
             -ApiKey $env:PSGALLERY_API_KEY
