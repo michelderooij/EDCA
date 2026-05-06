@@ -99,6 +99,6 @@ jobs:
           Import-Module Microsoft.PowerShell.PSResourceGet -Force
 
           Publish-PSResource `
-            -Path ./src `
+            -Path . `
             -Repository PSGallery `
             -ApiKey $env:PSGALLERY_API_KEY
