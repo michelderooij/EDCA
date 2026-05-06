@@ -1,0 +1,7 @@
+steps:
+      - name: Publish PowerShell Module
+        uses: natescherer/publish-powershell-action@v1
+        with:
+          token: ${{ secrets.GALLERY_API_KEY }}
+          target: gallery
+          path: src
