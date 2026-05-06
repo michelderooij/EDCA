@@ -5,6 +5,11 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag to publish (for example: v1.2.3 or v1.2.3-preview.1)'
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -25,7 +30,7 @@ jobs:
       - name: Set module version from tag
         shell: pwsh
         run: |
-          $tag = "${{ github.ref_name }}"
+          $tag = "${{ inputs.version || github.ref_name }}"
 
           if ($tag -notmatch '^v(?<version>\d+\.\d+\.\d+(-[0-9A-Za-z\.-]+)?)$') {
             throw "Tag '$tag' is not a valid supported version tag."
