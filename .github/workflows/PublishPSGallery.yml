@@ -5,7 +5,7 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
-  
+
 permissions:
   contents: read
 
@@ -22,9 +22,45 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Publish PowerShell Module
-        uses: natescherer/publish-powershell-action@v1
-        with:
-          token: ${{ secrets.GALLERY_API_KEY }}
-          target: gallery
-          path: src
+      - name: Set module version from tag
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+
+          if ($tag -notmatch '^v(?<version>\d+\.\d+\.\d+(-[0-9A-Za-z\.-]+)?)$') {
+            throw "Tag '$tag' is not a valid supported version tag."
+          }
+
+          $version = $Matches.version
+          $manifest = Join-Path $PWD 'src/EDCA.psd1'
+
+          if (-not (Test-Path $manifest)) {
+            throw "Module manifest not found: $manifest"
+          }
+
+          Update-ModuleManifest -Path $manifest -ModuleVersion $version
+          Write-Host "ModuleVersion set to $version in $manifest"
+
+      - name: Install PSResourceGet
+        shell: pwsh
+        run: |
+          Install-Module Microsoft.PowerShell.PSResourceGet -Scope CurrentUser -Force
+          Import-Module Microsoft.PowerShell.PSResourceGet -Force
+
+          if (-not (Get-PSResourceRepository -Name PSGallery -ErrorAction SilentlyContinue)) {
+            Register-PSResourceRepository -PSGallery
+          }
+
+          Set-PSResourceRepository -Name PSGallery -Trusted
+
+      - name: Publish to PowerShell Gallery
+        shell: pwsh
+        env:
+          PSGALLERY_API_KEY: ${{ secrets.GALLERY_API_KEY }}
+        run: |
+          Import-Module Microsoft.PowerShell.PSResourceGet -Force
+
+          Publish-PSResource `
+            -Path ./src `
+            -Repository PSGallery `
+            -ApiKey $env:PSGALLERY_API_KEY
