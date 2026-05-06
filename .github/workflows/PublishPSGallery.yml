@@ -65,7 +65,7 @@ jobs:
             throw "No version tag was provided and no matching repository tag was found."
           }
 
-          if ($tag -notmatch '^v(?<version>\d+\.\d+\.\d+(-[0-9A-Za-z\.-]+)?)$') {
+          if ($tag -notmatch '^v(?<version>\d+\.\d+\.\d+\.\d+(-[0-9A-Za-z\.-]+)?)$') {
             throw "Tag '$tag' is not a valid supported version tag."
           }
 
