@@ -6687,10 +6687,17 @@ function Invoke-EDCACollection {
             $localExchangeRole = 'Mailbox'
         }
         elseif (Test-Path -Path 'HKLM:\SOFTWARE\Microsoft\ExchangeServer\v15\Setup') {
-            # Setup key present but no recognised role subkey (rare; older or partial installs).
-            # Fall back to service presence: MSExchangeADTopology is absent on Edge servers.
-            $adTopologySvc = Get-Service -Name 'MSExchangeADTopology' -ErrorAction SilentlyContinue
-            $localExchangeRole = if ($null -eq $adTopologySvc) { 'Edge' } else { 'Mailbox' }
+            # The Setup key is also created by Exchange Management Tools on non-Exchange machines.
+            # Only treat this machine as a real Exchange server if the transport service is present;
+            # management workstations (tools only) will not have MSExchangeTransport installed.
+            $transportSvc = Get-Service -Name 'MSExchangeTransport' -ErrorAction SilentlyContinue
+            if ($null -ne $transportSvc) {
+                # Real Exchange server without a recognised role subkey (rare; older or partial installs).
+                # Use MSExchangeADTopology to distinguish Edge (absent) from Mailbox (present).
+                $adTopologySvc = Get-Service -Name 'MSExchangeADTopology' -ErrorAction SilentlyContinue
+                $localExchangeRole = if ($null -eq $adTopologySvc) { 'Edge' } else { 'Mailbox' }
+            }
+            # else: management tools only — $localExchangeRole stays $null and AD discovery runs below.
         }
 
         if ($localExchangeRole -eq 'Edge') {

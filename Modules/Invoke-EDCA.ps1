@@ -3,7 +3,7 @@ function Invoke-EDCA {
     .SYNOPSIS
         EDCA — Exchange Deployment & Compliance Assessment.
 
-        Version: 1.0.0.3
+        Version: 1.0.0.4
         Author:  Michel de Rooij
         Source:  https://github.com/michelderooij/EDCA
         Website: https://eightwone.com
