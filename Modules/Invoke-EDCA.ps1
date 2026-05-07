@@ -130,7 +130,7 @@ function Invoke-EDCA {
     Set-StrictMode -Version Latest
     $ErrorActionPreference = 'Stop'
 
-    $EDCAVersion = 'v1.0.0.0'
+    $EDCAVersion = 'v1.0.0.2'
 
     # $moduleRoot resolves module-owned assets (Controls/, Config/).
     # $userBase resolves user workspace paths (DataPath, OutputPath).
