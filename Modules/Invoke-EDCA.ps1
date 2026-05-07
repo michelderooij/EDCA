@@ -3,7 +3,7 @@ function Invoke-EDCA {
     .SYNOPSIS
         EDCA — Exchange Deployment & Compliance Assessment.
 
-        Version: 1.0.0.0
+        Version: 1.0.0.3
         Author:  Michel de Rooij
         Source:  https://github.com/michelderooij/EDCA
         Website: https://eightwone.com
@@ -130,7 +130,8 @@ function Invoke-EDCA {
     Set-StrictMode -Version Latest
     $ErrorActionPreference = 'Stop'
 
-    $EDCAVersion = 'v1.0.0.2'
+    $manifest = Import-PowerShellDataFile -Path (Join-Path $script:EDCAModuleRoot 'EDCA.psd1')
+    $EDCAVersion = 'v{0}' -f $manifest.ModuleVersion
 
     # $moduleRoot resolves module-owned assets (Controls/, Config/).
     # $userBase resolves user workspace paths (DataPath, OutputPath).
@@ -341,10 +342,10 @@ function Invoke-EDCA {
     }
 
     if ($doReport -and -not $doCollect) {
-        $jsonFiles = [string[]](Get-ChildItem -Path $resolvedDataPath -Filter '*.json' -File |
+        $jsonFiles = @(Get-ChildItem -Path $resolvedDataPath -Filter '*.json' -File |
             Select-Object -ExpandProperty FullName)
         if ($jsonFiles.Count -eq 0) {
-            throw ('No JSON files found in data folder: {0}' -f $resolvedDataPath)
+            throw ('No JSON data files found in: {0}. Run Invoke-EDCA -Collect first to gather Exchange data.' -f $resolvedDataPath)
         }
 
         Write-EDCALog -Message ('Found {0} JSON file(s) to evaluate.' -f $jsonFiles.Count)

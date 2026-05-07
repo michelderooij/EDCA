@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.0.0.3
+- Fixed an error in EDCA-DATA-001 that occurred when a certificate on an Exchange server had no services assigned to it.
+- Fixed an error when running `Invoke-EDCA -Report` with no data files in the Data folder. The error message now clearly tells you to run `-Collect` first.
+
 ## v1.0.0.0
 - First stable release — published to the PowerShell Gallery. Install with `Install-Module -Name EDCA`.
 - EDCA-SEC-032, EDCA-DATA-016: SettingOverride server loops now skip Edge Transport servers. When every server in the collection is an Edge Transport server, the control is reported as **Skipped** (Edge Transport servers do not support `Get-SettingOverride`).

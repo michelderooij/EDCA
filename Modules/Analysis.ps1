@@ -3071,7 +3071,7 @@ function Test-EDCAControl {
                 }
             }
             'EDCA-DATA-001' {
-                $expired = @($server.Certificates | Where-Object { $_.IsExpired -and -not [string]::IsNullOrWhiteSpace([string]$_.Services) -and [string]$_.Services -ne 'None' })
+                $expired = @($server.Certificates | Where-Object { $_.IsExpired -and ($_.PSObject.Properties.Name -contains 'Services') -and -not [string]::IsNullOrWhiteSpace([string]$_.Services) -and [string]$_.Services -ne 'None' })
                 $status = if ($expired.Count -eq 0) { 'Pass' } else { 'Fail' }
                 $summary = ('Expired certificates with assigned services: {0}' -f $expired.Count)
                 if ($expired.Count -gt 0) {

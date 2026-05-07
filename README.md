@@ -1,18 +1,18 @@
 # ![EDCA](Docs/EDCA_logo_100x100.png) Exchange Deployment & Compliance Assessment
 
-PowerShell-based tool to collect Exchange on-premises deployment data, evaluate it against best-practices and well-known compliance controls, and produce an interactive HTML report ([sample](https://michelderooij.github.io/EDCA/report_sample.html)). Supported are Exchange 2016, Exchange 2019, and Exchange SE.
+PowerShell-based tool that collects Exchange on-premises deployment data, evaluates it against best practices and compliance controls, and produces an interactive HTML report ([sample](https://michelderooij.github.io/EDCA/report_sample.html)). Supports Exchange 2016, Exchange 2019, and Exchange SE.
 
 ## Key Features
 
 - Supports Exchange 2016, Exchange 2019, and Exchange SE (Subscription Edition).
 - Evaluates controls against Best Practices and 7 compliance frameworks: [ANSSI](#frameworks) 🇫🇷, [BSI](#frameworks) 🇩🇪, [CIS](#frameworks) 🇺🇸, [CISA](#frameworks) 🇺🇸, [DISA](#frameworks) 🇺🇸, [ISM](#frameworks) 🇦🇺, and [NIS2](#frameworks) 🇪🇺.
-- Interactive HTML report with per-framework scores, colour-coded findings, search, and filters.
-- Evidence is included when printing or saving the report to PDF (browser print → Save as PDF).
-- Collect data from all discovered Exchange servers, or a specific set via `-Servers`.
-- Separate collect (`-Collect`) and report (`-Report`) phases, or both in a single run.
-- (Optional) Sample remediation script generation for all failed controls ([sample](remediation_sample.ps1)).
-- `-Update` switch to download the latest Exchange build catalog from GitHub.
-- Option to hide skipped controls (eg Edge Transport specific controls when there is no Edge Transport server).
+- Interactive HTML report with per-framework scores, color-coded findings, search, and filters.
+- Evidence appears in full when you print or save the report to PDF (browser print → Save as PDF).
+- Collect data from all discovered Exchange servers, or target a specific set with `-Servers`.
+- Run collect (`-Collect`) and report (`-Report`) as separate phases, or together in one step.
+- Generates an optional sample remediation script for all failed controls ([sample](remediation_sample.ps1)).
+- `-Update` switch downloads the latest Exchange build catalog from GitHub.
+- Hide skipped controls on demand (for example, Edge Transport controls when no Edge Transport server is present).
 - Report supports dark mode.
 
 ## Installation
@@ -46,22 +46,21 @@ Import-Module .\EDCA\EDCA.psd1
 Invoke-EDCA -Servers EX01,EX02
 ```
 
-All parameters are identical to `EDCA.ps1`. The thin wrapper script (`EDCA.ps1`) continues to work unchanged and delegates to the module internally.
+All parameters are the same as `EDCA.ps1`. The `EDCA.ps1` wrapper script continues to work unchanged.
 
 ## Requirements
 
 - PowerShell 5.1 or later.
-- Execution under an account that has Exchange and AD administrative access as required.
-- Neither Exchange Management Shell nor Active Directory module is required on the system.
-- When `-Servers` is not specified, Exchange servers are auto-discovered via Active Directory (the "Exchange Servers" security group). EDCA must be able to reach a domain controller.
-- EDCA uses remoting sessions to the Exchange servers through http (80) and .
-- EDCA uses LDAPS to Domain Controllers with the Global Catalog role (3269), and CIM uses WS-MAN (5985) to read CPU details.
+- Run EDCA under an account that has Exchange and AD administrative access.
+- EDCA does not require the Exchange Management Shell or the Active Directory module.
+- When you omit `-Servers`, EDCA auto-discovers Exchange servers via Active Directory (the "Exchange Servers" security group) and must be able to reach a domain controller.
+- EDCA connects to Exchange servers over HTTP (port 80) using remote PowerShell, queries Global Catalog domain controllers over LDAPS (port 3269), and reads CPU details via WS-MAN (port 5985).
 - To collect data from Edge Transport servers, see [Edge Transport Servers](#edge-transport-servers) below.
-- **When running EDCA on an Exchange Mailbox server**, your PowerShell session must be **elevated** (Run as Administrator). EDCA connects via Exchange Remote PowerShell over port 80; UACtoken filtering will block this for non-elevated sessions.
+- **When running EDCA on an Exchange Mailbox server**, your PowerShell session must be **elevated** (Run as Administrator). UAC token filtering blocks the remote PowerShell connection over port 80 for non-elevated sessions.
 
 ## Required Permissions
 
-The account running EDCA needs the following access rights. Rights marked **required** affect core collection; rights marked **needed for** affect specific controls only and will cause those controls to report **Fail** if missing.
+The account running EDCA needs the following permissions. Permissions that affect core collection are noted; permissions needed for specific controls cause those controls to report **Fail** when missing.
 
 | Permission | Scope | Required for |
 |---|---|---|
@@ -70,7 +69,7 @@ The account running EDCA needs the following access rights. Rights marked **requ
 | **Active Directory read** (Domain User is sufficient) | AD forest/domain | Core collection — LDAP RootDSE queries for forest and domain functional level; AD site enumeration; Exchange server AD site lookup. |
 | **Local Administrator** | Each Domain Controller / Global Catalog in the Exchange AD site | Exchange-to-DC/GC core ratio — WMI `Win32_Processor` on domain controller servers. |
 
-> **Note:** If the required permissions are not in place, affected controls will report **Fail** rather than *Unknown* so that missing access is surfaced as a finding rather than silently skipped.
+> **Note:** Missing permissions cause affected controls to report **Fail** rather than *Unknown*, so access gaps appear as findings in the report.
 
 ## Usage
 
@@ -100,7 +99,7 @@ Invoke-EDCA -Servers EXCH01,EXCH02 -Framework 'Best Practice',CIS
 
 ## Edge Transport Servers
 
-Edge Transport servers are not domain-joined and therefore cannot be reached by EDCA running on a Mailbox server. To assess an Edge Transport server, run EDCA locally on the Edge server itself and then bring the collected data file back to a Mailbox server for analysis and reporting.
+Edge Transport servers are not domain-joined, so EDCA running on a Mailbox server cannot reach them directly. To assess an Edge Transport server, run EDCA locally on the Edge server and copy the collected data file to a Mailbox server for analysis and reporting.
 
 **Step 1 — Collect on the Edge Transport server**
 
@@ -118,7 +117,7 @@ Copy the JSON file produced in Step 1 to the `Data` folder of the EDCA installat
 
 **Step 3 — Run analysis and generate the report**
 
-On the Mailbox server, run the normal collect-and-report flow (or just `-Report` if you already have a Mailbox-server collection). EDCA will discover all JSON files in `Data` and include the Edge server in the analysis:
+On the Mailbox server, run the normal collect-and-report flow (or just `-Report` if you already have Mailbox-server data). EDCA discovers all JSON files in `Data` and includes the Edge server in the analysis:
 
 ```powershell
 # Collect from Mailbox servers and report, including the copied Edge data file
@@ -128,7 +127,7 @@ Invoke-EDCA
 Invoke-EDCA -Report
 ```
 
-Edge-specific controls (anti-spam agents, recipient validation, blank-sender blocking, send connector TLS, protocol logging, and SMTP certificate assignment) are only assessed for servers whose data is present. The report marks Edge servers with an **EDGE** badge and lists any Edge servers that were detected in the organisation topology but not collected as an environment notice.
+EDCA assesses Edge-specific controls (anti-spam agents, recipient validation, blank-sender blocking, send connector TLS, protocol logging, and SMTP certificate assignment) only for servers whose data is present. The report marks Edge servers with an **EDGE** badge and lists any Edge servers detected in the organization topology that were not collected.
 
 ## Output
 
@@ -160,7 +159,7 @@ EDCA evaluates controls against the following compliance frameworks. Each contro
 
 ## Screenshots
 
-**Report dashboard** — framework scores (Total, Best Practice, ANSSI, BSI, CIS, CISA, DISA, ISM, NIS2) with colour-coded donut charts, and findings grouped by category with RAG indicators, search, and filters:
+**Report dashboard** — framework scores (Total, Best Practice, ANSSI, BSI, CIS, CISA, DISA, ISM, NIS2) with color-coded donut charts, and findings grouped by category with RAG indicators, search, and filters:
 
 ![EDCA report dashboard](Docs/EDCA_capture1.jpg)
 
