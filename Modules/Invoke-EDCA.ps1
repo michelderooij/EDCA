@@ -35,9 +35,16 @@ function Invoke-EDCA {
     .PARAMETER ThrottleLimit
         Maximum number of parallel collection jobs (default: 4; range 1–128).
 
-    .PARAMETER ControlsPath
+    .PARAMETER ControlPath
         Path to the directory containing individual control JSON files. Defaults to the Controls folder
         inside the module directory. Override to use a custom controls library.
+        When -InstallControls is specified, this parameter is mandatory and must point to an existing
+        directory; the module's built-in controls are copied to that location.
+
+    .PARAMETER InstallControls
+        Copies all built-in control JSON files from the module's Controls folder to the directory
+        specified by -ControlPath. -ControlPath is mandatory and must be an existing directory.
+        No collection or reporting is performed.
 
     .PARAMETER OutputPath
         Directory for HTML reports and remediation scripts (default: .\Output relative to the current
@@ -87,6 +94,9 @@ function Invoke-EDCA {
 
     .EXAMPLE
         Invoke-EDCA -Report -Framework 'Best Practice'
+
+    .EXAMPLE
+        Invoke-EDCA -InstallControls -ControlPath C:\MyControls
     #>
     [CmdletBinding(DefaultParameterSetName = 'Default')]
     param(
@@ -109,7 +119,14 @@ function Invoke-EDCA {
         [ValidateRange(1, 128)]
         [int]$ThrottleLimit = 4,
 
-        [string]$ControlsPath = '',
+        [Parameter(ParameterSetName = 'InstallControls', Mandatory = $true)]
+        [switch]$InstallControls,
+
+        [Parameter(ParameterSetName = 'Default')]
+        [Parameter(ParameterSetName = 'Collect')]
+        [Parameter(ParameterSetName = 'Report')]
+        [Parameter(ParameterSetName = 'InstallControls', Mandatory = $true)]
+        [string]$ControlPath = '',
 
         [Parameter(ParameterSetName = 'Default')]
         [Parameter(ParameterSetName = 'Report')]
@@ -142,6 +159,20 @@ function Invoke-EDCA {
     $doCollect = $PSCmdlet.ParameterSetName -in @('Collect', 'Default')
     $doReport  = $PSCmdlet.ParameterSetName -in @('Report', 'Default')
 
+    if ($PSCmdlet.ParameterSetName -eq 'InstallControls') {
+        $resolvedControlPath = Resolve-EDCAPath -Path $ControlPath -BasePath $userBase
+        if (-not (Test-Path -Path $resolvedControlPath -PathType Container)) {
+            throw ('ControlPath must be an existing directory: {0}' -f $resolvedControlPath)
+        }
+        $sourceControlsPath = Join-Path -Path $moduleRoot -ChildPath 'Controls'
+        $sourceFiles = @(Get-ChildItem -Path $sourceControlsPath -Filter '*.json')
+        foreach ($file in $sourceFiles) {
+            Copy-Item -Path $file.FullName -Destination $resolvedControlPath -Force
+        }
+        Write-EDCALog -Message ('Installed {0} control file(s) to: {1}' -f $sourceFiles.Count, $resolvedControlPath)
+        return
+    }
+
     Write-Host ('=============================================================')
     Write-Host ('EXCHANGE DEPLOYMENT & COMPLIANCE ASSESSMENT {0}' -f $EDCAVersion)
     Write-Host ('=============================================================')
@@ -149,31 +180,31 @@ function Invoke-EDCA {
     $resolvedDataPath   = Resolve-EDCAPath -Path $DataPath   -BasePath $userBase
     $resolvedOutputPath = Resolve-EDCAPath -Path $OutputPath -BasePath $userBase
 
-    # Resolve ControlsPath: when empty (the default), fall back to the module's own Controls/ folder.
-    if ([string]::IsNullOrEmpty($ControlsPath)) {
-        $resolvedControlsPath = Join-Path -Path $moduleRoot -ChildPath 'Controls'
+    # Resolve ControlPath: when empty (the default), fall back to the module's own Controls/ folder.
+    if ([string]::IsNullOrEmpty($ControlPath)) {
+        $resolvedControlPath = Join-Path -Path $moduleRoot -ChildPath 'Controls'
     }
     else {
-        $resolvedControlsPath = Resolve-EDCAPath -Path $ControlsPath -BasePath $userBase
+        $resolvedControlPath = Resolve-EDCAPath -Path $ControlPath -BasePath $userBase
     }
 
     New-EDCADirectoryIfMissing -Path $resolvedDataPath
 
     Write-Verbose ('Collect: {0}; Report: {1}' -f $doCollect, $doReport)
-    Write-Verbose ('Resolved controls path: {0}' -f $resolvedControlsPath)
+    Write-Verbose ('Resolved control path: {0}' -f $resolvedControlPath)
     Write-Verbose ('Resolved data path: {0}' -f $resolvedDataPath)
     Write-Verbose ('Resolved output path: {0}' -f $resolvedOutputPath)
     Write-Verbose ('Collection throttle limit: {0}' -f $ThrottleLimit)
 
-    if (-not (Test-Path -Path $resolvedControlsPath -PathType Container)) {
-        throw ('Controls directory not found: {0}' -f $resolvedControlsPath)
+    if (-not (Test-Path -Path $resolvedControlPath -PathType Container)) {
+        throw ('Controls directory not found: {0}' -f $resolvedControlPath)
     }
 
-    $controls = @(Get-ChildItem -Path $resolvedControlsPath -Filter '*.json' | Sort-Object Name | ForEach-Object {
+    $controls = @(Get-ChildItem -Path $resolvedControlPath -Filter '*.json' | Sort-Object Name | ForEach-Object {
         Get-Content -Path $_.FullName -Raw | ConvertFrom-Json
     })
     if ($controls.Count -eq 0) {
-        throw ('No control JSON files found in: {0}' -f $resolvedControlsPath)
+        throw ('No control JSON files found in: {0}' -f $resolvedControlPath)
     }
     Write-Verbose ('Loaded {0} control definition(s).' -f $controls.Count)
 

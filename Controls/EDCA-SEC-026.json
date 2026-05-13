@@ -1,7 +1,7 @@
 {
   "id": "EDCA-SEC-026",
   "title": "Microsoft Defender real-time protection enabled",
-  "description": "Each Exchange server MUST have Microsoft Defender Antivirus real-time protection enabled when Defender is the active antivirus solution. CIS Controls v8 requires deploying and maintaining anti-malware software.",
+  "description": "Each Exchange server MUST have Microsoft Defender Antivirus real-time protection enabled when Defender is the active antivirus solution. CIS Controls v8.1 requires deploying and maintaining anti-malware software.",
   "verify": true,
   "subject": "Server",
   "category": "Platform Security",
@@ -23,7 +23,7 @@
     },
     {
       "name": "CIS 10.1 (IG1): Deploy and Maintain Anti-Malware Software",
-      "url": "https://www.cisecurity.org/insights/white-papers/cis-controls-v8"
+      "url": "https://www.cisecurity.org/controls/v8-1"
     },
     {
       "name": "BSI SYS.1.1.A9 — Einsatz von Virenschutz-Programmen auf Servern",

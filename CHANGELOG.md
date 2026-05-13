@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.0.0.5
+- `-ControlsPath` parameter renamed to `-ControlPath`.
+- New switch `-InstallControls`: copies all built-in control JSON files from the module's `Controls/` folder to the directory specified by `-ControlPath`. `-ControlPath` is mandatory when using this switch and must point to an existing directory.
+- Verified against CIS Controls framework v8.1 (EDCA-SEC-023, EDCA-SEC-026, EDCA-TLS-023, EDCA-TLS-026). Reference URLs updated to `https://www.cisecurity.org/controls/v8-1`.
+
 ## v1.0.0.4
 - Fixed an issue where running `Invoke-EDCA` from a management server (with Exchange Management Tools installed but no Exchange server role) was incorrectly detected as an Edge Transport server. EDCA now correctly falls through to Active Directory discovery on machines where Exchange services are not running.
 
