@@ -1,6 +1,6 @@
 # ![EDCA](Docs/EDCA_logo_100x100.png) Exchange Deployment & Compliance Assessment
 
-![PowerShell Gallery Downloads](https://img.shields.io/powershellgallery/dt/EDCA?style=for-the-badge&label=PSGallery%20Downloads&link=https%3A%2F%2Fwww.powershellgallery.com%2Fpackages%2FEDCA%2F)
+![PowerShell Gallery Downloads](https://img.shields.io/powershellgallery/dt/EDCA&label=PSGallery%20Downloads&link=https%3A%2F%2Fwww.powershellgallery.com%2Fpackages%2FEDCA%2F)
 ![GitHub Release](https://img.shields.io/github/v/release/michelderooij/EDCA)
 ![GitHub forks](https://img.shields.io/github/forks/michelderooij/EDCA)
 
