@@ -2,7 +2,8 @@
 
 ![PowerShell Gallery Downloads](https://img.shields.io/powershellgallery/dt/EDCA)
 ![GitHub Release](https://img.shields.io/github/v/release/michelderooij/EDCA)
-![GitHub forks](https://img.shields.io/github/forks/michelderooij/EDCA)
+![GitHub forks](https://img.shields.io/github/forks/michelderooij/EDCA?style=lat-square)
+![GitHub forks](https://img.shields.io/github/stars/michelderooij/EDCA?style=flat-square)
 
 PowerShell-based tool that collects Exchange on-premises deployment data, evaluates it against best practices and compliance controls, and produces an interactive HTML report ([sample](https://michelderooij.github.io/EDCA/report_sample.html)). Supports Exchange 2016, Exchange 2019, and Exchange SE.
 
