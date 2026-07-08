@@ -1,8 +1,17 @@
 # Changelog
 
+## v1.0.0.6
+- Version bump to `1.0.0.6` aligned across module manifest, docs, and function header.
+- Updated ISM framework to June 2026:
+	- `EDCA-GOV-002`, `EDCA-SEC-038`: added `ISM-2110` (system management and patch currency alignment).
+	- `EDCA-MON-001`: added `ISM-2108` (system monitoring alignment).
+	- `EDCA-IAC-003`, `EDCA-IAC-004`, `EDCA-IAC-005`: added `ISM-1403`, `ISM-1467`, `ISM-1470` (system hardening/authentication alignment).
+	- `EDCA-TLS-027`: added `ISM-2116`, `ISM-2117` (email security alignment).
+- Added explicit README scope note that EDCA automates machine-checkable ISM controls and documents policy-only controls as out of scope.
+
 ## v1.0.0.5
 - `-ControlsPath` parameter renamed to `-ControlPath`.
-- New switch `-InstallControls`: copies all built-in control JSON files from the module's `Controls/` folder to the directory specified by `-ControlPath`. `-ControlPath` is mandatory when using this switch and must point to an existing directory.
+- New switch `-InstallControls`: copies built-in control JSON files from the module's `Controls/` folder to the directory specified by `-ControlPath`. `-ControlPath` is mandatory when using this switch and must point to an existing directory. When `-Framework` is also specified, only controls tagged with at least one of the supplied frameworks are copied.
 - Verified against CIS Controls framework v8.1 (EDCA-SEC-023, EDCA-SEC-026, EDCA-TLS-023, EDCA-TLS-026). Reference URLs updated to `https://www.cisecurity.org/controls/v8-1`.
 
 ## v1.0.0.4

@@ -3,7 +3,7 @@ function Invoke-EDCA {
     .SYNOPSIS
         EDCA — Exchange Deployment & Compliance Assessment.
 
-        Version: 1.0.0.4
+        Version: 1.0.0.6
         Author:  Michel de Rooij
         Source:  https://github.com/michelderooij/EDCA
         Website: https://eightwone.com
@@ -42,9 +42,10 @@ function Invoke-EDCA {
         directory; the module's built-in controls are copied to that location.
 
     .PARAMETER InstallControls
-        Copies all built-in control JSON files from the module's Controls folder to the directory
+        Copies built-in control JSON files from the module's Controls folder to the directory
         specified by -ControlPath. -ControlPath is mandatory and must be an existing directory.
-        No collection or reporting is performed.
+        When -Framework is also specified, only controls tagged with at least one of the supplied
+        frameworks are copied. No collection or reporting is performed.
 
     .PARAMETER OutputPath
         Directory for HTML reports and remediation scripts (default: .\Output relative to the current
@@ -97,6 +98,9 @@ function Invoke-EDCA {
 
     .EXAMPLE
         Invoke-EDCA -InstallControls -ControlPath C:\MyControls
+
+    .EXAMPLE
+        Invoke-EDCA -InstallControls -ControlPath C:\MyControls -Framework NIS2
     #>
     [CmdletBinding(DefaultParameterSetName = 'Default')]
     param(
@@ -140,6 +144,10 @@ function Invoke-EDCA {
 
         [switch]$Update,
 
+        [Parameter(ParameterSetName = 'Default')]
+        [Parameter(ParameterSetName = 'Collect')]
+        [Parameter(ParameterSetName = 'Report')]
+        [Parameter(ParameterSetName = 'InstallControls')]
         [ValidateSet('Best Practice', 'ANSSI', 'BSI', 'CIS', 'CISA', 'DISA', 'ISM', 'NIS2')]
         [string[]]$Framework
     )
@@ -153,11 +161,11 @@ function Invoke-EDCA {
     # $moduleRoot resolves module-owned assets (Controls/, Config/).
     # $userBase resolves user workspace paths (DataPath, OutputPath).
     $moduleRoot = $script:EDCAModuleRoot
-    $userBase   = (Get-Location).Path
+    $userBase = (Get-Location).Path
 
     # Derive phase flags from the active parameter set.
     $doCollect = $PSCmdlet.ParameterSetName -in @('Collect', 'Default')
-    $doReport  = $PSCmdlet.ParameterSetName -in @('Report', 'Default')
+    $doReport = $PSCmdlet.ParameterSetName -in @('Report', 'Default')
 
     if ($PSCmdlet.ParameterSetName -eq 'InstallControls') {
         $resolvedControlPath = Resolve-EDCAPath -Path $ControlPath -BasePath $userBase
@@ -166,6 +174,16 @@ function Invoke-EDCA {
         }
         $sourceControlsPath = Join-Path -Path $moduleRoot -ChildPath 'Controls'
         $sourceFiles = @(Get-ChildItem -Path $sourceControlsPath -Filter '*.json')
+        if ($Framework -and $Framework.Count -gt 0) {
+            $sourceFiles = @($sourceFiles | Where-Object {
+                    $ctrl = Get-Content -Path $_.FullName -Raw | ConvertFrom-Json
+                    @($ctrl.frameworks) | Where-Object { $Framework -contains $_ }
+                })
+            if ($sourceFiles.Count -eq 0) {
+                throw ('No controls match the specified framework(s): {0}' -f ($Framework -join ', '))
+            }
+            Write-Verbose ('Framework filter [{0}]: {1} control(s) will be installed.' -f ($Framework -join ', '), $sourceFiles.Count)
+        }
         foreach ($file in $sourceFiles) {
             Copy-Item -Path $file.FullName -Destination $resolvedControlPath -Force
         }
@@ -177,7 +195,7 @@ function Invoke-EDCA {
     Write-Host ('EXCHANGE DEPLOYMENT & COMPLIANCE ASSESSMENT {0}' -f $EDCAVersion)
     Write-Host ('=============================================================')
 
-    $resolvedDataPath   = Resolve-EDCAPath -Path $DataPath   -BasePath $userBase
+    $resolvedDataPath = Resolve-EDCAPath -Path $DataPath -BasePath $userBase
     $resolvedOutputPath = Resolve-EDCAPath -Path $OutputPath -BasePath $userBase
 
     # Resolve ControlPath: when empty (the default), fall back to the module's own Controls/ folder.
@@ -201,8 +219,8 @@ function Invoke-EDCA {
     }
 
     $controls = @(Get-ChildItem -Path $resolvedControlPath -Filter '*.json' | Sort-Object Name | ForEach-Object {
-        Get-Content -Path $_.FullName -Raw | ConvertFrom-Json
-    })
+            Get-Content -Path $_.FullName -Raw | ConvertFrom-Json
+        })
     if ($controls.Count -eq 0) {
         throw ('No control JSON files found in: {0}' -f $resolvedControlPath)
     }
@@ -222,7 +240,7 @@ function Invoke-EDCA {
 
     if ($Update) {
         Write-EDCALog -Message 'Updating build information.'
-        $buildsUrl  = 'https://raw.githubusercontent.com/michelderooij/EDCA/refs/heads/main/Config/exchange.builds.json'
+        $buildsUrl = 'https://raw.githubusercontent.com/michelderooij/EDCA/refs/heads/main/Config/exchange.builds.json'
         $buildsPath = Join-Path -Path $moduleRoot -ChildPath 'Config\exchange.builds.json'
         try {
             $content = (Invoke-WebRequest -Uri $buildsUrl -UseBasicParsing -ErrorAction Stop).Content
@@ -240,8 +258,8 @@ function Invoke-EDCA {
     }
 
     $collectionData = $null
-    $rawOrgId       = $null
-    $selectedOrgId  = $null
+    $rawOrgId = $null
+    $selectedOrgId = $null
 
     if ($doCollect) {
         Write-EDCALog -Message 'Starting collection mode.'
@@ -259,7 +277,7 @@ function Invoke-EDCA {
         Write-Verbose ('Collect mode target count from parameters: {0}' -f @($Servers).Count)
         $collectionData = Invoke-EDCACollection -Servers $Servers -ThrottleLimit $ThrottleLimit -ToolVersion $EDCAVersion
 
-        $stamp         = Get-Date -Format 'yyyyMMdd_HHmmss'
+        $stamp = Get-Date -Format 'yyyyMMdd_HHmmss'
         $exportedFiles = [System.Collections.Generic.List[string]]::new()
 
         # Resolve OrganizationId before exporting server files so it can be stamped on each.
@@ -271,8 +289,8 @@ function Invoke-EDCA {
 
         foreach ($serverRecord in @($collectionData.Servers)) {
             $serverFqdn = if ($serverRecord.PSObject.Properties.Name -contains 'Server') { [string]$serverRecord.Server } else { 'unknown' }
-            $safeName   = $serverFqdn -replace '[^\w\.\-]', '_'
-            $jsonOut    = Join-Path -Path $resolvedDataPath -ChildPath ('{0}_{1}.json' -f $safeName, $stamp)
+            $safeName = $serverFqdn -replace '[^\w\.\-]', '_'
+            $jsonOut = Join-Path -Path $resolvedDataPath -ChildPath ('{0}_{1}.json' -f $safeName, $stamp)
 
             $perServerMetadata = [pscustomobject]@{
                 FileType            = 'Server'
@@ -307,7 +325,7 @@ function Invoke-EDCA {
         )
 
         if (-not $allServersAreEdge) {
-            $safeOrgId  = if ($null -ne $rawOrgId) { $rawOrgId -replace '[^\w\.\-]', '_' } else { 'organization' }
+            $safeOrgId = if ($null -ne $rawOrgId) { $rawOrgId -replace '[^\w\.\-]', '_' } else { 'organization' }
             $orgJsonOut = Join-Path -Path $resolvedDataPath -ChildPath ('{0}_{1}.json' -f $safeOrgId, $stamp)
 
             $orgMetadata = [pscustomobject]@{
@@ -345,7 +363,7 @@ function Invoke-EDCA {
             $exInfo = if ($serverRecord.PSObject.Properties.Name -contains 'Exchange') { $serverRecord.Exchange } else { $null }
             if ($null -eq $exInfo) { continue }
             $recordIsEdge = ($exInfo.PSObject.Properties.Name -contains 'IsEdge') -and [bool]$exInfo.IsEdge
-            $hasCmdlets   = ($exInfo.PSObject.Properties.Name -contains 'ExchangeCmdletsAvailable') -and [bool]$exInfo.ExchangeCmdletsAvailable
+            $hasCmdlets = ($exInfo.PSObject.Properties.Name -contains 'ExchangeCmdletsAvailable') -and [bool]$exInfo.ExchangeCmdletsAvailable
             if ($recordIsEdge -and -not $hasCmdlets) {
                 $edgeServerName = if ($serverRecord.PSObject.Properties.Name -contains 'Server') { [string]$serverRecord.Server } else { 'unknown' }
                 $edgeServersNotCollected.Add($edgeServerName)
@@ -384,7 +402,7 @@ function Invoke-EDCA {
         # Pass 1: parse all files and bucket them into org files vs server files.
         # Org files are fully collected before server files are processed so the selected
         # organization is known when server files are filtered in Pass 2.
-        $allOrgFiles    = [System.Collections.Generic.List[pscustomobject]]::new()
+        $allOrgFiles = [System.Collections.Generic.List[pscustomobject]]::new()
         $rawServerFiles = [System.Collections.Generic.List[pscustomobject]]::new()
 
         foreach ($jsonFile in $jsonFiles) {
@@ -459,7 +477,7 @@ function Invoke-EDCA {
         # Determine the selected organization from the most recently collected org file.
         # Also gather all collection timestamps that belong to that org (for legacy timestamp matching).
         # Warn if org files from a different organization are present in the folder.
-        $selectedOrgId         = $null
+        $selectedOrgId = $null
         $selectedOrgTimestamps = @()
         if ($allOrgFiles.Count -gt 0) {
             # Prefer org files where Organization.Available = true (from Mailbox servers) over
@@ -502,14 +520,14 @@ function Invoke-EDCA {
         }
 
         # Pass 2: filter server files to the selected organization and build the parsed record list.
-        $allParsed            = [System.Collections.Generic.List[pscustomobject]]::new()
-        $latestBaseMetadata   = $null
-        $latestBaseTimestamp  = [datetime]::MinValue
+        $allParsed = [System.Collections.Generic.List[pscustomobject]]::new()
+        $latestBaseMetadata = $null
+        $latestBaseTimestamp = [datetime]::MinValue
 
         foreach ($sf in $rawServerFiles) {
-            $parsed        = $sf.Parsed
+            $parsed = $sf.Parsed
             $fileTimestamp = $sf.Timestamp
-            $jsonFile      = $sf.FilePath
+            $jsonFile = $sf.FilePath
 
             # Determine which organization this server file declares.
             $sfOrgId = $null
@@ -586,7 +604,7 @@ function Invoke-EDCA {
 
         # Pick organization data from the most recently collected org file.
         $latestOrganization = $null
-        $latestEmailAuth    = $null
+        $latestEmailAuth = $null
         $latestOrgTimestamp = [datetime]::MinValue
 
         foreach ($orgEntry in $allOrgFiles) {
@@ -602,7 +620,7 @@ function Invoke-EDCA {
         }
 
         if ($allOrgFiles.Count -gt 1) {
-            $skippedOrg  = $allOrgFiles.Count - 1
+            $skippedOrg = $allOrgFiles.Count - 1
             $bestOrgFile = ($allOrgFiles | Sort-Object { $_.Timestamp } -Descending | Select-Object -First 1).FilePath
             Write-EDCALog -Message ('Organization data: {0} file(s) found; using most recent ({1}).' -f $allOrgFiles.Count, $bestOrgFile)
         }
@@ -633,7 +651,7 @@ function Invoke-EDCA {
     }
 
     $analysisStamp = Get-Date -Format 'yyyyMMdd_HHmmss'
-    $analysisOut   = Join-Path -Path $resolvedDataPath -ChildPath ('analysis_{0}.json' -f $analysisStamp)
+    $analysisOut = Join-Path -Path $resolvedDataPath -ChildPath ('analysis_{0}.json' -f $analysisStamp)
     ConvertTo-EDCAJson -InputObject $analysis | Set-Content -Path $analysisOut -Encoding UTF8
     Write-EDCALog -Message ('Analysis JSON exported: {0}' -f $analysisOut)
     Write-Verbose ('Analysis produced {0} finding(s).' -f @($analysis.Findings).Count)
@@ -683,13 +701,13 @@ function Invoke-EDCA {
 
     New-EDCADirectoryIfMissing -Path $resolvedOutputPath
     Write-Verbose 'Starting HTML report generation phase.'
-    $reportOut  = Join-Path -Path $resolvedOutputPath -ChildPath ('report_{0}.html' -f $analysisStamp)
+    $reportOut = Join-Path -Path $resolvedOutputPath -ChildPath ('report_{0}.html' -f $analysisStamp)
     $reportPath = New-EDCAHtmlReport -CollectionData $collectionData -AnalysisData $outputAnalysis -HistoryData $historyData -OutputFile $reportOut
     Write-EDCALog -Message ('HTML report generated: {0}' -f $reportPath)
 
     if ($RemediationScript) {
         Write-Verbose 'Starting remediation script generation phase.'
-        $remediationOut  = Join-Path -Path $resolvedOutputPath -ChildPath ('remediation_{0}.ps1' -f $analysisStamp)
+        $remediationOut = Join-Path -Path $resolvedOutputPath -ChildPath ('remediation_{0}.ps1' -f $analysisStamp)
         $remediationPath = New-EDCARemediationScript -AnalysisData $outputAnalysis -OutputFile $remediationOut
         Write-EDCALog -Message ('Remediation script generated: {0}' -f $remediationPath)
     }

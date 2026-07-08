@@ -1081,39 +1081,94 @@ function Get-EDCAExchangeServerInfo {
     return Invoke-EDCAServerCommand -Server $Server -ScriptBlock $scriptBlock
 }
 
-function Resolve-EDCADnsRecord {
+function Resolve-DnsNamePlus {
+    # Drop-in wrapper around Resolve-DnsName that adds support for record types not
+    # included in the Windows RecordType enum (e.g. TLSA) by falling back to DoH.
+    # For supported types the system DNS resolver is used transparently.
+    # For unsupported types a DNS-over-HTTPS query is sent to -Server (default: 1.1.1.1).
+    # Returns DNS record objects directly, matching Resolve-DnsName output format.
+    # Throws on resolution failure, consistent with Resolve-DnsName -ErrorAction Stop behavior.
+    # Throws CommandNotFoundException when Resolve-DnsName is unavailable (supported types only).
     [CmdletBinding()]
     param(
         [Parameter(Mandatory = $true)]
         [string]$Name,
         [Parameter(Mandatory = $true)]
-        [string]$Type
+        [string]$Type,
+        [string]$Server = '1.1.1.1'
     )
 
-    if (-not (Get-Command -Name Resolve-DnsName -ErrorAction SilentlyContinue)) {
-        return [pscustomobject]@{
-            ResolverAvailable = $false
-            Success           = $false
-            Records           = @()
-            Error             = 'Resolve-DnsName is not available on this host.'
-        }
-    }
-
-    try {
-        $records = @(Resolve-DnsName -Name $Name -Type $Type -ErrorAction Stop)
-        return [pscustomobject]@{
-            ResolverAvailable = $true
-            Success           = $true
-            Records           = $records
-            Error             = ''
-        }
+    # Determine which types Resolve-DnsName supports by inspecting its RecordType enum at runtime.
+    # This stays automatically in sync with whatever version of the DnsClient module is installed.
+    # If the enum type is unavailable (DnsClient module not loaded / non-Windows), the array is
+    # empty and all lookups are routed through DoH — consistent with Resolve-DnsName being absent.
+    $supportedTypes = try {
+        [Microsoft.DnsClient.Commands.RecordType].GetEnumValues() | ForEach-Object { $_.ToString().ToUpperInvariant() }
     }
     catch {
-        return [pscustomobject]@{
-            ResolverAvailable = $true
-            Success           = $false
-            Records           = @()
-            Error             = $_.Exception.Message
+        @()
+    }
+
+    if ($Type.ToUpperInvariant() -in $supportedTypes) {
+        # Supported type: pass through to Resolve-DnsName using the current system DNS resolver.
+        # Throws CommandNotFoundException if Resolve-DnsName is unavailable, or a DNS exception on lookup failure.
+        Resolve-DnsName -Name $Name -Type $Type -ErrorAction Stop
+        return
+    }
+
+    # Unsupported type: query via DNS-over-HTTPS
+    # Map type names to their IANA DNS type numbers
+    $dnsTypeNumbers = @{
+        TLSA  = 52
+        CAA   = 257
+        SSHFP = 44
+        CERT  = 37
+        NAPTR = 35
+        TKEY  = 249
+        TSIG  = 250
+        URI   = 256
+        SVCB  = 64
+        HTTPS = 65
+    }
+
+    $typeUpper = $Type.ToUpperInvariant()
+    $typeValue = if ($dnsTypeNumbers.ContainsKey($typeUpper)) { $dnsTypeNumbers[$typeUpper] } else { $typeUpper }
+
+    $uri = ('https://{0}/dns-query?name={1}&type={2}' -f $Server, [Uri]::EscapeDataString($Name), $typeValue)
+    $response = Invoke-WebRequest -Uri $uri -Headers @{ Accept = 'application/dns-json' } -UseBasicParsing -TimeoutSec 10 -ErrorAction Stop
+    $json = $response.Content | ConvertFrom-Json
+
+    if ($null -eq $json.Answer -or @($json.Answer).Count -eq 0) {
+        throw ('No {0} records found for {1}.' -f $Type, $Name)
+    }
+
+    foreach ($answer in @($json.Answer)) {
+        switch ($typeUpper) {
+            'TLSA' {
+                # data format: "<CertUsage> <Selector> <MatchingType> <HexHash>"
+                $parts = ($answer.data -split '\s+', 4)
+                if ($parts.Count -ge 3) {
+                    [pscustomobject]@{
+                        Type             = 'TLSA'
+                        Name             = $answer.name.TrimEnd('.')
+                        TTL              = $answer.TTL
+                        Section          = 'Answer'
+                        CertificateUsage = [int]$parts[0]
+                        Selector         = [int]$parts[1]
+                        MatchingType     = [int]$parts[2]
+                        Certificate      = if ($parts.Count -ge 4) { $parts[3] } else { '' }
+                    }
+                }
+            }
+            default {
+                [pscustomobject]@{
+                    Type    = $Type
+                    Name    = $answer.name.TrimEnd('.')
+                    TTL     = $answer.TTL
+                    Section = 'Answer'
+                    Data    = $answer.data
+                }
+            }
         }
     }
 }
@@ -1167,12 +1222,10 @@ function Get-EDCASpfDnsLookupCount {
         return 0
     }
 
-    $txtLookup = Resolve-EDCADnsRecord -Name $Domain -Type 'TXT'
-    if (-not $txtLookup.Success) {
-        return 0
-    }
+    $txtRecords = $null
+    try { $txtRecords = @(Resolve-DnsNamePlus -Name $Domain -Type 'TXT' -ErrorAction Stop) } catch { return 0 }
 
-    $txtValues = Get-EDCATxtRecordValues -Records $txtLookup.Records
+    $txtValues = Get-EDCATxtRecordValues -Records $txtRecords
     $spfRecords = @($txtValues | Where-Object { $_ -match '^v=spf1(\s|$)' })
     if ($spfRecords.Count -ne 1) {
         return 0
@@ -1206,28 +1259,30 @@ function Test-EDCASpfConfiguration {
         [string]$Domain
     )
 
-    $txtLookup = Resolve-EDCADnsRecord -Name $Domain -Type 'TXT'
-    if (-not $txtLookup.ResolverAvailable) {
+    $txtRecords = $null
+    try {
+        $txtRecords = @(Resolve-DnsNamePlus -Name $Domain -Type 'TXT' -ErrorAction Stop)
+    }
+    catch [System.Management.Automation.CommandNotFoundException] {
         return [pscustomobject]@{
             Status                  = 'Unknown'
-            Evidence                = $txtLookup.Error
+            Evidence                = $_.Exception.Message
             Records                 = @()
             PotentialDnsLookupCount = $null
-            Issues                  = @($txtLookup.Error)
+            Issues                  = @($_.Exception.Message)
         }
     }
-
-    if (-not $txtLookup.Success) {
+    catch {
         return [pscustomobject]@{
             Status                  = 'Fail'
-            Evidence                = ('No TXT records resolved for SPF check: {0}' -f $txtLookup.Error)
+            Evidence                = ('No TXT records resolved for SPF check: {0}' -f $_.Exception.Message)
             Records                 = @()
             PotentialDnsLookupCount = $null
             Issues                  = @('No SPF TXT record found.')
         }
     }
 
-    $txtValues = Get-EDCATxtRecordValues -Records $txtLookup.Records
+    $txtValues = Get-EDCATxtRecordValues -Records $txtRecords
     $spfRecords = @($txtValues | Where-Object { $_ -match '^v=spf1(\s|$)' })
     if ($spfRecords.Count -eq 0) {
         return [pscustomobject]@{
@@ -1283,28 +1338,30 @@ function Test-EDCADmarcConfiguration {
     )
 
     $dmarcDomain = ('_dmarc.{0}' -f $Domain)
-    $txtLookup = Resolve-EDCADnsRecord -Name $dmarcDomain -Type 'TXT'
-    if (-not $txtLookup.ResolverAvailable) {
+    $txtRecords = $null
+    try {
+        $txtRecords = @(Resolve-DnsNamePlus -Name $dmarcDomain -Type 'TXT' -ErrorAction Stop)
+    }
+    catch [System.Management.Automation.CommandNotFoundException] {
         return [pscustomobject]@{
             Status   = 'Unknown'
-            Evidence = $txtLookup.Error
+            Evidence = $_.Exception.Message
             Records  = @()
             Policy   = $null
-            Issues   = @($txtLookup.Error)
+            Issues   = @($_.Exception.Message)
         }
     }
-
-    if (-not $txtLookup.Success) {
+    catch {
         return [pscustomobject]@{
             Status   = 'Fail'
-            Evidence = ('No DMARC TXT records resolved: {0}' -f $txtLookup.Error)
+            Evidence = ('No DMARC TXT records resolved: {0}' -f $_.Exception.Message)
             Records  = @()
             Policy   = $null
             Issues   = @('DMARC record missing.')
         }
     }
 
-    $txtValues = Get-EDCATxtRecordValues -Records $txtLookup.Records
+    $txtValues = Get-EDCATxtRecordValues -Records $txtRecords
     $dmarcRecords = @($txtValues | Where-Object { $_ -match '^v=DMARC1\s*;?' })
     if ($dmarcRecords.Count -eq 0) {
         return [pscustomobject]@{
@@ -1396,25 +1453,27 @@ function Test-EDCAMtaStsConfiguration {
     )
 
     $dnsName = ('_mta-sts.{0}' -f $Domain)
-    $txtLookup = Resolve-EDCADnsRecord -Name $dnsName -Type 'TXT'
-    if (-not $txtLookup.ResolverAvailable) {
+    $txtRecords = $null
+    try {
+        $txtRecords = @(Resolve-DnsNamePlus -Name $dnsName -Type 'TXT' -ErrorAction Stop)
+    }
+    catch [System.Management.Automation.CommandNotFoundException] {
         return [pscustomobject]@{
             Status          = 'Unknown'
-            Evidence        = $txtLookup.Error
+            Evidence        = $_.Exception.Message
             DnsRecord       = $null
             PolicyUrl       = ('https://mta-sts.{0}/.well-known/mta-sts.txt' -f $Domain)
             PolicyStatus    = 'Unknown'
             PolicyMode      = $null
             PolicyMaxAge    = $null
             PolicyMxEntries = @()
-            Issues          = @($txtLookup.Error)
+            Issues          = @($_.Exception.Message)
         }
     }
-
-    if (-not $txtLookup.Success) {
+    catch {
         return [pscustomobject]@{
             Status          = 'Fail'
-            Evidence        = ('No MTA-STS DNS TXT record resolved: {0}' -f $txtLookup.Error)
+            Evidence        = ('No MTA-STS DNS TXT record resolved: {0}' -f $_.Exception.Message)
             DnsRecord       = $null
             PolicyUrl       = ('https://mta-sts.{0}/.well-known/mta-sts.txt' -f $Domain)
             PolicyStatus    = 'NotChecked'
@@ -1425,7 +1484,7 @@ function Test-EDCAMtaStsConfiguration {
         }
     }
 
-    $txtValues = Get-EDCATxtRecordValues -Records $txtLookup.Records
+    $txtValues = Get-EDCATxtRecordValues -Records $txtRecords
     $stsRecords = @($txtValues | Where-Object { $_ -match '^v=STSv1\s*;?' })
     if ($stsRecords.Count -eq 0) {
         return [pscustomobject]@{
@@ -1560,21 +1619,23 @@ function Test-EDCADaneConfiguration {
         [string]$Domain
     )
 
-    $mxLookup = Resolve-EDCADnsRecord -Name $Domain -Type 'MX'
-    if (-not $mxLookup.ResolverAvailable) {
+    $mxRecords = $null
+    try {
+        $mxRecords = @(Resolve-DnsNamePlus -Name $Domain -Type 'MX' -ErrorAction Stop)
+    }
+    catch [System.Management.Automation.CommandNotFoundException] {
         return [pscustomobject]@{
             Status     = 'Unknown'
-            Evidence   = $mxLookup.Error
+            Evidence   = $_.Exception.Message
             MxHosts    = @()
             TlsaByHost = @()
-            Issues     = @($mxLookup.Error)
+            Issues     = @($_.Exception.Message)
         }
     }
-
-    if (-not $mxLookup.Success) {
+    catch {
         return [pscustomobject]@{
             Status     = 'Fail'
-            Evidence   = ('No MX records resolved for domain: {0}' -f $mxLookup.Error)
+            Evidence   = ('No MX records resolved for domain: {0}' -f $_.Exception.Message)
             MxHosts    = @()
             TlsaByHost = @()
             Issues     = @('MX records missing; SMTP DANE cannot be evaluated.')
@@ -1582,7 +1643,7 @@ function Test-EDCADaneConfiguration {
     }
 
     $mxHosts = @()
-    foreach ($record in $mxLookup.Records) {
+    foreach ($record in $mxRecords) {
         if ($record.PSObject.Properties.Name -contains 'NameExchange') {
             $mxHost = ([string]$record.NameExchange).Trim().TrimEnd('.').ToLowerInvariant()
             if (-not [string]::IsNullOrWhiteSpace($mxHost)) {
@@ -1607,37 +1668,41 @@ function Test-EDCADaneConfiguration {
     foreach ($mxHost in $mxHosts) {
         $tlsaName = ('_25._tcp.{0}' -f $mxHost)
 
-        # Try TLSA type; Windows DNS may not support it on older OS versions
-        $tlsaLookup = Resolve-EDCADnsRecord -Name $tlsaName -Type 'TLSA'
-
+        # Try TLSA type; falls back to DoH automatically for types unsupported by Resolve-DnsName
         $directTlsaRecords = @()
         $cnameTarget = $null
+        $tlsaError = $null
 
-        if ($tlsaLookup.Success) {
-            $directTlsaRecords = @($tlsaLookup.Records | Where-Object { $_.PSObject.Properties.Name -contains 'Type' -and [string]$_.Type -eq 'TLSA' })
+        try {
+            $tlsaRecords = @(Resolve-DnsNamePlus -Name $tlsaName -Type 'TLSA' -ErrorAction Stop)
+            $directTlsaRecords = @($tlsaRecords | Where-Object { $_.PSObject.Properties.Name -contains 'Type' -and [string]$_.Type -eq 'TLSA' })
             # A CNAME at the TLSA name is also valid (e.g. Exchange Online / M365 DANE delegation)
-            $cnameHit = @($tlsaLookup.Records | Where-Object { $_.PSObject.Properties.Name -contains 'Type' -and [string]$_.Type -eq 'CNAME' })
+            $cnameHit = @($tlsaRecords | Where-Object { $_.PSObject.Properties.Name -contains 'Type' -and [string]$_.Type -eq 'CNAME' })
             if ($cnameHit.Count -gt 0 -and ($cnameHit[0].PSObject.Properties.Name -contains 'NameHost')) {
                 $cnameTarget = ([string]$cnameHit[0].NameHost).TrimEnd('.')
             }
         }
+        catch {
+            $tlsaError = $_.Exception.Message
+        }
 
-        # If TLSA type query failed (not supported on this Windows version), try explicit CNAME lookup
-        if (-not $tlsaLookup.Success -and $directTlsaRecords.Count -eq 0 -and $null -eq $cnameTarget) {
-            $cnameLookup = Resolve-EDCADnsRecord -Name $tlsaName -Type 'CNAME'
-            if ($cnameLookup.Success) {
-                $cnameHit = @($cnameLookup.Records | Where-Object { $_.PSObject.Properties.Name -contains 'Type' -and [string]$_.Type -eq 'CNAME' })
+        # If no TLSA records found, also check for CNAME delegation (e.g. Exchange Online / M365 DANE)
+        if ($directTlsaRecords.Count -eq 0 -and $null -eq $cnameTarget) {
+            try {
+                $cnameRecords = @(Resolve-DnsNamePlus -Name $tlsaName -Type 'CNAME' -ErrorAction Stop)
+                $cnameHit = @($cnameRecords | Where-Object { $_.PSObject.Properties.Name -contains 'Type' -and [string]$_.Type -eq 'CNAME' })
                 if ($cnameHit.Count -gt 0 -and ($cnameHit[0].PSObject.Properties.Name -contains 'NameHost')) {
                     $cnameTarget = ([string]$cnameHit[0].NameHost).TrimEnd('.')
                 }
             }
+            catch { }
         }
 
         $hasTlsa = $directTlsaRecords.Count -gt 0
         $hasCname = -not [string]::IsNullOrWhiteSpace($cnameTarget)
 
         if (-not $hasTlsa -and -not $hasCname) {
-            $errorDetail = if (-not $tlsaLookup.Success) { $tlsaLookup.Error } else { 'No TLSA record or CNAME delegation found.' }
+            $errorDetail = if ($null -ne $tlsaError) { $tlsaError } else { 'No TLSA record or CNAME delegation found.' }
             $issues += ('{0}: no TLSA record or CNAME delegation found.' -f $tlsaName)
             $tlsaByHost += [pscustomobject]@{
                 MxHost      = $mxHost
@@ -1767,29 +1832,32 @@ function Test-EDCADkimConfiguration {
 
     foreach ($selector in $knownSelectors) {
         $dnsName = ('{0}._domainkey.{1}' -f $selector, $Domain)
-        $txtLookup = Resolve-EDCADnsRecord -Name $dnsName -Type 'TXT'
-
-        if (-not $txtLookup.ResolverAvailable) {
+        $txtRecords = $null
+        try {
+            $txtRecords = @(Resolve-DnsNamePlus -Name $dnsName -Type 'TXT' -ErrorAction Stop)
+        }
+        catch [System.Management.Automation.CommandNotFoundException] {
             return [pscustomobject]@{
                 Status            = 'Unknown'
-                Evidence          = $txtLookup.Error
+                Evidence          = $_.Exception.Message
                 Selector1         = $null
                 Selector2         = $null
                 DetectedSelectors = $null
                 SigningService    = $null
-                Issues            = @($txtLookup.Error)
+                Issues            = @($_.Exception.Message)
             }
         }
-
-        if (-not $txtLookup.Success) { continue }
+        catch {
+            continue
+        }
 
         # Extract CNAME records (Resolve-DnsName may return the full chain).
-        $cnameTarget = @($txtLookup.Records |
+        $cnameTarget = @($txtRecords |
             Where-Object { $_.PSObject.Properties.Name -contains 'Type' -and [string]$_.Type -eq 'CNAME' } |
             ForEach-Object { [string]$_.NameHost }) | Select-Object -Last 1
 
         # Extract TXT values containing a DKIM public key (p= tag).
-        $txtValues = Get-EDCATxtRecordValues -Records $txtLookup.Records
+        $txtValues = Get-EDCATxtRecordValues -Records $txtRecords
         $dkimTxt = @($txtValues | Where-Object { $_ -match 'p=' }) | Select-Object -First 1
 
         if ([string]::IsNullOrWhiteSpace($cnameTarget) -and [string]::IsNullOrWhiteSpace($dkimTxt)) { continue }
@@ -1859,27 +1927,28 @@ function Test-EDCATlsRptConfiguration {
     )
 
     $dnsName = ('_smtp._tls.{0}' -f $Domain)
-    $txtLookup = Resolve-EDCADnsRecord -Name $dnsName -Type 'TXT'
-
-    if (-not $txtLookup.ResolverAvailable) {
+    $txtRecords = $null
+    try {
+        $txtRecords = @(Resolve-DnsNamePlus -Name $dnsName -Type 'TXT' -ErrorAction Stop)
+    }
+    catch [System.Management.Automation.CommandNotFoundException] {
         return [pscustomobject]@{
             Status   = 'Unknown'
-            Evidence = $txtLookup.Error
+            Evidence = $_.Exception.Message
             Record   = $null
-            Issues   = @($txtLookup.Error)
+            Issues   = @($_.Exception.Message)
         }
     }
-
-    if (-not $txtLookup.Success) {
+    catch {
         return [pscustomobject]@{
             Status   = 'Fail'
-            Evidence = ('No TLS-RPT TXT record resolved at {0}: {1}' -f $dnsName, $txtLookup.Error)
+            Evidence = ('No TLS-RPT TXT record resolved at {0}: {1}' -f $dnsName, $_.Exception.Message)
             Record   = $null
             Issues   = @('TLS-RPT record missing.')
         }
     }
 
-    $txtValues = Get-EDCATxtRecordValues -Records $txtLookup.Records
+    $txtValues = Get-EDCATxtRecordValues -Records $txtRecords
     $tlsrptRecords = @($txtValues | Where-Object { $_ -match '^v=TLSRPTv1\s*;?' })
     if ($tlsrptRecords.Count -eq 0) {
         return [pscustomobject]@{

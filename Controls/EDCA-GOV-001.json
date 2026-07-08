@@ -3,7 +3,7 @@
   "title": "Shared mailbox type consistency",
   "description": "Shared-resource mailboxes MUST be provisioned as RecipientTypeDetails=SharedMailbox (or RoomMailbox or EquipmentMailbox). Mismatched mailbox types can create unintended licensing requirements and security exposure.",
   "verify": true,
-  "subject": "Mailbox",
+  "subject": "Organization",
   "category": "Governance",
   "severity": "Low",
   "severityWeight": 4,
