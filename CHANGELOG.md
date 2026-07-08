@@ -7,7 +7,7 @@
 	- `EDCA-MON-001`: added `ISM-2108` (system monitoring alignment).
 	- `EDCA-IAC-003`, `EDCA-IAC-004`, `EDCA-IAC-005`: added `ISM-1403`, `ISM-1467`, `ISM-1470` (system hardening/authentication alignment).
 	- `EDCA-TLS-027`: added `ISM-2116`, `ISM-2117` (email security alignment).
-- Added explicit README scope note that EDCA automates machine-checkable ISM controls and documents policy-only controls as out of scope.
+- Exchange Edge Transport server discovery via Active Directory, resulting in notice on how to run and incorporate them.
 
 ## v1.0.0.5
 - `-ControlsPath` parameter renamed to `-ControlPath`.

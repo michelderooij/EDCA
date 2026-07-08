@@ -277,6 +277,28 @@ function Invoke-EDCA {
         Write-Verbose ('Collect mode target count from parameters: {0}' -f @($Servers).Count)
         $collectionData = Invoke-EDCACollection -Servers $Servers -ThrottleLimit $ThrottleLimit -ToolVersion $EDCAVersion
 
+        # Advisory: Edge Transport servers found in AD but not collected — they require a local run.
+        # Use a typed [string[]] variable so that an empty result from AD is stored as a zero-length
+        # array rather than $null (avoiding PropertyNotFoundStrict on .Count in Set-StrictMode -Version Latest).
+        [string[]]$collectedEdgeServers = @()
+        if ($collectionData.PSObject.Properties.Name -contains 'DiscoveredEdgeServers') {
+            [string[]]$collectedEdgeServers = @($collectionData.DiscoveredEdgeServers)
+        }
+        if ($collectedEdgeServers.Count -gt 0) {
+            Write-Warning '--------------------------------------------------------------------------------'
+            Write-Warning ('The following Edge Transport server(s) were detected in Active Directory:')
+            foreach ($edgeName in $collectedEdgeServers) {
+                Write-Warning ('  - {0}' -f $edgeName)
+            }
+            Write-Warning 'Edge Transport servers are not domain-joined and cannot be collected remotely.'
+            Write-Warning 'To include Edge Transport server data in this assessment:'
+            Write-Warning '  1. Copy EDCA to each Edge Transport server'
+            Write-Warning '  2. On the Edge Transport server, run: Invoke-EDCA -Collect -Local'
+            Write-Warning ('  3. Copy the resulting Data\<ServerName>_*.json file(s) to: {0}' -f $resolvedDataPath)
+            Write-Warning '  4. Re-run the report: Invoke-EDCA -Report'
+            Write-Warning '--------------------------------------------------------------------------------'
+        }
+
         $stamp = Get-Date -Format 'yyyyMMdd_HHmmss'
         $exportedFiles = [System.Collections.Generic.List[string]]::new()
 

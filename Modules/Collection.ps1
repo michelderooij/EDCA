@@ -5960,14 +5960,20 @@ function Get-EDCAExchangeEnvironmentServers {
     [CmdletBinding()]
     param()
 
-    # Discover Exchange servers via the well-known "Exchange Servers" universal security group.
-    # Exchange Setup adds every Exchange server computer account to this group; membership is
-    # authoritative. Uses .NET System.DirectoryServices - no RSAT/AD module required.
+    # Discover Exchange servers via two complementary AD queries:
+    # 1. The well-known "Exchange Servers" universal security group — Exchange Setup adds every
+    #    domain-joined server computer account to this group; membership is authoritative.
+    # 2. msExchExchangeServer objects in the AD Configuration partition with the Edge Transport
+    #    role bit (64) set — Edge Transport servers are not domain-joined and therefore never
+    #    appear in "Exchange Servers", but EdgeSync creates a Configuration-partition object for
+    #    each subscribed Edge server.
+    # Uses .NET System.DirectoryServices — no RSAT/AD module required.
     Write-Verbose 'Discovering Exchange servers via AD group membership of "Exchange Servers" using .NET DirectoryServices.'
 
     try {
         $rootDse = [System.DirectoryServices.DirectoryEntry]::new('GC://RootDSE')
         $forestRootNC = [string]$rootDse.Properties['rootDomainNamingContext'][0]
+        $configNC     = [string]$rootDse.Properties['configurationNamingContext'][0]
     }
     catch {
         throw ('Failed to connect to Active Directory via LDAP: {0}. Provide -Servers explicitly.' -f $_.Exception.Message)
@@ -6019,15 +6025,52 @@ function Get-EDCAExchangeEnvironmentServers {
         throw ('Exchange server discovery failed while enumerating members: {0}. Provide -Servers explicitly.' -f $_.Exception.Message)
     }
 
-    $unique = @($serverNames | Sort-Object -Unique)
-
-    if ($unique.Count -eq 0) {
-        throw 'The "Exchange Servers" group exists but contains no computer members. Provide -Servers explicitly.'
+    # Discover Edge Transport servers from the AD Configuration partition.
+    # Edge Transport servers are not domain-joined, so they have no computer account in the
+    # domain and are never added to the "Exchange Servers" security group.  EdgeSync creates an
+    # msExchExchangeServer object for every subscribed Edge server in the Configuration partition;
+    # those objects carry msExchCurrentServerRoles with bit 64 (Edge Transport) set.
+    # LDAP_MATCHING_RULE_BIT_AND OID 1.2.840.113556.1.4.803 tests whether a specific bit is set.
+    # Edge servers are returned separately so callers can advise the operator without attempting
+    # a remote collection that will always fail (Edge servers reject domain Kerberos auth).
+    $edgeNames = [System.Collections.Generic.List[string]]::new()
+    try {
+        $configRoot   = [System.DirectoryServices.DirectoryEntry]::new(('LDAP://{0}' -f $configNC))
+        $edgeSearcher = [System.DirectoryServices.DirectorySearcher]::new($configRoot)
+        $edgeSearcher.Filter      = '(&(objectClass=msExchExchangeServer)(msExchCurrentServerRoles:1.2.840.113556.1.4.803:=64))'
+        $edgeSearcher.SearchScope = [System.DirectoryServices.SearchScope]::Subtree
+        $edgeSearcher.PageSize    = 1000
+        $null = $edgeSearcher.PropertiesToLoad.Add('name')
+        $edgeResults = $edgeSearcher.FindAll()
+        foreach ($result in $edgeResults) {
+            $name = if ($result.Properties['name'].Count -gt 0) { [string]$result.Properties['name'][0] } else { $null }
+            if (-not [string]::IsNullOrWhiteSpace($name)) {
+                $edgeNames.Add($name)
+            }
+        }
+        $edgeResults.Dispose()
+    }
+    catch {
+        # Non-fatal: log and continue with whatever domain-joined servers were found.
+        Write-Verbose ('Edge Transport server discovery from Configuration partition failed: {0}' -f $_.Exception.Message)
     }
 
-    Write-Verbose ('Automatic discovery found {0} server(s): {1}' -f $unique.Count, ($unique -join ', '))
+    $uniqueServers = @($serverNames | Sort-Object -Unique)
+    $uniqueEdge    = @($edgeNames   | Sort-Object -Unique)
 
-    return $unique
+    if ($uniqueServers.Count -eq 0) {
+        throw 'No Exchange servers were discovered in Active Directory. Provide -Servers explicitly.'
+    }
+
+    Write-Verbose ('Automatic discovery found {0} server(s): {1}' -f $uniqueServers.Count, ($uniqueServers -join ', '))
+    if ($uniqueEdge.Count -gt 0) {
+        Write-EDCALog -Level 'WARN' -Message ('Edge Transport server(s) detected in AD (not added to collection targets): {0}' -f ($uniqueEdge -join ', '))
+    }
+
+    return [pscustomobject]@{
+        Servers     = $uniqueServers
+        EdgeServers = $uniqueEdge
+    }
 }
 
 function Invoke-EDCAExchangeEndpointCommand {
@@ -6739,6 +6782,7 @@ function Invoke-EDCACollection {
     )
 
     $normalizedServers = @($Servers | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | ForEach-Object { ([string]$_).Trim() } | Sort-Object -Unique)
+    $discoveredEdgeServers = @()   # populated by AD auto-discovery; empty when servers are passed explicitly
     if ($normalizedServers.Count -gt 0) {
         Write-Verbose ('Input server list normalized to {0} target(s): {1}' -f $normalizedServers.Count, ($normalizedServers -join ', '))
     }
@@ -6777,7 +6821,9 @@ function Invoke-EDCACollection {
         else {
             Write-EDCALog -Message 'No servers specified. Discovering all Exchange servers in the current environment.'
             try {
-                $normalizedServers = Get-EDCAExchangeEnvironmentServers
+                $discovery         = Get-EDCAExchangeEnvironmentServers
+                $normalizedServers = @($discovery.Servers)
+                $discoveredEdgeServers = @($discovery.EdgeServers)
                 Write-EDCALog -Message ('Discovered Exchange servers: {0}' -f ($normalizedServers -join ', '))
             }
             catch {
@@ -7037,15 +7083,16 @@ function Invoke-EDCACollection {
     Write-Verbose 'Email authentication checks completed.'
 
     return [pscustomobject]@{
-        Metadata            = [pscustomobject]@{
+        Metadata              = [pscustomobject]@{
             ToolName            = 'EDCA'
             ToolVersion         = $ToolVersion
             CollectionTimestamp = (Get-Date -Format 'o')
             ExecutedBy          = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
         }
-        Servers             = $results
-        Organization        = $organization
-        EmailAuthentication = $emailAuthentication
+        Servers               = $results
+        Organization          = $organization
+        EmailAuthentication   = $emailAuthentication
+        DiscoveredEdgeServers = $discoveredEdgeServers
     }
 }
 
