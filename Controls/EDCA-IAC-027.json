@@ -8,7 +8,8 @@
   "severity": "High",
   "severityWeight": 9,
   "frameworks": [
-    "ANSSI"
+    "ANSSI",
+    "NIS2"
   ],
   "references": [
     {
@@ -22,6 +23,10 @@
     {
       "name": "ANSSI - Recommandations pour l'administration sécurisée des SI reposant sur AD (2023)",
       "url": "https://messervices.cyber.gouv.fr/guides/recommandations-pour-ladministration-securisee-des-si-reposant-sur-ad"
+    },
+    {
+      "name": "ENISA / NIS2 Directive (EU) 2022/2555 - Article 21(2)(i): access control, authentication and authorization - Section 11.5-11.7, 11.3, 10, 2.2",
+      "url": "https://eur-lex.europa.eu/eli/dir/2022/2555/oj"
     }
   ],
   "remediation": {

@@ -20,7 +20,11 @@
       "url": "https://learn.microsoft.com/exchange/plan-and-deploy/post-installation-tasks/security-best-practices/exchange-extended-protection"
     },
     {
-      "name": "ENISA / NIS2 Directive (EU) 2022/2555 - Article 21(2)(i)(j): access control and multi-factor authentication - Section 11.5-11.7, 11.3, 10, 2.2",
+      "name": "ENISA / NIS2 Directive (EU) 2022/2555 - Article 21(2)(i): access control, authentication and authorization - Section 11.5-11.7, 11.3, 10, 2.2",
+      "url": "https://eur-lex.europa.eu/eli/dir/2022/2555/oj"
+    },
+    {
+      "name": "ENISA / NIS2 Directive (EU) 2022/2555 - Article 21(2)(j): multi-factor authentication and secure authentication - Section 11.3, 11.5-11.7, 10, 2.2",
       "url": "https://eur-lex.europa.eu/eli/dir/2022/2555/oj"
     },
     {

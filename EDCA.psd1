@@ -1,6 +1,6 @@
 @{
     RootModule        = 'EDCA.psm1'
-    ModuleVersion     = '1.0.0.6'
+    ModuleVersion     = '1.0.0.7'
     GUID              = '3bc65f39-03b1-4d4d-a3af-b88f21dac09b'
     Author            = 'Michel de Rooij'
     CompanyName       = 'EighTwOne'

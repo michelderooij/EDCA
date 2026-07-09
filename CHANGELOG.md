@@ -1,7 +1,12 @@
 # Changelog
 
+## v1.0.0.7
+
+- Expanded and normalized NIS2 control mappings across the control library.
+- Added EDCA control to security control framework table in mapping.md
+
 ## v1.0.0.6
-- Version bump to `1.0.0.6` aligned across module manifest, docs, and function header.
+
 - Updated ISM framework to June 2026:
 	- `EDCA-GOV-002`, `EDCA-SEC-038`: added `ISM-2110` (system management and patch currency alignment).
 	- `EDCA-MON-001`: added `ISM-2108` (system monitoring alignment).

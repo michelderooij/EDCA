@@ -8,6 +8,7 @@
   "severity": "High",
   "severityWeight": 8,
   "frameworks": [
+    "NIS2",
     "ANSSI",
     "BSI",
     "CIS"
@@ -20,6 +21,10 @@
     {
       "name": "Configure SMB signing with confidence",
       "url": "https://learn.microsoft.com/windows-server/storage/file-server/configure-smb-signing"
+    },
+    {
+      "name": "ENISA / NIS2 Directive (EU) 2022/2555 - Article 21(2)(h): cryptography and encryption policies - Section 9, 6.7, 6.3, 6.6",
+      "url": "https://eur-lex.europa.eu/eli/dir/2022/2555/oj"
     },
     {
       "name": "ANSSI - Recommandations pour l'administration sécurisée des SI reposant sur AD (2023)",

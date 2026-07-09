@@ -10,7 +10,8 @@
   "frameworks": [
     "ANSSI",
     "BSI",
-    "ISM"
+    "ISM",
+    "NIS2"
   ],
   "references": [
     {
@@ -32,6 +33,10 @@
     {
       "name": "ISM: Guidelines for System Hardening (ISM-2010)",
       "url": "https://www.cyber.gov.au/resources-business-and-government/essential-cyber-security/ism/cyber-security-guidelines/guidelines-for-system-hardening"
+    },
+    {
+      "name": "ENISA / NIS2 Directive (EU) 2022/2555 - Article 21(2)(i): access control, authentication and authorization - Section 11.5-11.7, 11.3, 10, 2.2",
+      "url": "https://eur-lex.europa.eu/eli/dir/2022/2555/oj"
     }
   ],
   "remediation": {

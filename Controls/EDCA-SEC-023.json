@@ -9,6 +9,7 @@
   "severityWeight": 8,
   "frameworks": [
     "Best Practice",
+    "NIS2",
     "CIS",
     "CISA",
     "ANSSI",
@@ -22,6 +23,10 @@
     {
       "name": "SMB security hardening guidance",
       "url": "https://learn.microsoft.com/windows-server/storage/file-server/troubleshoot/detect-enable-and-disable-smbv1-v2-v3"
+    },
+    {
+      "name": "ENISA / NIS2 Directive (EU) 2022/2555 - Article 21(2)(g): basic cyber hygiene practices",
+      "url": "https://eur-lex.europa.eu/eli/dir/2022/2555/oj"
     },
     {
       "name": "CIS 4.8 (IG1): Uninstall or Disable Unnecessary Services on Enterprise Assets and Software",

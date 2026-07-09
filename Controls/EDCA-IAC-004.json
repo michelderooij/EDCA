@@ -10,7 +10,8 @@
   "frameworks": [
     "Best Practice",
     "CISA",
-    "ISM"
+    "ISM",
+    "NIS2"
   ],
   "references": [
     {
@@ -32,6 +33,10 @@
     {
       "name": "ISM: Guidelines for System Hardening (ISM-1919, ISM-1467)",
       "url": "https://www.cyber.gov.au/resources-business-and-government/essential-cyber-security/ism/cyber-security-guidelines/guidelines-for-system-hardening"
+    },
+    {
+      "name": "ENISA / NIS2 Directive (EU) 2022/2555 - Article 21(2)(j): multi-factor authentication and secure authentication - Section 11.3, 11.5-11.7, 10, 2.2",
+      "url": "https://eur-lex.europa.eu/eli/dir/2022/2555/oj"
     }
   ],
   "remediation": {

@@ -7,13 +7,14 @@
 
 PowerShell-based tool that collects Exchange on-premises deployment data, evaluates it against best practices and compliance controls, and produces an interactive HTML report ([sample](https://michelderooij.github.io/EDCA/report_sample.html)). Supports Exchange 2016, Exchange 2019, and Exchange SE.
 
-Current module release: **v1.0.0.6** (see [CHANGELOG.md](CHANGELOG.md)).
+Current module release: **v1.0.0.7** (see [CHANGELOG.md](CHANGELOG.md)).
 
 ## Key Features
 
 - Supports Exchange 2016, Exchange 2019, and Exchange SE (Subscription Edition).
 - Evaluates controls against Best Practices and 7 compliance frameworks: [ANSSI](#frameworks) 🇫🇷, [BSI](#frameworks) 🇩🇪, [CIS](#frameworks) 🇺🇸, [CISA](#frameworks) 🇺🇸, [DISA](#frameworks) 🇺🇸, [ISM](#frameworks) 🇦🇺, and [NIS2](#frameworks) 🇪🇺.
 - Interactive HTML report with per-framework scores, color-coded findings, search, and filters.
+- Generated framework mapping matrix available in [Mapping.md](Mapping.md).
 - Evidence appears in full when you print or save the report to PDF (browser print → Save as PDF).
 - Collect data from all discovered Exchange servers, or target a specific set with `-Servers`.
 - Run collect (`-Collect`) and report (`-Report`) as separate phases, or together in one step.
