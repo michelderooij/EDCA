@@ -5,6 +5,8 @@
 ![GitHub forks](https://img.shields.io/github/forks/michelderooij/EDCA?style=lat-square)
 ![GitHub forks](https://img.shields.io/github/stars/michelderooij/EDCA?style=flat-square)
 
+Note: A blog on usage of the module is located at [https://eightwone.com/2026/04/23/exchange-deployment-compliance-assessment/](https://eightwone.com/2026/04/23/exchange-deployment-compliance-assessment/).
+
 PowerShell-based tool that collects Exchange on-premises deployment data, evaluates it against best practices and compliance controls, and produces an interactive HTML report ([sample](https://michelderooij.github.io/EDCA/report_sample.html)). Supports Exchange 2016, Exchange 2019, and Exchange SE.
 
 Current module release: **v1.0.0.7** (see [CHANGELOG.md](CHANGELOG.md)).
