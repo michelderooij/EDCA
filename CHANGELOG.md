@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.0.1.1
+
+- Fixed categorizing DAG-related controls resulting in `Control evaluator not implemented`.
+- Updated DAG resilience controls (`EDCA-RES-012` through `EDCA-RES-015`) to report with DAG entities.
+- In environments without DAG deployment, DAG resilience controls now consistently return **Skipped**.
+
 ## v1.0.1.0
 
 - Preferred Architecture (PA) guidance references added and normalized across controls.

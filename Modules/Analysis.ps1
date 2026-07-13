@@ -226,7 +226,7 @@ function Test-EDCAControl {
         [pscustomobject]$CollectionData
     )
 
-    if ($Control.id -in @('EDCA-MON-001', 'EDCA-IAC-001', 'EDCA-DATA-002', 'EDCA-IAC-004', 'EDCA-IAC-008', 'EDCA-SEC-032', 'EDCA-TLS-026', 'EDCA-TLS-023', 'EDCA-TLS-025', 'EDCA-TLS-024', 'EDCA-TLS-027', 'EDCA-TLS-028', 'EDCA-TLS-029', 'EDCA-SEC-004', 'EDCA-SEC-003', 'EDCA-SEC-005', 'EDCA-TLS-003', 'EDCA-IAC-011', 'EDCA-GOV-004', 'EDCA-IAC-009', 'EDCA-IAC-010', 'EDCA-TLS-004', 'EDCA-TLS-005', 'EDCA-TLS-006', 'EDCA-TLS-007', 'EDCA-TLS-008', 'EDCA-TLS-009', 'EDCA-MON-008', 'EDCA-TLS-010', 'EDCA-TLS-011', 'EDCA-TLS-014', 'EDCA-IAC-014', 'EDCA-IAC-015', 'EDCA-IAC-016', 'EDCA-IAC-017', 'EDCA-IAC-018', 'EDCA-IAC-019', 'EDCA-IAC-020', 'EDCA-IAC-021', 'EDCA-IAC-022', 'EDCA-IAC-023', 'EDCA-IAC-024', 'EDCA-TLS-012', 'EDCA-TLS-018', 'EDCA-TLS-019', 'EDCA-DATA-016', 'EDCA-RES-012', 'EDCA-GOV-009', 'EDCA-PERF-012', 'EDCA-GOV-011', 'EDCA-SEC-036', 'EDCA-IAC-028', 'EDCA-RES-011')) {
+    if ($Control.id -in @('EDCA-MON-001', 'EDCA-IAC-001', 'EDCA-DATA-002', 'EDCA-IAC-004', 'EDCA-IAC-008', 'EDCA-SEC-032', 'EDCA-TLS-026', 'EDCA-TLS-023', 'EDCA-TLS-025', 'EDCA-TLS-024', 'EDCA-TLS-027', 'EDCA-TLS-028', 'EDCA-TLS-029', 'EDCA-SEC-004', 'EDCA-SEC-003', 'EDCA-SEC-005', 'EDCA-TLS-003', 'EDCA-IAC-011', 'EDCA-GOV-004', 'EDCA-IAC-009', 'EDCA-IAC-010', 'EDCA-TLS-004', 'EDCA-TLS-005', 'EDCA-TLS-006', 'EDCA-TLS-007', 'EDCA-TLS-008', 'EDCA-TLS-009', 'EDCA-MON-008', 'EDCA-TLS-010', 'EDCA-TLS-011', 'EDCA-TLS-014', 'EDCA-IAC-014', 'EDCA-IAC-015', 'EDCA-IAC-016', 'EDCA-IAC-017', 'EDCA-IAC-018', 'EDCA-IAC-019', 'EDCA-IAC-020', 'EDCA-IAC-021', 'EDCA-IAC-022', 'EDCA-IAC-023', 'EDCA-IAC-024', 'EDCA-TLS-012', 'EDCA-TLS-018', 'EDCA-TLS-019', 'EDCA-DATA-016', 'EDCA-RES-012', 'EDCA-RES-013', 'EDCA-RES-014', 'EDCA-RES-015', 'EDCA-GOV-009', 'EDCA-PERF-012', 'EDCA-GOV-011', 'EDCA-SEC-036', 'EDCA-IAC-028', 'EDCA-RES-011')) {
         $status = 'Unknown'
         $evidence = ''
         $domainServerResults = $null
@@ -2234,6 +2234,7 @@ function Test-EDCAControl {
                 }
             }
             'EDCA-RES-012' {
+                $subjectLabel = 'DAG'
                 $serverList = @()
                 if (($CollectionData.PSObject.Properties.Name -contains 'Servers') -and $null -ne $CollectionData.Servers) {
                     $serverList = @($CollectionData.Servers)
@@ -2246,20 +2247,26 @@ function Test-EDCAControl {
                 if ($dagMembers.Count -eq 0) {
                     $status = 'Skipped'
                     $evidence = 'No DAG members found in the collected server data. This control is not applicable if no DAG is deployed.'
+                    $domainServerResults = @([pscustomobject]@{ Server = 'No DAG'; Status = 'Skipped'; Evidence = $evidence })
                 }
                 else {
                     $dagGroups = $dagMembers | Group-Object -Property { [string]$_.Exchange.DagName }
                     $nonCompliantDags = @()
                     $passDags = @()
+                    $domainServerResults = @()
                     foreach ($dagGroup in $dagGroups) {
                         $sites = @($dagGroup.Group | ForEach-Object {
                                 if ($_.Exchange.PSObject.Properties.Name -contains 'AdSite') { [string]$_.Exchange.AdSite } else { '' }
                             } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique)
                         if ($sites.Count -lt 2) {
-                            $nonCompliantDags += ('{0}: {1} site(s) [{2}]' -f $dagGroup.Name, $sites.Count, ($sites -join ', '))
+                            $dagEvidence = ('{0}: {1} site(s) [{2}]' -f $dagGroup.Name, $sites.Count, ($sites -join ', '))
+                            $nonCompliantDags += $dagEvidence
+                            $domainServerResults += [pscustomobject]@{ Server = [string]$dagGroup.Name; Status = 'Fail'; Evidence = $dagEvidence }
                         }
                         else {
-                            $passDags += ('{0}: {1} sites [{2}]' -f $dagGroup.Name, $sites.Count, ($sites -join ', '))
+                            $dagEvidence = ('{0}: {1} sites [{2}]' -f $dagGroup.Name, $sites.Count, ($sites -join ', '))
+                            $passDags += $dagEvidence
+                            $domainServerResults += [pscustomobject]@{ Server = [string]$dagGroup.Name; Status = 'Pass'; Evidence = $dagEvidence }
                         }
                     }
                     if ($nonCompliantDags.Count -gt 0) {
@@ -2273,6 +2280,7 @@ function Test-EDCAControl {
                 }
             }
             'EDCA-RES-013' {
+                $subjectLabel = 'DAG'
                 $serverList = @()
                 if (($CollectionData.PSObject.Properties.Name -contains 'Servers') -and $null -ne $CollectionData.Servers) {
                     $serverList = @($CollectionData.Servers)
@@ -2287,12 +2295,14 @@ function Test-EDCAControl {
                 if ($dagMembers.Count -eq 0) {
                     $status = 'Skipped'
                     $evidence = 'Not applicable: no DAG deployed.'
+                    $domainServerResults = @([pscustomobject]@{ Server = 'No DAG'; Status = 'Skipped'; Evidence = $evidence })
                 }
                 else {
                     $dagGroups = $dagMembers | Group-Object -Property { [string]$_.Exchange.DagName }
                     $unknownDags = @()
                     $nonCompliantDags = @()
                     $passDags = @()
+                    $domainServerResults = @()
 
                     foreach ($dagGroup in $dagGroups) {
                         $sites = @($dagGroup.Group | ForEach-Object {
@@ -2300,13 +2310,19 @@ function Test-EDCAControl {
                             } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique)
 
                         if ($sites.Count -eq 0) {
-                            $unknownDags += ('{0}: site telemetry unavailable' -f $dagGroup.Name)
+                            $dagEvidence = ('{0}: site telemetry unavailable' -f $dagGroup.Name)
+                            $unknownDags += $dagEvidence
+                            $domainServerResults += [pscustomobject]@{ Server = [string]$dagGroup.Name; Status = 'Unknown'; Evidence = $dagEvidence }
                         }
                         elseif ($sites.Count -gt 2) {
-                            $nonCompliantDags += ('{0}: {1} sites [{2}]' -f $dagGroup.Name, $sites.Count, ($sites -join ', '))
+                            $dagEvidence = ('{0}: {1} sites [{2}]' -f $dagGroup.Name, $sites.Count, ($sites -join ', '))
+                            $nonCompliantDags += $dagEvidence
+                            $domainServerResults += [pscustomobject]@{ Server = [string]$dagGroup.Name; Status = 'Fail'; Evidence = $dagEvidence }
                         }
                         else {
-                            $passDags += ('{0}: {1} site(s) [{2}]' -f $dagGroup.Name, $sites.Count, ($sites -join ', '))
+                            $dagEvidence = ('{0}: {1} site(s) [{2}]' -f $dagGroup.Name, $sites.Count, ($sites -join ', '))
+                            $passDags += $dagEvidence
+                            $domainServerResults += [pscustomobject]@{ Server = [string]$dagGroup.Name; Status = 'Pass'; Evidence = $dagEvidence }
                         }
                     }
 
@@ -2325,6 +2341,7 @@ function Test-EDCAControl {
                 }
             }
             'EDCA-RES-014' {
+                $subjectLabel = 'DAG'
                 $serverList = @()
                 if (($CollectionData.PSObject.Properties.Name -contains 'Servers') -and $null -ne $CollectionData.Servers) {
                     $serverList = @($CollectionData.Servers)
@@ -2339,11 +2356,13 @@ function Test-EDCAControl {
                 if ($dagMembers.Count -eq 0) {
                     $status = 'Skipped'
                     $evidence = 'Not applicable: no DAG deployed.'
+                    $domainServerResults = @([pscustomobject]@{ Server = 'No DAG'; Status = 'Skipped'; Evidence = $evidence })
                 }
                 else {
                     $dagGroups = $dagMembers | Group-Object -Property { [string]$_.Exchange.DagName }
                     $nonCompliantDags = @()
                     $passDags = @()
+                    $domainServerResults = @()
 
                     foreach ($dagGroup in $dagGroups) {
                         $siteGroups = @($dagGroup.Group | ForEach-Object {
@@ -2351,12 +2370,16 @@ function Test-EDCAControl {
                             } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Group-Object)
 
                         if ($siteGroups.Count -lt 2) {
-                            $nonCompliantDags += ('{0}: only {1} site represented' -f $dagGroup.Name, $siteGroups.Count)
+                            $dagEvidence = ('{0}: only {1} site represented' -f $dagGroup.Name, $siteGroups.Count)
+                            $nonCompliantDags += $dagEvidence
+                            $domainServerResults += [pscustomobject]@{ Server = [string]$dagGroup.Name; Status = 'Fail'; Evidence = $dagEvidence }
                             continue
                         }
 
                         if ($siteGroups.Count -ne 2) {
-                            $nonCompliantDags += ('{0}: {1} sites represented (expected 2)' -f $dagGroup.Name, $siteGroups.Count)
+                            $dagEvidence = ('{0}: {1} sites represented (expected 2)' -f $dagGroup.Name, $siteGroups.Count)
+                            $nonCompliantDags += $dagEvidence
+                            $domainServerResults += [pscustomobject]@{ Server = [string]$dagGroup.Name; Status = 'Fail'; Evidence = $dagEvidence }
                             continue
                         }
 
@@ -2365,10 +2388,14 @@ function Test-EDCAControl {
                         $maxCount = @($siteGroups | Measure-Object -Property Count -Maximum).Maximum
 
                         if ($minCount -eq $maxCount) {
-                            $passDags += ('{0}: symmetrical distribution [{1}]' -f $dagGroup.Name, ($siteSummary -join ', '))
+                            $dagEvidence = ('{0}: symmetrical distribution [{1}]' -f $dagGroup.Name, ($siteSummary -join ', '))
+                            $passDags += $dagEvidence
+                            $domainServerResults += [pscustomobject]@{ Server = [string]$dagGroup.Name; Status = 'Pass'; Evidence = $dagEvidence }
                         }
                         else {
-                            $nonCompliantDags += ('{0}: asymmetrical distribution [{1}]' -f $dagGroup.Name, ($siteSummary -join ', '))
+                            $dagEvidence = ('{0}: asymmetrical distribution [{1}]' -f $dagGroup.Name, ($siteSummary -join ', '))
+                            $nonCompliantDags += $dagEvidence
+                            $domainServerResults += [pscustomobject]@{ Server = [string]$dagGroup.Name; Status = 'Fail'; Evidence = $dagEvidence }
                         }
                     }
 
@@ -2383,6 +2410,7 @@ function Test-EDCAControl {
                 }
             }
             'EDCA-RES-015' {
+                $subjectLabel = 'DAG'
                 $serverList = @()
                 if (($CollectionData.PSObject.Properties.Name -contains 'Servers') -and $null -ne $CollectionData.Servers) {
                     $serverList = @($CollectionData.Servers)
@@ -2397,6 +2425,7 @@ function Test-EDCAControl {
                 if ($dagMembers.Count -eq 0) {
                     $status = 'Skipped'
                     $evidence = 'Not applicable: no DAG deployed.'
+                    $domainServerResults = @([pscustomobject]@{ Server = 'No DAG'; Status = 'Skipped'; Evidence = $evidence })
                 }
                 else {
                     $dagTopologies = @()
@@ -2408,10 +2437,12 @@ function Test-EDCAControl {
                     if ($dagTopologies.Count -eq 0) {
                         $status = 'Unknown'
                         $evidence = 'DAG topology data unavailable (Get-DatabaseAvailabilityGroup not collected).'
+                        $domainServerResults = @([pscustomobject]@{ Server = 'DAG Topology'; Status = 'Unknown'; Evidence = $evidence })
                     }
                     else {
                         $nonCompliant = @()
                         $compliant = @()
+                        $domainServerResults = @()
 
                         foreach ($dag in $dagTopologies) {
                             $dagName = if ($dag.PSObject.Properties.Name -contains 'Name') { [string]$dag.Name } else { '' }
@@ -2423,10 +2454,14 @@ function Test-EDCAControl {
                             $witnessDirectory = if ($dag.PSObject.Properties.Name -contains 'WitnessDirectory') { [string]$dag.WitnessDirectory } else { '' }
 
                             if ([string]::IsNullOrWhiteSpace($witnessServer) -or [string]::IsNullOrWhiteSpace($witnessDirectory)) {
-                                $nonCompliant += ('{0}: WitnessServer="{1}", WitnessDirectory="{2}"' -f $dagName, $(if ([string]::IsNullOrWhiteSpace($witnessServer)) { '<empty>' } else { $witnessServer }), $(if ([string]::IsNullOrWhiteSpace($witnessDirectory)) { '<empty>' } else { $witnessDirectory }))
+                                $dagEvidence = ('{0}: WitnessServer="{1}", WitnessDirectory="{2}"' -f $dagName, $(if ([string]::IsNullOrWhiteSpace($witnessServer)) { '<empty>' } else { $witnessServer }), $(if ([string]::IsNullOrWhiteSpace($witnessDirectory)) { '<empty>' } else { $witnessDirectory }))
+                                $nonCompliant += $dagEvidence
+                                $domainServerResults += [pscustomobject]@{ Server = $dagName; Status = 'Fail'; Evidence = $dagEvidence }
                             }
                             else {
-                                $compliant += ('{0}: WitnessServer="{1}", WitnessDirectory="{2}"' -f $dagName, $witnessServer, $witnessDirectory)
+                                $dagEvidence = ('{0}: WitnessServer="{1}", WitnessDirectory="{2}"' -f $dagName, $witnessServer, $witnessDirectory)
+                                $compliant += $dagEvidence
+                                $domainServerResults += [pscustomobject]@{ Server = $dagName; Status = 'Pass'; Evidence = $dagEvidence }
                             }
                         }
 
