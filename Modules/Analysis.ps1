@@ -2272,6 +2272,179 @@ function Test-EDCAControl {
                     }
                 }
             }
+            'EDCA-RES-013' {
+                $serverList = @()
+                if (($CollectionData.PSObject.Properties.Name -contains 'Servers') -and $null -ne $CollectionData.Servers) {
+                    $serverList = @($CollectionData.Servers)
+                }
+
+                $dagMembers = @($serverList | Where-Object {
+                        ($_.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $_.Exchange -and
+                        ($_.Exchange.PSObject.Properties.Name -contains 'IsDagMember') -and [bool]$_.Exchange.IsDagMember -and
+                        ($_.Exchange.PSObject.Properties.Name -contains 'DagName') -and -not [string]::IsNullOrWhiteSpace([string]$_.Exchange.DagName)
+                    })
+
+                if ($dagMembers.Count -eq 0) {
+                    $status = 'Skipped'
+                    $evidence = 'Not applicable: no DAG deployed.'
+                }
+                else {
+                    $dagGroups = $dagMembers | Group-Object -Property { [string]$_.Exchange.DagName }
+                    $unknownDags = @()
+                    $nonCompliantDags = @()
+                    $passDags = @()
+
+                    foreach ($dagGroup in $dagGroups) {
+                        $sites = @($dagGroup.Group | ForEach-Object {
+                                if ($_.Exchange.PSObject.Properties.Name -contains 'AdSite') { [string]$_.Exchange.AdSite } else { '' }
+                            } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique)
+
+                        if ($sites.Count -eq 0) {
+                            $unknownDags += ('{0}: site telemetry unavailable' -f $dagGroup.Name)
+                        }
+                        elseif ($sites.Count -gt 2) {
+                            $nonCompliantDags += ('{0}: {1} sites [{2}]' -f $dagGroup.Name, $sites.Count, ($sites -join ', '))
+                        }
+                        else {
+                            $passDags += ('{0}: {1} site(s) [{2}]' -f $dagGroup.Name, $sites.Count, ($sites -join ', '))
+                        }
+                    }
+
+                    if ($nonCompliantDags.Count -gt 0) {
+                        $status = 'Fail'
+                        $evidence = Format-EDCAEvidenceWithElements -Summary ('{0} of {1} DAG(s) span more than two Active Directory sites.' -f $nonCompliantDags.Count, @($dagGroups).Count) -Elements $nonCompliantDags
+                    }
+                    elseif ($unknownDags.Count -gt 0) {
+                        $status = 'Unknown'
+                        $evidence = Format-EDCAEvidenceWithElements -Summary ('Site telemetry is incomplete for {0} DAG(s).' -f $unknownDags.Count) -Elements $unknownDags
+                    }
+                    else {
+                        $status = 'Pass'
+                        $evidence = Format-EDCAEvidenceWithElements -Summary ('All {0} DAG(s) span no more than two Active Directory sites.' -f @($dagGroups).Count) -Elements $passDags
+                    }
+                }
+            }
+            'EDCA-RES-014' {
+                $serverList = @()
+                if (($CollectionData.PSObject.Properties.Name -contains 'Servers') -and $null -ne $CollectionData.Servers) {
+                    $serverList = @($CollectionData.Servers)
+                }
+
+                $dagMembers = @($serverList | Where-Object {
+                        ($_.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $_.Exchange -and
+                        ($_.Exchange.PSObject.Properties.Name -contains 'IsDagMember') -and [bool]$_.Exchange.IsDagMember -and
+                        ($_.Exchange.PSObject.Properties.Name -contains 'DagName') -and -not [string]::IsNullOrWhiteSpace([string]$_.Exchange.DagName)
+                    })
+
+                if ($dagMembers.Count -eq 0) {
+                    $status = 'Skipped'
+                    $evidence = 'Not applicable: no DAG deployed.'
+                }
+                else {
+                    $dagGroups = $dagMembers | Group-Object -Property { [string]$_.Exchange.DagName }
+                    $nonCompliantDags = @()
+                    $passDags = @()
+
+                    foreach ($dagGroup in $dagGroups) {
+                        $siteGroups = @($dagGroup.Group | ForEach-Object {
+                                if ($_.Exchange.PSObject.Properties.Name -contains 'AdSite') { [string]$_.Exchange.AdSite } else { '' }
+                            } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Group-Object)
+
+                        if ($siteGroups.Count -lt 2) {
+                            $nonCompliantDags += ('{0}: only {1} site represented' -f $dagGroup.Name, $siteGroups.Count)
+                            continue
+                        }
+
+                        if ($siteGroups.Count -ne 2) {
+                            $nonCompliantDags += ('{0}: {1} sites represented (expected 2)' -f $dagGroup.Name, $siteGroups.Count)
+                            continue
+                        }
+
+                        $siteSummary = @($siteGroups | Sort-Object Name | ForEach-Object { ('{0}={1}' -f $_.Name, $_.Count) })
+                        $minCount = @($siteGroups | Measure-Object -Property Count -Minimum).Minimum
+                        $maxCount = @($siteGroups | Measure-Object -Property Count -Maximum).Maximum
+
+                        if ($minCount -eq $maxCount) {
+                            $passDags += ('{0}: symmetrical distribution [{1}]' -f $dagGroup.Name, ($siteSummary -join ', '))
+                        }
+                        else {
+                            $nonCompliantDags += ('{0}: asymmetrical distribution [{1}]' -f $dagGroup.Name, ($siteSummary -join ', '))
+                        }
+                    }
+
+                    if ($nonCompliantDags.Count -gt 0) {
+                        $status = 'Fail'
+                        $evidence = Format-EDCAEvidenceWithElements -Summary ('{0} of {1} DAG(s) are not symmetrically distributed across sites.' -f $nonCompliantDags.Count, @($dagGroups).Count) -Elements $nonCompliantDags
+                    }
+                    else {
+                        $status = 'Pass'
+                        $evidence = Format-EDCAEvidenceWithElements -Summary ('All {0} DAG(s) are symmetrically distributed across two sites.' -f @($dagGroups).Count) -Elements $passDags
+                    }
+                }
+            }
+            'EDCA-RES-015' {
+                $serverList = @()
+                if (($CollectionData.PSObject.Properties.Name -contains 'Servers') -and $null -ne $CollectionData.Servers) {
+                    $serverList = @($CollectionData.Servers)
+                }
+
+                $dagMembers = @($serverList | Where-Object {
+                        ($_.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $_.Exchange -and
+                        ($_.Exchange.PSObject.Properties.Name -contains 'IsDagMember') -and [bool]$_.Exchange.IsDagMember -and
+                        ($_.Exchange.PSObject.Properties.Name -contains 'DagName') -and -not [string]::IsNullOrWhiteSpace([string]$_.Exchange.DagName)
+                    })
+
+                if ($dagMembers.Count -eq 0) {
+                    $status = 'Skipped'
+                    $evidence = 'Not applicable: no DAG deployed.'
+                }
+                else {
+                    $dagTopologies = @()
+                    if (($CollectionData.PSObject.Properties.Name -contains 'Organization') -and $null -ne $CollectionData.Organization -and
+                        ($CollectionData.Organization.PSObject.Properties.Name -contains 'DagTopologies') -and $null -ne $CollectionData.Organization.DagTopologies) {
+                        $dagTopologies = @($CollectionData.Organization.DagTopologies)
+                    }
+
+                    if ($dagTopologies.Count -eq 0) {
+                        $status = 'Unknown'
+                        $evidence = 'DAG topology data unavailable (Get-DatabaseAvailabilityGroup not collected).'
+                    }
+                    else {
+                        $nonCompliant = @()
+                        $compliant = @()
+
+                        foreach ($dag in $dagTopologies) {
+                            $dagName = if ($dag.PSObject.Properties.Name -contains 'Name') { [string]$dag.Name } else { '' }
+                            if ([string]::IsNullOrWhiteSpace($dagName)) {
+                                continue
+                            }
+
+                            $witnessServer = if ($dag.PSObject.Properties.Name -contains 'WitnessServer') { [string]$dag.WitnessServer } else { '' }
+                            $witnessDirectory = if ($dag.PSObject.Properties.Name -contains 'WitnessDirectory') { [string]$dag.WitnessDirectory } else { '' }
+
+                            if ([string]::IsNullOrWhiteSpace($witnessServer) -or [string]::IsNullOrWhiteSpace($witnessDirectory)) {
+                                $nonCompliant += ('{0}: WitnessServer="{1}", WitnessDirectory="{2}"' -f $dagName, $(if ([string]::IsNullOrWhiteSpace($witnessServer)) { '<empty>' } else { $witnessServer }), $(if ([string]::IsNullOrWhiteSpace($witnessDirectory)) { '<empty>' } else { $witnessDirectory }))
+                            }
+                            else {
+                                $compliant += ('{0}: WitnessServer="{1}", WitnessDirectory="{2}"' -f $dagName, $witnessServer, $witnessDirectory)
+                            }
+                        }
+
+                        if ($nonCompliant.Count -gt 0) {
+                            $status = 'Fail'
+                            $evidence = Format-EDCAEvidenceWithElements -Summary ('{0} DAG(s) have incomplete witness configuration.' -f $nonCompliant.Count) -Elements $nonCompliant
+                        }
+                        elseif ($compliant.Count -eq 0) {
+                            $status = 'Unknown'
+                            $evidence = 'DAG entries were collected but could not be evaluated for witness configuration.'
+                        }
+                        else {
+                            $status = 'Pass'
+                            $evidence = Format-EDCAEvidenceWithElements -Summary ('All {0} DAG(s) have witness server and witness directory configured.' -f $compliant.Count) -Elements $compliant
+                        }
+                    }
+                }
+            }
             'EDCA-RES-011' {
                 # SingleItemRecoveryDisabledCount is collected via org-scoped Get-Mailbox on each server.
                 # All servers store identical org-level data — take the first server's value to avoid multiplication.

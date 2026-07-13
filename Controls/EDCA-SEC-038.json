@@ -8,6 +8,7 @@
   "severity": "Medium",
   "severityWeight": 7,
   "frameworks": [
+    "Best Practice",
     "DISA",
     "ANSSI",
     "BSI",
@@ -15,16 +16,16 @@
   ],
   "references": [
     {
+      "name": "Exchange Server Preferred Architecture",
+      "url": "https://learn.microsoft.com/en-us/exchange/plan-and-deploy/deployment-ref/preferred-architecture"
+    },
+    {
       "name": "DISA STIG EX19-MB-000244: Exchange must have the most current, approved Cumulative Update installed (V-259711)",
       "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259711"
     },
     {
       "name": "Exchange Server build numbers and release dates",
       "url": "https://learn.microsoft.com/exchange/new-features/build-numbers-and-release-dates"
-    },
-    {
-      "name": "Exchange Update Wizard",
-      "url": "https://aka.ms/ExchangeUpdateWizard"
     },
     {
       "name": "ANSSI - Mise en œuvre sécurisée d'un serveur Windows membre AD DS (2025)",

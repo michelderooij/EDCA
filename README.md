@@ -9,7 +9,7 @@ Note: A blog on usage of the module is located at [https://eightwone.com/2026/04
 
 PowerShell-based tool that collects Exchange on-premises deployment data, evaluates it against best practices and compliance controls, and produces an interactive HTML report ([sample](https://michelderooij.github.io/EDCA/report_sample.html)). Supports Exchange 2016, Exchange 2019, and Exchange SE.
 
-Current module release: **v1.0.0.7** (see [CHANGELOG.md](CHANGELOG.md)).
+Current module release: **v1.0.1.0** (see [CHANGELOG.md](CHANGELOG.md)).
 
 ## Key Features
 
@@ -158,16 +158,27 @@ EDCA evaluates controls against the following compliance frameworks. Each contro
 
 | Framework | Official Reference(s) | Version / Date | Official URL | License |
 |---|---|---|---|---|
-| **Best Practice** | Common best practices for Exchange Server deployments, including [CSS Exchange](https://microsoft.github.io/CSS-Exchange/) | — | — | — |
+| **Best Practice** | Common best practices for Exchange Server deployments, including [CSS Exchange](https://microsoft.github.io/CSS-Exchange/) and [Exchange Server Preferred Architecture (PA)](https://learn.microsoft.com/en-us/exchange/plan-and-deploy/deployment-ref/preferred-architecture?WT.mc_id=M365-MVP-5000284) guidance | — | — | — |
 | **ANSSI** 🇫🇷 | [Mise en œuvre sécurisée d'un serveur Windows](https://messervices.cyber.gouv.fr/guides/mise-en-oeuvre-securisee-dun-serveur-windows)<br>[Recommandations de sécurité relatives à TLS](https://messervices.cyber.gouv.fr/guides/recommandations-de-securite-relatives-tls)<br>[Sécuriser la journalisation dans un environnement Microsoft AD](https://messervices.cyber.gouv.fr/guides/securiser-la-journalisation-dans-un-environnement-microsoft-active-directory)<br>[Transition post-quantique de TLS 1.3](https://messervices.cyber.gouv.fr/guides/Transition-post-quantique-protocole-TLS-1-3) | v1.0 · Oct 2025<br>v1.2 · Mar 2020<br>Jan 2022<br>Feb 2026 | [messervices.cyber.gouv.fr](https://messervices.cyber.gouv.fr/) | Free to access |
 | **BSI** 🇩🇪 | [IT-Grundschutz-Kompendium Edition 2023](https://www.bsi.bund.de/DE/Themen/Unternehmen-und-Organisationen/Standards-und-Zertifizierung/IT-Grundschutz/IT-Grundschutz-Kompendium/it-grundschutz-kompendium_node.html)<br>Modules: SYS.1.1 · SYS.1.2.3 · APP.2.2 · APP.5.2 | Edition 2023<br>February 2023 | [bsi.bund.de](https://www.bsi.bund.de/) | © BSI — free to download |
 | **CIS** 🇺🇸 | [CIS Microsoft Exchange Server 2019 Benchmark](https://www.cisecurity.org/benchmark/microsoft_exchange_server)<br>[CIS Microsoft Windows Server 2019/2022 Benchmark](https://www.cisecurity.org/benchmark/microsoft_windows_server)<br>[CIS Controls v8.1](https://www.cisecurity.org/controls/v8-1) | v1.0.0<br>v4.0.0 (2019) · v5.0.0 (2022)<br>v8.1 | [cisecurity.org](https://www.cisecurity.org/benchmark/microsoft_exchange_server) | Free, non-commercial use only |
 | **CISA** 🇺🇸 | [Microsoft Exchange Server Security Best Practices Guide](https://www.cisa.gov/sites/default/files/publications/CSI_MS_Exchange_Security_Best_Practices_Final.pdf)<br>[Advisory AA21-062A: Mitigate Exchange Server Vulnerabilities](https://www.cisa.gov/news-events/cybersecurity-advisories/aa21-062a)<br>[Binding Operational Directive 18-01](https://www.cisa.gov/binding-operational-directive-18-01)<br>[Known Exploited Vulnerabilities Catalog](https://www.cisa.gov/known-exploited-vulnerabilities-catalog) | 2021<br>March 2021<br>October 2017<br>Ongoing | [cisa.gov](https://www.cisa.gov/) | Public domain (US Government) |
 | **DISA** 🇺🇸 | [Microsoft Exchange 2019 Mailbox Server STIG](https://public.cyber.mil/stigs/downloads/)<br>[Microsoft Exchange 2016 Mailbox Server STIG](https://public.cyber.mil/stigs/downloads/) | 2025-05-14<br>2023-12-18 | [public.cyber.mil/stigs](https://public.cyber.mil/stigs/downloads/) | Public domain (US Government) |
-| **ISM** 🇦🇺 | [Information Security Manual](https://www.cyber.gov.au/resources-business-and-government/essential-cyber-security/ism), published by Australian Signals Directorate (ASD)<br>[ISM June 2026 changes](https://www.cyber.gov.au/sites/default/files/2026-06/ISM%20June%202026%20changes%20%28June%202026%29.pdf) | June 2026 | [cyber.gov.au](https://www.cyber.gov.au/) | Free to access (Australian Government) |
+| **ISM** 🇦🇺 | [Information Security Manual](https://www.cyber.gov.au/resources-business-and-government/essential-cyber-security/ism)<br>[ISM June 2026 changes](https://www.cyber.gov.au/sites/default/files/2026-06/ISM%20June%202026%20changes%20%28June%202026%29.pdf) | June 2026 | [cyber.gov.au](https://www.cyber.gov.au/) | Free to access (Australian Government) |
 | **NIS2** 🇪🇺🇳🇱 | [NIS2 Directive (EU) 2022/2555](https://eur-lex.europa.eu/eli/dir/2022/2555/oj)<br>[NCSC-NL TLS Guidelines 2025-05](https://www.ncsc.nl/transport-layer-security/ICT-beveiligingsrichtlijnen-voor-TLS) | December 2022<br>April 2026 | [eur-lex.europa.eu](https://eur-lex.europa.eu/eli/dir/2022/2555/oj)<br>[ncsc.nl](https://www.ncsc.nl/) | Open (EU law)<br>Free (Dutch Government) |
 
 ISM coverage in EDCA is focused on machine-checkable Exchange and Windows hardening controls. Process-only and governance-only ISM controls that cannot be reliably validated from Exchange telemetry are intentionally documented as out of scope for automated evaluation.
+
+## Control Language
+
+EDCA control text follows the requirement terms used in RFC 2119 and RFC 8174:
+
+- **MUST / MUST NOT**: Absolute requirement.
+- **SHALL / SHALL NOT**: Mandatory requirement in policy-style wording.
+- **SHOULD / SHOULD NOT**: Recommended best practice; valid reasons may exist to deviate.
+- **MAY**: Optional behavior.
+
+Some controls are explicitly scenario-dependent. When a prerequisite architecture component is not deployed, EDCA reports the control as **Skipped** with not-applicable evidence. Example: DAG-specific controls are **Not applicable** when no DAG is deployed.
 
 ## Screenshots
 

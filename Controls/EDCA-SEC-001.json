@@ -13,6 +13,10 @@
   ],
   "references": [
     {
+      "name": "Exchange Server Preferred Architecture: Namespace and client protocol design",
+      "url": "https://learn.microsoft.com/en-us/exchange/plan-and-deploy/deployment-ref/preferred-architecture"
+    },
+    {
       "name": "MAPI over HTTP in Exchange Server",
       "url": "https://learn.microsoft.com/exchange/clients/mapi-over-http/mapi-over-http"
     },

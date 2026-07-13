@@ -13,6 +13,10 @@
   ],
   "references": [
     {
+      "name": "Exchange Server Preferred Architecture: Database availability group design",
+      "url": "https://learn.microsoft.com/en-us/exchange/plan-and-deploy/deployment-ref/preferred-architecture"
+    },
+    {
       "name": "Test-ReplicationHealth command",
       "url": "https://learn.microsoft.com/powershell/module/exchange/test-replicationhealth"
     },

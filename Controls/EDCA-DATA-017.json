@@ -14,7 +14,7 @@
   "references": [
     {
       "name": "Exchange Server Preferred Architecture: Server component requirements",
-      "url": "https://learn.microsoft.com/en-us/exchange/plan-and-deploy/deployment-ref/preferred-architecture-2019"
+      "url": "https://learn.microsoft.com/en-us/exchange/plan-and-deploy/deployment-ref/preferred-architecture"
     },
     {
       "name": "BitLocker overview",

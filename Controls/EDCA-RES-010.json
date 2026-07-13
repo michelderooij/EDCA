@@ -8,9 +8,14 @@
   "severity": "Medium",
   "severityWeight": 7,
   "frameworks": [
+    "Best Practice",
     "DISA"
   ],
   "references": [
+    {
+      "name": "Exchange Server Preferred Architecture: Database availability group design",
+      "url": "https://learn.microsoft.com/en-us/exchange/plan-and-deploy/deployment-ref/preferred-architecture"
+    },
     {
       "name": "DISA STIG EX19-MB-000234: Exchange must provide mailbox databases in a highly available and redundant configuration (V-259709)",
       "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259709"
@@ -25,7 +30,7 @@
     "description": "Configure a Database Availability Group with at least two mailbox database copies across different servers.",
     "scriptTemplate": "# Check mailbox database copy status."
   },
-  "considerations": "DAG deployment requires at least two Exchange Mailbox servers and a witness server (file share witness or Azure cloud witness). Planning DAG deployment involves network, storage, and licensing considerations. This is a significant infrastructure change requiring careful planning.",
+  "considerations": "DAG deployment requires at least two Exchange Mailbox servers and a witness server. Follow current Exchange Preferred Architecture guidance for witness placement and supported witness options. Planning DAG deployment involves network, storage, and licensing considerations. This is a significant infrastructure change requiring careful planning.",
   "roles": [
     "Mailbox"
   ]

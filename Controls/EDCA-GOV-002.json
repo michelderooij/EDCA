@@ -16,6 +16,10 @@
   ],
   "references": [
     {
+      "name": "Exchange Server Preferred Architecture",
+      "url": "https://learn.microsoft.com/en-us/exchange/plan-and-deploy/deployment-ref/preferred-architecture"
+    },
+    {
       "name": "Exchange Server build numbers, release dates, and support status",
       "url": "https://learn.microsoft.com/exchange/new-features/build-numbers-and-release-dates"
     },

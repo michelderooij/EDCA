@@ -6130,6 +6130,7 @@ function Get-EDCAOrganizationInventory {
         EdgeServers                        = @()
         MobileDevicePolicies               = @()
         IrmConfiguration                   = $null
+        DagTopologies                      = @()
         DcCoreRatio                        = $null
         DomainObjectDacl                   = $null
         ClientAccessRules                  = $null
@@ -6358,6 +6359,34 @@ function Get-EDCAOrganizationInventory {
     }
     catch {
         $organization.CollectionWarnings += ('Get-ExchangeServer (Edge detection) failed: ' + $_.Exception.Message)
+    }
+
+    try {
+        $dagResults = @(Invoke-EDCAExchangeEndpointCommand -Server $Server -ScriptBlock {
+                Get-DatabaseAvailabilityGroup -ErrorAction Stop | Select-Object Name, WitnessServer, WitnessDirectory, DatacenterActivationMode, Servers
+            })
+
+        foreach ($dag in $dagResults) {
+            $dagServerNames = @()
+            if ($dag.PSObject.Properties.Name -contains 'Servers' -and $null -ne $dag.Servers) {
+                $dagServerNames = @($dag.Servers | ForEach-Object {
+                        $serverText = [string]$_
+                        if ([string]::IsNullOrWhiteSpace($serverText)) { return $null }
+                        ($serverText -split '\\')[0]
+                    } | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | Sort-Object -Unique)
+            }
+
+            $organization.DagTopologies += [pscustomobject]@{
+                Name                     = if ($dag.PSObject.Properties.Name -contains 'Name') { [string]$dag.Name } else { '' }
+                WitnessServer            = if ($dag.PSObject.Properties.Name -contains 'WitnessServer' -and $null -ne $dag.WitnessServer) { [string]$dag.WitnessServer } else { '' }
+                WitnessDirectory         = if ($dag.PSObject.Properties.Name -contains 'WitnessDirectory' -and $null -ne $dag.WitnessDirectory) { [string]$dag.WitnessDirectory } else { '' }
+                DatacenterActivationMode = if ($dag.PSObject.Properties.Name -contains 'DatacenterActivationMode' -and $null -ne $dag.DatacenterActivationMode) { [string]$dag.DatacenterActivationMode } else { '' }
+                Servers                  = $dagServerNames
+            }
+        }
+    }
+    catch {
+        $organization.CollectionWarnings += ('Get-DatabaseAvailabilityGroup failed: ' + $_.Exception.Message)
     }
 
     try {
@@ -6869,6 +6898,7 @@ function Invoke-EDCACollection {
         RemoteDomains              = @()
         EdgeServers                = @()
         IrmConfiguration           = $null
+        DagTopologies              = @()
         CollectionWarnings         = @()
     }
 
@@ -6980,6 +7010,7 @@ function Invoke-EDCACollection {
                     ForestFunctionalLevel      = $null
                     DomainFunctionalLevel      = $null
                     AdSiteCount                = $null
+                    DagTopologies              = @()
                     CollectionWarnings         = $orgFallbackWarnings
                 }
             }

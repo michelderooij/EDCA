@@ -13,6 +13,10 @@
   ],
   "references": [
     {
+      "name": "Exchange Server Preferred Architecture: Data resiliency",
+      "url": "https://learn.microsoft.com/en-us/exchange/plan-and-deploy/deployment-ref/preferred-architecture"
+    },
+    {
       "name": "CIS 2.1.2 (L1): Ensure Keep deleted items for the specified number of days is set to 14",
       "url": "https://www.cisecurity.org/benchmark/microsoft_exchange_server"
     },

@@ -1,0 +1,32 @@
+{
+  "id": "EDCA-RES-014",
+  "title": "DAG member distribution is symmetrical across sites",
+  "description": "Each site-resilient DAG SHOULD have symmetrical member distribution across its Active Directory sites. Symmetry improves failover behavior by distributing load and activation capacity evenly across failure domains.",
+  "verify": true,
+  "subject": "Organization",
+  "category": "Resilience",
+  "severity": "Medium",
+  "severityWeight": 6,
+  "frameworks": [
+    "Best Practice"
+  ],
+  "references": [
+    {
+      "name": "Exchange Server Preferred Architecture: DAG configuration",
+      "url": "https://learn.microsoft.com/en-us/exchange/plan-and-deploy/deployment-ref/preferred-architecture"
+    },
+    {
+      "name": "Database availability groups (DAGs)",
+      "url": "https://learn.microsoft.com/en-us/exchange/high-availability/database-availability-groups/database-availability-groups"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Rebalance DAG membership so each participating site hosts an equal number of DAG members.",
+    "scriptTemplate": "# Diagnose: Show DAG member counts by site\nGet-ExchangeServer | Where-Object { $_.MemberOfDAG } | Group-Object MemberOfDAG, Site | Select-Object Name, Count | Sort-Object Name | Format-Table -AutoSize"
+  },
+  "considerations": "If no DAG is deployed, this control is not applicable and should report Skipped. This control validates symmetry for DAGs that span two or more sites; single-site DAGs are treated as non-compliant with site-resilient symmetry guidance.",
+  "roles": [
+    "Mailbox"
+  ]
+}

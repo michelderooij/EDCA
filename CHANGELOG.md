@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.0.1.0
+
+- Preferred Architecture (PA) guidance references added and normalized across controls.
+- Added three new Best Practice, PA-based DAG resilience controls:
+  - `EDCA-RES-013`: DAG SHOULD not span more than two Active Directory sites.
+  - `EDCA-RES-014`: DAG SHOULD have symmetrical member distribution across sites.
+  - `EDCA-RES-015`: DAG MUST have witness server settings configured.
+- Added organization-level DAG topology collection (`Get-DatabaseAvailabilityGroup`) to support automated DAG topology and witness checks.
+- DAG-scoped controls show as **Skipped** when no DAG is deployed.
+- README updated with requirement-term nomenclature (`MUST`, `SHOULD`, `SHALL`).
+
 ## v1.0.0.7
 
 - Expanded and normalized NIS2 control mappings across the control library.
