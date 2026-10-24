@@ -27,7 +27,7 @@
       "url": "https://www.cisecurity.org/benchmark/microsoft_windows_server"
     },
     {
-      "name": "CIS Microsoft Windows Server 2022 Benchmark v3.0.0 (L1): Ensure TLS 1.2 is enabled (Enabled = 1, DisabledByDefault = 0) under HKLM\\SYSTEM\\CurrentControlSet\\Control\\SecurityProviders\\SCHANNEL\\Protocols\\TLS 1.2",
+      "name": "CIS Microsoft Windows Server 2022 Benchmark v5.1.0 (L1): Ensure TLS 1.2 is enabled (Enabled = 1, DisabledByDefault = 0) under HKLM\\SYSTEM\\CurrentControlSet\\Control\\SecurityProviders\\SCHANNEL\\Protocols\\TLS 1.2",
       "url": "https://www.cisecurity.org/benchmark/microsoft_windows_server"
     },
     {

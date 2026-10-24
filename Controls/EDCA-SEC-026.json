@@ -14,7 +14,7 @@
   ],
   "references": [
     {
-      "name": "CIS Microsoft Windows Server 2019/2022/2025 Benchmarks",
+      "name": "CIS Microsoft Windows Server 2019 Benchmark v4.0.0",
       "url": "https://www.cisecurity.org/benchmark/microsoft_windows_server"
     },
     {
