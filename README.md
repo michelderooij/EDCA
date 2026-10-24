@@ -9,7 +9,7 @@ Note: A blog on usage of the module is located at [https://eightwone.com/2026/04
 
 PowerShell-based tool that collects Exchange on-premises deployment data, evaluates it against best practices and compliance controls, and produces an interactive HTML report ([sample](https://michelderooij.github.io/EDCA/report_sample.html)). Supports Exchange 2016, Exchange 2019, and Exchange SE.
 
-Current module release: **v1.0.1.1** (see [CHANGELOG.md](CHANGELOG.md)).
+Current module release: **v1.0.1.2** (see [CHANGELOG.md](CHANGELOG.md)).
 
 ## Key Features
 
@@ -166,6 +166,8 @@ EDCA evaluates controls against the following compliance frameworks. Each contro
 | **DISA** 🇺🇸 | [Microsoft Exchange 2019 Mailbox Server STIG](https://public.cyber.mil/stigs/downloads/)<br>[Microsoft Exchange 2016 Mailbox Server STIG](https://public.cyber.mil/stigs/downloads/) | 2025-05-14<br>2023-12-18 | [public.cyber.mil/stigs](https://public.cyber.mil/stigs/downloads/) | Public domain (US Government) |
 | **ISM** 🇦🇺 | [Information Security Manual](https://www.cyber.gov.au/resources-business-and-government/essential-cyber-security/ism)<br>[ISM June 2026 changes](https://www.cyber.gov.au/sites/default/files/2026-06/ISM%20June%202026%20changes%20%28June%202026%29.pdf) | June 2026 | [cyber.gov.au](https://www.cyber.gov.au/) | Free to access (Australian Government) |
 | **NIS2** 🇪🇺🇳🇱 | [NIS2 Directive (EU) 2022/2555](https://eur-lex.europa.eu/eli/dir/2022/2555/oj)<br>[NCSC-NL TLS Guidelines 2025-05](https://www.ncsc.nl/transport-layer-security/ICT-beveiligingsrichtlijnen-voor-TLS) | December 2022<br>April 2026 | [eur-lex.europa.eu](https://eur-lex.europa.eu/eli/dir/2022/2555/oj)<br>[ncsc.nl](https://www.ncsc.nl/) | Open (EU law)<br>Free (Dutch Government) |
+
+Exchange benchmark references are checked against CIS Microsoft Exchange Server 2019 Benchmark v1.0.1. Administrator audit logging maps to recommendation 4.2; MAPI over HTTP and Extended Protection are not recommendations in this benchmark version and are not attributed to CIS.
 
 ISM coverage in EDCA is focused on machine-checkable Exchange and Windows hardening controls. Process-only and governance-only ISM controls that cannot be reliably validated from Exchange telemetry are intentionally documented as out of scope for automated evaluation.
 

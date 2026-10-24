@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.0.1.2
+
+- Corrected CIS Exchange Server 2019 Benchmark v1.0.1 references: administrator audit logging maps to recommendation 4.2; removed incorrect CIS mappings for MAPI over HTTP and Extended Protection.
+- Updated README benchmark coverage notes and module version.
+
 ## v1.0.1.1
 
 - Fixed categorizing DAG-related controls resulting in `Control evaluator not implemented`.

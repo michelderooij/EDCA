@@ -11,7 +11,6 @@
     "Best Practice",
     "NIS2",
     "BSI",
-    "CIS",
     "CISA"
   ],
   "references": [
@@ -26,14 +25,6 @@
     {
       "name": "ENISA / NIS2 Directive (EU) 2022/2555 - Article 21(2)(j): multi-factor authentication and secure authentication - Section 11.3, 11.5-11.7, 10, 2.2",
       "url": "https://eur-lex.europa.eu/eli/dir/2022/2555/oj"
-    },
-    {
-      "name": "CIS Microsoft Exchange Server Benchmark",
-      "url": "https://www.cisecurity.org/benchmark/microsoft_exchange_server"
-    },
-    {
-      "name": "CIS Microsoft Exchange Server 2019 Benchmark v1.0.1: Ensure Extended Protection is Enabled on Exchange virtual directories",
-      "url": "https://www.cisecurity.org/benchmark/microsoft_exchange_server"
     },
     {
       "name": "CISA AA21-062A: Mitigate Microsoft Exchange Server Vulnerabilities - enable Extended Protection for Authentication on all Exchange virtual directories",

@@ -26,7 +26,7 @@
       "url": "https://www.cisecurity.org/benchmark/microsoft_exchange_server"
     },
     {
-      "name": "CIS 1.1.1 (L1): Ensure 'AdminAuditLogEnabled' is set to 'True'",
+      "name": "CIS 4.2 (L1): Ensure 'Turn on administrator audit logging' is set to '<values>'",
       "url": "https://www.cisecurity.org/benchmark/microsoft_exchange_server"
     },
     {
