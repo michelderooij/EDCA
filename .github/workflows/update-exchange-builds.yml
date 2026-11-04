@@ -2,8 +2,8 @@ name: Update Exchange Builds
 
 on:
   schedule:
-    # Daily at 06:00 UTC
-    - cron: '0 6 * * *'
+    # Tuesday and Friday at 20:00 GMT+1 (19:00 UTC)
+    - cron: '0 19 * * 2,5'
   workflow_dispatch:
 
 permissions:
