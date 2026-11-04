@@ -1,0 +1,32 @@
+{
+  "id": "EDCA-SEC-008",
+  "title": "Exchange database/log volume block size is 64KB",
+  "description": "Volumes hosting Exchange mailbox database and log files SHOULD use 64KB allocation unit size (block size) per the Exchange storage configuration guidelines.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Platform Security",
+  "severity": "Medium",
+  "severityWeight": 6,
+  "frameworks": [
+    "Best Practice"
+  ],
+  "references": [
+    {
+      "name": "Exchange storage best practices",
+      "url": "https://learn.microsoft.com/exchange/plan-and-deploy/deployment-ref/storage-configuration"
+    },
+    {
+      "name": "Exchange CSS storage checks",
+      "url": "https://github.com/microsoft/CSS-Exchange/blob/main/Diagnostics/HealthChecker/HealthChecker.ps1"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Use 64KB allocation unit size on volumes that host Exchange database/log paths.",
+    "scriptTemplate": "# Diagnose: Identify volumes hosting Exchange databases and logs for block size verification\nGet-MailboxDatabase -Server $env:COMPUTERNAME | Select-Object Name, EdbFilePath, LogFolderPath\n# For each volume run: fsutil fsinfo ntfsinfo <DriveLetter>:\n# 'Bytes Per Cluster' should be 65536 (64 KB). Smaller values require reformatting and database migration."
+  },
+  "considerations": "Changing the block size of existing volumes requires reformatting - all data must be migrated to temporary storage, volumes reformatted, and data restored. This requires a planned maintenance window with database failovers. New volumes should be formatted with 64 KB blocks before use.",
+  "roles": [
+    "Mailbox"
+  ]
+}

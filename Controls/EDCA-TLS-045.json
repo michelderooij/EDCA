@@ -1,0 +1,37 @@
+{
+  "id": "EDCA-TLS-045",
+  "title": "Edge Sender Reputation filter is enabled",
+  "description": "Sender Reputation is an Exchange Edge Transport anti-spam feature that builds a reputation score for each sending IP address based on observed message characteristics and blocks IPs that exceed a configurable Sender Reputation Level threshold; it operates independently of DNS-based blocklists by learning from the actual behavior of senders observed on this Edge server. The Edge Transport server MUST have the Sender Reputation filter enabled. Sender Reputation analyses connection behaviour to calculate a Sender Reputation Level (SRL) and block senders that exceed the threshold. Disabled Sender Reputation allows high-volume spam and relay sources to remain undetected.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Transport Security",
+  "severity": "Medium",
+  "severityWeight": 6,
+  "frameworks": [
+    "Best Practice",
+    "DISA"
+  ],
+  "references": [
+    {
+      "name": "Microsoft — Sender reputation procedures",
+      "url": "https://learn.microsoft.com/exchange/antispam-and-antimalware/antispam-protection/sender-reputation"
+    },
+    {
+      "name": "DISA STIG EX19-ED-000091: The Exchange Sender Reputation filter must identify the spam reputation of the sender (V-259614)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_edge_server/2024-12-06/finding/V-259614"
+    },
+    {
+      "name": "DISA STIG EX19-ED-000093: The Exchange Sender Reputation filter must be enabled (V-259615)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_edge_server/2024-12-06/finding/V-259615"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Enable Sender Reputation: Set-SenderReputationConfig -Enabled $true.",
+    "scriptTemplate": "Get-SenderReputationConfig | Select-Object Enabled, SenderBlockingEnabled, SenderBlockingPeriod\n# To enable:\n# Set-SenderReputationConfig -Enabled $true"
+  },
+  "considerations": "Sender Reputation requires the Protocol Analysis agent to be enabled. The SRL threshold and blocking period are configurable. In high-volume environments, tune the threshold to balance false-positive risk against spam blocking effectiveness.",
+  "roles": [
+    "Edge"
+  ]
+}

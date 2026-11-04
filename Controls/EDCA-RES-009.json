@@ -1,0 +1,32 @@
+{
+  "id": "EDCA-RES-009",
+  "title": "Exchange mailbox stores mount at startup",
+  "description": "Exchange mailbox stores MUST mount at startup. If a mailbox database is set not to mount automatically, it will remain offline after a server restart, causing service disruption. All production mailbox databases must be configured to auto-mount to ensure continuity of email service.",
+  "verify": true,
+  "subject": "Database",
+  "category": "Resilience",
+  "severity": "Low",
+  "severityWeight": 3,
+  "frameworks": [
+    "DISA"
+  ],
+  "references": [
+    {
+      "name": "DISA STIG EX19-MB-000121: Exchange mailbox stores must mount at startup (V-259674)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259674"
+    },
+    {
+      "name": "Set-MailboxDatabase cmdlet",
+      "url": "https://learn.microsoft.com/powershell/module/exchange/set-mailboxdatabase"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Set all mailbox databases to mount at startup.",
+    "scriptTemplate": "Get-MailboxDatabase | Set-MailboxDatabase -MountAtStartup $true"
+  },
+  "considerations": "In some disaster recovery scenarios, databases are intentionally left set not to mount automatically. Verify that no databases used for DR or archival purposes should remain unmounted before applying this setting globally.",
+  "roles": [
+    "Mailbox"
+  ]
+}

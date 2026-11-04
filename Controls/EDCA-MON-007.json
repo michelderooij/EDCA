@@ -1,0 +1,44 @@
+{
+  "id": "EDCA-MON-007",
+  "title": "Receive connector protocol logging is set to Verbose",
+  "description": "Receive connector protocol logging records the full SMTP conversation — including EHLO, AUTH, MAIL FROM, RCPT TO, and DATA commands — for every inbound SMTP session accepted by a receive connector, providing a detailed transaction-level audit trail. Each Exchange server MUST have ProtocolLoggingLevel set to Verbose on all receive connectors. Verbose SMTP transaction logging supports security investigations, compliance auditing, and post-incident forensics.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Monitoring",
+  "severity": "Medium",
+  "severityWeight": 6,
+  "frameworks": [
+    "Best Practice",
+    "CIS",
+    "DISA",
+    "ANSSI"
+  ],
+  "references": [
+    {
+      "name": "CIS 4.1 (L1): Ensure ProtocolLoggingLevel is set to Verbose on Receive Connectors",
+      "url": "https://www.cisecurity.org/benchmark/microsoft_exchange_server"
+    },
+    {
+      "name": "Configure protocol logging in Exchange Server",
+      "url": "https://learn.microsoft.com/exchange/mail-flow/connectors/configure-protocol-logging"
+    },
+    {
+      "name": "DISA STIG EX19-MB-000129: The Exchange global inbound message size must be controlled (V-259682)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259682"
+    },
+    {
+      "name": "ANSSI - Sécuriser la journalisation dans un environnement Microsoft Active Directory (2022)",
+      "url": "https://messervices.cyber.gouv.fr/guides/securiser-la-journalisation-dans-un-environnement-microsoft-active-directory"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Set ProtocolLoggingLevel to Verbose on all receive connectors.",
+    "scriptTemplate": "# Enable verbose protocol logging on all receive connectors of this server.\nGet-ReceiveConnector -Server $env:COMPUTERNAME | Set-ReceiveConnector -ProtocolLoggingLevel Verbose"
+  },
+  "considerations": "Verbose protocol logging generates significant disk I/O on high-volume servers. Ensure that adequate disk space and a log rotation / archival policy are in place. Review log paths via Get-TransportService.",
+  "roles": [
+    "Mailbox",
+    "Edge"
+  ]
+}

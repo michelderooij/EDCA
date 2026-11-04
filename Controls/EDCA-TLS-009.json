@@ -1,0 +1,38 @@
+{
+  "id": "EDCA-TLS-009",
+  "title": "Organization-wide maximum receive message size is 25 MB or less",
+  "description": "The MaxReceiveSize transport configuration setting places an organization-wide upper bound on the size of messages that can be received. The CIS benchmark recommends a maximum of 25 MB (26214400 bytes) to reduce exposure to resource exhaustion attacks via oversized inbound messages.",
+  "verify": true,
+  "subject": "Organization",
+  "category": "Transport Security",
+  "severity": "Low",
+  "severityWeight": 3,
+  "frameworks": [
+    "Best Practice",
+    "CIS",
+    "DISA"
+  ],
+  "references": [
+    {
+      "name": "CIS 2.2.3 (L1): Ensure MaxReceiveSize is set to 25 MB",
+      "url": "https://www.cisecurity.org/benchmark/microsoft_exchange_server"
+    },
+    {
+      "name": "Message size limits in Exchange Server",
+      "url": "https://learn.microsoft.com/exchange/mail-flow/message-size-limits"
+    },
+    {
+      "name": "DISA STIG EX19-MB-000130: The Exchange global outbound message size must be controlled (V-259683)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259683"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Set the organization-wide MaxReceiveSize to 25 MB.",
+    "scriptTemplate": "# Set organization-wide maximum receive size to 25 MB.\nSet-TransportConfig -MaxReceiveSize 25MB"
+  },
+  "considerations": "Reducing MaxReceiveSize may cause legitimate large-attachment emails from external senders to bounce. Communicate the change to relevant users and external partners who may send large files.",
+  "roles": [
+    "Mailbox"
+  ]
+}

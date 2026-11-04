@@ -1,0 +1,29 @@
+{
+  "id": "EDCA-PERF-008",
+  "title": "Single page file configuration",
+  "description": "Multiple configured page files can impact Exchange performance consistency. A single managed page file entry is recommended.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Performance",
+  "severity": "Medium",
+  "severityWeight": 6,
+  "frameworks": [
+    "Best Practice"
+  ],
+  "references": [
+    {
+      "name": "CSS page file warning logic",
+      "url": "https://github.com/microsoft/CSS-Exchange/blob/main/Diagnostics/HealthChecker/HealthChecker.ps1"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Review and standardize page file settings through approved OS baseline controls.",
+    "scriptTemplate": "# Manual remediation recommended: align page file configuration with Exchange server baseline."
+  },
+  "considerations": "Exchange has specific page file sizing recommendations based on installed RAM. Changing page file settings requires a reboot. Placing the page file on the Exchange database volume is not recommended. Follow CSS and Microsoft guidance for page file placement and size.",
+  "roles": [
+    "Mailbox",
+    "Edge"
+  ]
+}

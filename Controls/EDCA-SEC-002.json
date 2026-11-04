@@ -1,0 +1,29 @@
+{
+  "id": "EDCA-SEC-002",
+  "title": ".NET Framework version compatible with Exchange",
+  "description": "Exchange Server 2016, 2019, and SE all require .NET Framework 4.8 as a minimum. Running Exchange on an older .NET Framework version is unsupported and may cause stability and security issues.",
+  "verify": false,
+  "subject": "Server",
+  "category": "Platform Security",
+  "severity": "High",
+  "severityWeight": 8,
+  "frameworks": [
+    "Best Practice"
+  ],
+  "references": [
+    {
+      "name": "Exchange Server supportability matrix",
+      "url": "https://learn.microsoft.com/exchange/plan-and-deploy/supportability-matrix"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Update .NET Framework to at least version 4.8 following Exchange-specific guidance to sequence the upgrade correctly relative to Exchange CU installation.",
+    "scriptTemplate": "# Diagnose: Check installed .NET Framework release key (528040+ required for 4.8)\nGet-ItemProperty 'HKLM:\\SOFTWARE\\Microsoft\\NET Framework Setup\\NDP\\v4\\Full' | Select-Object Release, Version"
+  },
+  "considerations": "Upgrading Exchange Server to a newer Cumulative Update (CU) requires scheduled downtime and thorough regression testing, particularly for hybrid configurations and third-party integrations. Follow the upgrade readiness checklist and verify all coexistence prerequisites before proceeding.",
+  "roles": [
+    "Mailbox",
+    "Edge"
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "id": "EDCA-DATA-004",
+  "title": "Serialized data signing baseline",
+  "description": "Serialized data signing is an Exchange security feature that cryptographically signs serialized PowerShell and RPC payloads exchanged between Exchange components, preventing attackers from injecting malicious deserialized objects into internal service communication. Exchange serialized data signing (EnableSerializationDataSigning registry value) MUST be enabled. Serialized data signing prevents deserialization-based attacks against Exchange endpoint processing.",
+  "verify": false,
+  "subject": "Server",
+  "category": "Data Security",
+  "severity": "High",
+  "severityWeight": 8,
+  "frameworks": [
+    "Best Practice",
+    "CISA"
+  ],
+  "references": [
+    {
+      "name": "CSS SerializedDataSigningCheck",
+      "url": "https://microsoft.github.io/CSS-Exchange/Diagnostics/HealthChecker/SerializedDataSigningCheck/"
+    },
+    {
+      "name": "CISA AA21-062A: Mitigate Microsoft Exchange Server Vulnerabilities - enable serialized data signing to prevent deserialization attacks",
+      "url": "https://www.cisa.gov/news-events/cybersecurity-advisories/aa21-062a"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Ensure PowerShell Serialization Payload Signing is enabled on Exchange 2016 CU23+ or Exchange 2019 CU12+ with January 2023 SU or later installed. Verify the signing certificate is valid and present on all Exchange servers.",
+    "scriptTemplate": "# Diagnose: Check serialized data signing SettingOverride status\nGet-SettingOverride | Where-Object { $_.ComponentName -eq 'Data' -and $_.SectionName -eq 'EnableSerializationDataSigning' } | Select-Object Name, ComponentName, SectionName, Parameters, Server | Format-List\n# Expected: an override with Parameters containing 'Enabled=True' applied globally or to target servers."
+  },
+  "considerations": "Serialized data signing requires a minimum Exchange Cumulative Update level (Exchange 2019 CU12+ or Exchange SE). Enabling it on an older build that does not fully support the feature may cause issues. Verify supported build version before enabling. After enabling, a brief transport interruption may occur while services restart.",
+  "roles": [
+    "Mailbox"
+  ]
+}

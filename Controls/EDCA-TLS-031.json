@@ -1,0 +1,42 @@
+{
+  "id": "EDCA-TLS-031",
+  "title": "Edge anti-spam agents are enabled",
+  "description": "The Edge Transport server MUST have content filtering, recipient filtering, sender filtering, and connection filtering agents enabled. The Connection Filtering agent is enabled or disabled independently via Enable-TransportAgent / Disable-TransportAgent, not via a *-ConnectionFilterConfig cmdlet. Disabled anti-spam agents allow spam, phishing, and malicious mail to pass to internal mail servers without inspection.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Transport Security",
+  "severity": "High",
+  "severityWeight": 8,
+  "frameworks": [
+    "Best Practice",
+    "DISA",
+    "CISA"
+  ],
+  "references": [
+    {
+      "name": "Microsoft — Antispam protection in Exchange Server",
+      "url": "https://learn.microsoft.com/exchange/antispam-and-antimalware/antispam-protection/antispam-protection"
+    },
+    {
+      "name": "DISA STIG EX19-ED-000102: The Exchange content filter must be enabled (V-259626)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_edge_server/2024-12-06/finding/V-259626"
+    },
+    {
+      "name": "DISA STIG EX19-ED-000104: The Exchange Recipient Filter must be enabled (V-259627)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_edge_server/2024-12-06/finding/V-259627"
+    },
+    {
+      "name": "DISA STIG EX19-ED-000106: The Exchange Sender Filter must be enabled (V-259628)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_edge_server/2024-12-06/finding/V-259628"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Enable the relevant agent(s). For content, recipient, and sender filtering use Set-ContentFilterConfig -Enabled $true, Set-RecipientFilterConfig -Enabled $true, or Set-SenderFilterConfig -Enabled $true. For connection filtering, enable the Connection Filtering transport agent with Enable-TransportAgent 'Connection Filtering Agent' then restart the transport service.",
+    "scriptTemplate": "Get-ContentFilterConfig | Select-Object Enabled\nGet-RecipientFilterConfig | Select-Object Enabled\nGet-SenderFilterConfig | Select-Object Enabled\nGet-TransportAgent -Identity 'Connection Filtering Agent' | Select-Object Identity,Enabled\n# To enable connection filtering:\n# Enable-TransportAgent 'Connection Filtering Agent'\n# Restart-Service MSExchangeTransport"
+  },
+  "considerations": "Enabling or tuning anti-spam agents may temporarily affect mail flow if the thresholds are misconfigured. Test in a staging environment when possible.",
+  "roles": [
+    "Edge"
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "id": "EDCA-IAC-017",
+  "title": "Mobile device mailbox policy requires a minimum password length of 4 or more",
+  "description": "The MinPasswordLength property on the default mobile device mailbox policy MUST be 4 or greater. Setting a minimum password length reduces the likelihood of brute-force attacks against device PINs or passwords. The CIS benchmark requires a minimum password length of at least 4.",
+  "verify": true,
+  "subject": "Organization",
+  "category": "Identity and Access Control",
+  "severity": "Low",
+  "severityWeight": 3,
+  "frameworks": [
+    "Best Practice",
+    "CIS"
+  ],
+  "references": [
+    {
+      "name": "CIS 3.4 (L1): Ensure Minimum password length is set to 4 or more",
+      "url": "https://www.cisecurity.org/benchmark/microsoft_exchange_server"
+    },
+    {
+      "name": "Mobile device mailbox policies in Exchange Server",
+      "url": "https://learn.microsoft.com/exchange/clients/exchange-activesync/mobile-device-mailbox-policies"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Set minimum password length to 4 or more in the default mobile device mailbox policy.",
+    "scriptTemplate": "# Require a minimum password length of 4 in the default mobile device mailbox policy.\nSet-MobileDeviceMailboxPolicy -Identity Default -MinPasswordLength 4"
+  },
+  "considerations": "Setting a minimum password length together with alphanumeric password requirements provides stronger protection than PIN-only policies.",
+  "roles": [
+    "Mailbox"
+  ]
+}

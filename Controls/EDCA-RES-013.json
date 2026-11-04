@@ -1,0 +1,32 @@
+{
+  "id": "EDCA-RES-013",
+  "title": "DAG is not stretched beyond two Active Directory sites",
+  "description": "Each Database Availability Group (DAG) SHOULD be deployed across no more than two Active Directory sites. Stretching a DAG beyond two sites increases failover complexity and can reduce operational predictability during site-level incidents.",
+  "verify": true,
+  "subject": "Organization",
+  "category": "Resilience",
+  "severity": "Medium",
+  "severityWeight": 6,
+  "frameworks": [
+    "Best Practice"
+  ],
+  "references": [
+    {
+      "name": "Exchange Server Preferred Architecture: Database availability group design",
+      "url": "https://learn.microsoft.com/en-us/exchange/plan-and-deploy/deployment-ref/preferred-architecture"
+    },
+    {
+      "name": "Database availability groups (DAGs)",
+      "url": "https://learn.microsoft.com/en-us/exchange/high-availability/database-availability-groups/database-availability-groups"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Consolidate DAG membership to one or two Active Directory sites. If more than two sites are in use, redesign DAG topology to align with a site-resilient datacenter pair model.",
+    "scriptTemplate": "# Diagnose: Show DAG membership and AD site distribution\nGet-ExchangeServer | Where-Object { $_.MemberOfDAG } | Select-Object Name, MemberOfDAG, Site | Sort-Object MemberOfDAG, Site, Name | Format-Table -AutoSize"
+  },
+  "considerations": "If no DAG is deployed, this control is not applicable and should report Skipped. In single-site environments with one DAG site, this control can still pass because it enforces an upper bound (not more than two sites).",
+  "roles": [
+    "Mailbox"
+  ]
+}

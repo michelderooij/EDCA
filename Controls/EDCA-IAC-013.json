@@ -1,0 +1,36 @@
+{
+  "id": "EDCA-IAC-013",
+  "title": "OWA forms-based authentication is configured per version requirements",
+  "description": "Forms-based authentication (FBA) is the IIS/Exchange authentication method that presents users with an HTML login page (the OWA sign-in form) to collect credentials, replacing browser-native Basic or Integrated Windows Authentication prompts with a customizable Exchange-managed form. Exchange MUST have forms-based authentication (FBA) configured as defined for the installed Exchange version on OWA virtual directories. For Exchange 2019 and Exchange SE, FBA must be ENABLED so that users authenticate through a secure logon form rather than relying on browser-level Basic or Integrated Windows Authentication. Exception: Exchange 2016 requires FBA to be DISABLED; Integrated Windows Authentication or another approved method must be used instead.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Identity and Access Control",
+  "severity": "Medium",
+  "severityWeight": 6,
+  "frameworks": [
+    "DISA"
+  ],
+  "references": [
+    {
+      "name": "DISA STIG EX19-MB-000008: Exchange must have forms-based authentication enabled (V-259647)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259647"
+    },
+    {
+      "name": "DISA STIG EX16-MB-002920: Exchange must have forms-based authentication disabled (V-228417)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2016_mailbox_server/2023-12-18/finding/V-228417"
+    },
+    {
+      "name": "Set-OwaVirtualDirectory cmdlet",
+      "url": "https://learn.microsoft.com/powershell/module/exchange/set-owavirtualdirectory"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Enable forms-based authentication on Exchange 2019 and Exchange SE OWA virtual directories. On Exchange 2016, disable forms-based authentication.",
+    "scriptTemplate": "# Exchange 2019 and Exchange SE: enable forms-based authentication\r\nGet-OwaVirtualDirectory -Server $env:COMPUTERNAME | Set-OwaVirtualDirectory -FormsAuthentication $true -LogonFormat UserName -DefaultDomain $env:USERDNSDOMAIN\r\n\r\n# Exchange 2016 exception: disable forms-based authentication\r\n# Get-OwaVirtualDirectory -Server $env:COMPUTERNAME | Set-OwaVirtualDirectory -FormsAuthentication $false"
+  },
+  "considerations": "Exchange 2019 and Exchange SE require forms-based authentication enabled (DISA STIG ). Exchange 2016 is the exception: the DISA STIG requires FBA disabled. These requirements are directly opposed between versions -- verify the installed Exchange version before applying.",
+  "roles": [
+    "Mailbox"
+  ]
+}

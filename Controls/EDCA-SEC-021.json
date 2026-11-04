@@ -1,0 +1,59 @@
+{
+  "id": "EDCA-SEC-021",
+  "title": "POP3 and IMAP services disabled unless explicitly required",
+  "description": "Each Exchange server MUST have POP3 and IMAP4 services disabled unless the organization has a documented requirement for their use. The CIS benchmark requires the POP3 and IMAP4 Windows services to be set to 'Disabled'.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Platform Security",
+  "severity": "Medium",
+  "severityWeight": 6,
+  "frameworks": [
+    "Best Practice",
+    "BSI",
+    "CIS",
+    "DISA"
+  ],
+  "references": [
+    {
+      "name": "Exchange POP3 and IMAP4 service management",
+      "url": "https://learn.microsoft.com/exchange/clients/pop3-and-imap4/configure-mailbox-access"
+    },
+    {
+      "name": "CIS Microsoft Exchange Server Benchmark",
+      "url": "https://www.cisecurity.org/benchmark/microsoft_exchange_server"
+    },
+    {
+      "name": "CIS 2.4.1 (L1): Ensure 'POP3' Windows services are set to 'Disabled'",
+      "url": "https://www.cisecurity.org/benchmark/microsoft_exchange_server"
+    },
+    {
+      "name": "CIS 2.4.2 (L1): Ensure 'IMAP4' Windows services are set to 'Disabled'",
+      "url": "https://www.cisecurity.org/benchmark/microsoft_exchange_server"
+    },
+    {
+      "name": "DISA STIG EX19-MB-000065: The Exchange IMAP4 service must be disabled (V-259667)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259667"
+    },
+    {
+      "name": "DISA STIG EX19-MB-000066: The Exchange POP3 service must be disabled (V-259668)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259668"
+    },
+    {
+      "name": "BSI SYS.1.1.A6 — Deaktivierung nicht benötigter Dienste",
+      "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/07_SYS_IT_Systeme/SYS_1_1_Allgemeiner_Server_Edition_2023.pdf?__blob=publicationFile"
+    },
+    {
+      "name": "BSI APP.5.2.A9 — Sichere Konfiguration von Exchange-Servern",
+      "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/06_APP_Anwendungen/APP_5_2_Microsoft_Exchange_und_Outlook_Edition_2023.pdf?__blob=publicationFile"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Disable POP3 and IMAP4 Exchange services when not required.",
+    "scriptTemplate": "Set-Service -Name MSExchangePOP3 -StartupType Disabled; Stop-Service -Name MSExchangePOP3 -ErrorAction SilentlyContinue; Set-Service -Name MSExchangePOP3BE -StartupType Disabled; Stop-Service -Name MSExchangePOP3BE -ErrorAction SilentlyContinue; Set-Service -Name MSExchangeIMAP4 -StartupType Disabled; Stop-Service -Name MSExchangeIMAP4 -ErrorAction SilentlyContinue; Set-Service -Name MSExchangeIMAP4BE -StartupType Disabled; Stop-Service -Name MSExchangeIMAP4BE -ErrorAction SilentlyContinue"
+  },
+  "considerations": "If POP3 or IMAP4 services are actively used by clients (mobile devices, legacy mail clients, monitoring systems), disabling them will cause connectivity failures. Audit client usage before disabling these services. If these services are required, ensure they are explicitly permitted and secured with TLS.",
+  "roles": [
+    "Mailbox"
+  ]
+}

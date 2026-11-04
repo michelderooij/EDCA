@@ -1,0 +1,34 @@
+{
+  "id": "EDCA-TLS-001",
+  "title": "Receive connector internal and external relay patterns are separated",
+  "description": "Exchange receive connectors are the SMTP listener endpoints configured on each Mailbox or Edge server that define which source IP ranges may connect, which authentication methods are accepted, and what permission level the connecting host is granted. Receive connectors SHOULD follow clear internal versus external relay/authentication patterns and avoid broad anonymous relay exposure.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Transport Security",
+  "severity": "High",
+  "severityWeight": 8,
+  "frameworks": [
+    "Best Practice",
+    "DISA"
+  ],
+  "references": [
+    {
+      "name": "Receive connectors in Exchange Server",
+      "url": "https://learn.microsoft.com/exchange/mail-flow/connectors/receive-connectors"
+    },
+    {
+      "name": "DISA STIG EX19-MB-000135: Exchange internal receive connectors must not allow anonymous connections (V-259687)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259687"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Review and redesign receive connectors to separate internal and external relay/auth patterns.",
+    "scriptTemplate": "# Diagnose: Audit receive connector relay scopes and authentication settings\nGet-ReceiveConnector -Server $env:COMPUTERNAME | Select-Object Name, Bindings, RemoteIPRanges, PermissionGroups, AuthMechanism, TlsEnabled | Format-List\n# Connectors with 'AnonymousUsers' in PermissionGroups and open RemoteIPRanges (0.0.0.0-255.255.255.255) are open relays."
+  },
+  "considerations": "Restricting or reconfiguring receive connectors can block legitimate SMTP relay from applications and devices. Carefully audit all SMTP relay sources before changing connector permissions or authentication settings. Test mail flow from all relay sources after applying changes.",
+  "roles": [
+    "Mailbox",
+    "Edge"
+  ]
+}

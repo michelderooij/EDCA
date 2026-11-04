@@ -1,0 +1,36 @@
+{
+  "id": "EDCA-IAC-001",
+  "title": "UPN matches primary SMTP address",
+  "description": "Each user mailbox UserPrincipalName MUST match the primary SMTP address. Mismatches cause authentication failures with modern authentication and Entra ID (Azure AD) synchronization. This check applies to UserMailbox recipients only; shared, room, and equipment mailboxes are excluded.",
+  "verify": true,
+  "subject": "Organization",
+  "category": "Identity and Access Control",
+  "severity": "Medium",
+  "severityWeight": 4,
+  "frameworks": [
+    "Best Practice"
+  ],
+  "references": [
+    {
+      "name": "IdFix — identify and fix directory synchronization errors before Entra ID Connect sync",
+      "url": "https://github.com/microsoft/idfix"
+    },
+    {
+      "name": "Configuring Alternate Login ID (AD FS) — when UPN-to-SMTP alignment is not feasible",
+      "url": "https://learn.microsoft.com/en-us/windows-server/identity/ad-fs/operations/configuring-alternate-login-id"
+    },
+    {
+      "name": "Email as alternate login ID (Entra ID) — when UPN-to-SMTP alignment is not feasible",
+      "url": "https://learn.microsoft.com/en-ca/entra/identity/authentication/howto-authentication-use-email-signin"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Align UPN values and primary SMTP addresses according to identity policy. Use IdFix (https://github.com/microsoft/idfix) to identify and remediate UPN and format errors before synchronizing with Entra ID. Where aligning UPNs is not feasible, configure Alternate Login ID via AD FS or the Entra ID email sign-in feature as a compensating control.",
+    "scriptTemplate": "# Diagnose: Find user mailboxes where UserPrincipalName differs from primary SMTP address\nGet-Mailbox -ResultSize Unlimited -RecipientTypeDetails UserMailbox | Where-Object { $_.UserPrincipalName -ne $_.WindowsEmailAddress.ToString() } | Select-Object DisplayName, UserPrincipalName, WindowsEmailAddress | Sort-Object DisplayName"
+  },
+  "considerations": "Updating a user principal name (UPN) in Active Directory affects the login identity used by Modern Authentication. Changes must be coordinated with the identity team and may temporarily disrupt SSO. Email addresses remain unaffected unless also updated. If UPN alignment is not possible due to organisational constraints (e.g. corporate UPN suffix differs from mail domain), configure Alternate Login ID in AD FS or enable email sign-in in Entra ID as a compensating control rather than leaving mismatches unaddressed.",
+  "roles": [
+    "Mailbox"
+  ]
+}

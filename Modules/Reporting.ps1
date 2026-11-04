@@ -1,3 +1,6 @@
+# Script:  Reporting.ps1
+# Synopsis: Part of EDCA (Exchange Deployment & Compliance Assessment)
+#           https://github.com/michelderooij/EDCA
 # Author:  Michel de Rooij
 # Website: https://eightwone.com
 
@@ -157,18 +160,35 @@ function New-EDCAHtmlReport {
         [Parameter(Mandatory = $true)]
         [pscustomobject]$AnalysisData,
         [Parameter(Mandatory = $true)]
-        [string]$OutputFile
+        [string]$OutputFile,
+        [Parameter(Mandatory = $false)]
+        [AllowNull()]
+        [pscustomobject[]]$HistoryData = @()
     )
 
     Write-Verbose ('Generating HTML report for {0} findings and {1} server entries.' -f @($AnalysisData.Findings).Count, @($CollectionData.Servers).Count)
 
+    # Build a map of server name -> role for role badge display in evidence tables.
+    $serverRoleMap = @{}
+    foreach ($srv in @($CollectionData.Servers)) {
+        $srvName = if ($srv.PSObject.Properties.Name -contains 'Name') { [string]$srv.Name } else { '' }
+        if ([string]::IsNullOrEmpty($srvName)) { continue }
+        if (($srv.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $srv.Exchange -and
+            ($srv.Exchange.PSObject.Properties.Name -contains 'IsEdge') -and [bool]$srv.Exchange.IsEdge) {
+            $serverRoleMap[$srvName] = 'Edge'
+        }
+        else {
+            $serverRoleMap[$srvName] = 'Mailbox'
+        }
+    }
+
     # Build framework filter dropdown options from scores actually present in this report.
-    $frameworkLabelMap = @{ 'ENISA' = 'ENISA/NIS2' }
-    $frameworkOptions = New-Object System.Text.StringBuilder
+    $frameworkLabelMap = @{}
+    $frameworkCheckboxes = New-Object System.Text.StringBuilder
     foreach ($score in $AnalysisData.Scores) {
         if ($score.Framework -eq 'All') { continue }
         $label = if ($frameworkLabelMap.ContainsKey($score.Framework)) { $frameworkLabelMap[$score.Framework] } else { $score.Framework }
-        $null = $frameworkOptions.AppendLine(('                    <option value="{0}">{1}</option>' -f $score.Framework, $label))
+        $null = $frameworkCheckboxes.AppendLine(('                        <label class="ms-item"><input type="checkbox" value="{0}"> {1}</label>' -f $score.Framework, $label))
     }
 
     $scoreCards = New-Object System.Text.StringBuilder
@@ -191,6 +211,45 @@ function New-EDCAHtmlReport {
                 $skipCount,
                 $displayLabel
             ))
+    }
+
+    # Build compliance trend chart data from history analysis files.
+    # Each entry embeds scores for every framework keyed by framework name,
+    # so the chart JS can slice to the active filter without a round-trip.
+    $trendCardHtml = ''
+    if ($null -ne $HistoryData -and @($HistoryData).Count -gt 0) {
+        $trendPoints = @(foreach ($entry in @($HistoryData)) {
+                $hasAll = $entry.Scores | Where-Object { $_.Framework -eq 'All' }
+                if (-not $hasAll) { continue }
+                $dateLabel = ''
+                try {
+                    $rawTs = [string]$entry.Metadata.AnalysisTimestamp
+                    # Handle PS5.1 /Date(ms)/ serialization as well as ISO 8601 strings
+                    if ($rawTs -match '^/Date\((-?\d+)\)/$') {
+                        $ts = [datetime]::new(621355968000000000, [System.DateTimeKind]::Utc).AddMilliseconds([long]$Matches[1]).ToLocalTime()
+                    }
+                    else {
+                        $ts = [datetime]::Parse($rawTs)
+                    }
+                    $dateLabel = $ts.ToString('d MMM yyyy HH:mm')
+                }
+                catch { $dateLabel = '' }
+                $parts = '"d":"' + $dateLabel + '"'
+                foreach ($sc in @($entry.Scores)) {
+                    $fk = [string]$sc.Framework
+                    $tFail = [int]$sc.FailedControls
+                    $tWarn = [int]$sc.UnknownControls
+                    $tSkip = [int]$sc.SkippedControls
+                    $tTotal = [int]$sc.TotalControls
+                    $tPass = [math]::Max(0, $tTotal - $tFail - $tWarn - $tSkip)
+                    $parts += ',"' + $fk + '":{"p":' + $tPass + ',"w":' + $tWarn + ',"f":' + $tFail + ',"s":' + $tSkip + '}'
+                }
+                '{' + $parts + '}'
+            })
+        $trendJson = ('[' + ($trendPoints -join ',') + ']') -replace '"', '&quot;'
+        if ($trendPoints.Count -ge 2) {
+            $trendCardHtml = ('<div class="score-card trend-card" data-trend="{0}"><canvas class="trend-canvas" width="288" height="160"></canvas><p class="card-label">Total Compliance Trend</p></div>' -f $trendJson)
+        }
     }
 
     $findingGroups = @{}
@@ -233,7 +292,7 @@ function New-EDCAHtmlReport {
                 $remediationParts += ('<p>{0}</p>' -f $remediationDescription)
             }
             if (-not [string]::IsNullOrWhiteSpace($remediationScript)) {
-                $remediationParts += ('<pre><code>{0}</code></pre>' -f $remediationScript)
+                $remediationParts += ('<div class="pre-wrapper"><button class="copy-btn" title="Copy to clipboard" aria-label="Copy script to clipboard">Copy</button><pre><code>{0}</code></pre></div>' -f $remediationScript)
             }
             if ($remediationParts.Count -gt 0) {
                 $remediationHtml = $remediationParts -join ''
@@ -248,29 +307,43 @@ function New-EDCAHtmlReport {
         $serverLines = @()
         $subjectLabel = if (($finding.PSObject.Properties.Name -contains 'SubjectLabel') -and -not [string]::IsNullOrWhiteSpace([string]$finding.SubjectLabel)) { [string]$finding.SubjectLabel } else { 'Server' }
         foreach ($serverResult in $finding.ServerResults) {
+            if ($serverResult.Status -eq 'Skipped') { continue }
             $serverRagLabel = Get-EDCARagLabel -Status $serverResult.Status
-            $serverLines += ('<tr class="{1}"><td>{0}</td><td>{2}</td><td class="evidence-cell">{3}</td></tr>' -f
-                $serverResult.Server,
+            $srvName = [string]$serverResult.Server
+            $srvRoleBadge = if ($serverRoleMap.ContainsKey($srvName) -and $serverRoleMap[$srvName] -eq 'Edge') { ' <span class="role-badge role-edge" title="Edge Transport server">Edge</span>' } else { '' }
+            $serverLines += ('<tr class="{1}"><td>{0}{4}</td><td>{2}</td><td class="evidence-cell">{3}</td></tr>' -f
+                (ConvertTo-EDCAHtmlEncoded -Value $srvName),
                 (Get-EDCAStatusClass -Status $serverResult.Status),
                 $serverRagLabel,
-                (ConvertTo-EDCAHtmlWithLineBreaks -Value $serverResult.Evidence)
+                (ConvertTo-EDCAHtmlWithLineBreaks -Value $serverResult.Evidence),
+                $srvRoleBadge
             )
         }
+
+        # Derive filter data attributes for subject and role targeting
+        $findingSubject = if ($finding.PSObject.Properties.Name -contains 'Subject') { [string]$finding.Subject } else { '' }
+        $findingRoles = if ($finding.PSObject.Properties.Name -contains 'Roles') { @($finding.Roles | ForEach-Object { [string]$_ }) } else { @() }
+        $rolesValue = ($findingRoles -join ',')
+        $targetValue = if ($findingSubject -eq 'Database') { 'Database' }
+        elseif ($findingSubject -eq 'Mailbox') { 'Mailbox' }
+        elseif ($subjectLabel -eq 'Domain') { 'Domain' }
+        elseif ($subjectLabel -eq 'Organization' -or $findingSubject -eq 'Organization') { 'Organization' }
+        else { 'Server' }
 
         $overallCss = Get-EDCAStatusClass -Status $finding.OverallStatus
         $overallRagLabel = Get-EDCARagLabel -Status $finding.OverallStatus
         $findingModalId = 'modal-' + ($finding.ControlId -replace '[^a-zA-Z0-9]', '-')
         $descriptionHtml = ConvertTo-EDCAHtmlMarkdown -Value $finding.Description
         $findingHtml = (
-            ('<div class="finding-row {0}" data-status="{1}" data-category="{2}" data-framework="{3}" data-modal="{4}" data-id="{6}" data-title="{7}" data-description="{10}">' +
+            ('<div class="finding-row {0}" data-status="{1}" data-category="{2}" data-framework="{3}" data-modal="{4}" data-id="{6}" data-title="{7}" data-description="{10}" data-subject="{17}" data-roles="{18}">' +
             '{5}<span class="finding-id">{6}</span> <span class="finding-title">{7}</span>' +
             '</div>' +
             '<div class="modal-data" id="{4}" hidden>' +
             '<h2>{6}: {7}</h2>' +
             '<p class="modal-meta"><strong>Category:</strong> {8} | <strong>Severity:</strong> {9} | <strong>Frameworks:</strong> {3}</p>' +
             '<div class="finding-description">{16}</div>' +
-            '<h3>Evidence</h3>' +
-            '<table class="evidence-table"><thead><tr><th>{15}</th><th>Status</th><th>Evidence</th></tr></thead><tbody>{11}</tbody></table>' +
+            '<div class="evidence-section"><h3>Evidence</h3>' +
+            '<table class="evidence-table"><thead><tr><th>{15}</th><th>Status</th><th>Evidence</th></tr></thead><tbody>{11}</tbody></table></div>' +
             '<h3>Remediation</h3>{12}' +
             $(if (-not [string]::IsNullOrWhiteSpace($considerationsHtml)) { '<h3>Considerations</h3>{14}' } else { '' }) +
             '<h3>References</h3>{13}' +
@@ -291,7 +364,9 @@ function New-EDCAHtmlReport {
             $referencesHtml,
             $considerationsHtml,
             $subjectLabel,
-            $descriptionHtml
+            $descriptionHtml,
+            $targetValue,
+            $rolesValue
         )
 
         $categoryName = [string]$finding.Category
@@ -316,7 +391,7 @@ function New-EDCAHtmlReport {
         $groupStatus = Get-EDCAAggregateStatus -Statuses @($group.Statuses)
         $groupCss = Get-EDCAStatusClass -Status $groupStatus
         $groupRagLabel = Get-EDCARagLabel -Status $groupStatus
-        $groupCount = @($group.Statuses).Count
+        $groupCount = @($group.Statuses | Where-Object { $_ -ne 'Skipped' }).Count
         $encodedCategoryName = ConvertTo-EDCAHtmlEncoded -Value $categoryName
 
         $null = $groupedFindingRows.AppendLine((
@@ -340,17 +415,40 @@ function New-EDCAHtmlReport {
     }
 
     $metadata = $CollectionData.Metadata
+    $reportGeneratedAt = Get-Date -Format 'o'
+    $reportGeneratedAtDisplay = Get-Date -Format 'yyyy-MM-dd HH:mm'
+    $collectedAtDisplay = try { [datetime]::Parse($metadata.CollectionTimestamp).ToString('yyyy-MM-dd HH:mm') } catch { $metadata.CollectionTimestamp }
 
     # Build environment notices (Edge servers, unsupported Exchange versions)
     $noticesHtml = New-Object System.Text.StringBuilder
-    $edgeServers = @()
+    # Determine which Edge servers were collected vs. only detected in the org topology.
+    $collectedEdgeServers = @($CollectionData.Servers | Where-Object {
+            ($_.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $_.Exchange -and
+            ($_.Exchange.PSObject.Properties.Name -contains 'IsEdge') -and [bool]$_.Exchange.IsEdge
+        })
+    $orgEdgeServers = @()
     if (($CollectionData.PSObject.Properties.Name -contains 'Organization') -and $null -ne $CollectionData.Organization -and
         ($CollectionData.Organization.PSObject.Properties.Name -contains 'EdgeServers')) {
-        $edgeServers = @($CollectionData.Organization.EdgeServers)
+        $orgEdgeServers = @($CollectionData.Organization.EdgeServers)
     }
-    if ($edgeServers.Count -gt 0) {
-        $edgeNames = ($edgeServers | ForEach-Object { ConvertTo-EDCAHtmlEncoded -Value $_.Name }) -join ', '
-        $null = $noticesHtml.AppendLine('<div class="env-notice"><span class="env-notice-icon">&#9888;</span><div><strong>Edge Transport servers detected</strong>Exchange Edge Transport servers are present in this environment (' + $edgeNames + '). EDCA does not collect data from or evaluate controls against Edge Transport servers. Edge-specific controls are not covered by this report.</div></div>')
+    $collectedEdgeNames = @($collectedEdgeServers | ForEach-Object {
+            if (($_.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $_.Exchange -and ($_.Exchange.PSObject.Properties.Name -contains 'Name')) { [string]$_.Exchange.Name }
+            elseif ($_.PSObject.Properties.Name -contains 'Server') { [string]$_.Server }
+            else { '' }
+        })
+    $uncollectedEdgeServers = @($orgEdgeServers | Where-Object { $n = if ($_.PSObject.Properties.Name -contains 'Name') { [string]$_.Name } else { '' }; $collectedEdgeNames -notcontains $n })
+    if ($collectedEdgeServers.Count -gt 0) {
+        $edgeNamesHtml = ($collectedEdgeServers | ForEach-Object {
+                $n = if (($_.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $_.Exchange -and ($_.Exchange.PSObject.Properties.Name -contains 'Name')) { [string]$_.Exchange.Name }
+                elseif ($_.PSObject.Properties.Name -contains 'Server') { [string]$_.Server }
+                else { '' }
+                ConvertTo-EDCAHtmlEncoded -Value $n
+            }) -join ', '
+        $null = $noticesHtml.AppendLine('<div class="env-notice env-notice-info"><span class="env-notice-icon">&#10003;</span><div><strong>Edge Transport servers collected and assessed</strong>' + $collectedEdgeServers.Count + ' Edge Transport server(s) were collected and assessed with role-specific controls: ' + $edgeNamesHtml + '.</div></div>')
+    }
+    if ($uncollectedEdgeServers.Count -gt 0) {
+        $edgeNames = ($uncollectedEdgeServers | ForEach-Object { ConvertTo-EDCAHtmlEncoded -Value $(if ($_.PSObject.Properties.Name -contains 'Name') { $_.Name } else { '' }) }) -join ', '
+        $null = $noticesHtml.AppendLine('<div class="env-notice"><span class="env-notice-icon">&#9888;</span><div><strong>Edge Transport servers not collected</strong>The following Edge Transport server(s) were detected in the Exchange organisation but not collected. Re-run EDCA specifying these servers to assess Edge-specific controls: ' + $edgeNames + '.</div></div>')
     }
     $exchange2013Servers = @($CollectionData.Servers | Where-Object {
             ($_.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $_.Exchange -and
@@ -457,12 +555,23 @@ function New-EDCAHtmlReport {
         .score-card.active { outline: 2px solid #3b82f6; box-shadow: 0 4px 14px rgba(59,130,246,.35); }
         .donut-canvas { display: block; }
         .card-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; margin: 6px 0 0; color: var(--id-color); text-align: center; }
+        /* Trend chart card — same width as 2 gauge cards (2×152px + 16px gap) */
+        .trend-card { width: 320px; min-width: 320px; cursor: default; }
+        .trend-card:hover { transform: none; box-shadow: 0 4px 14px rgba(0,0,0,.08); }
+        .trend-canvas { display: block; }
         /* RAG icons */
         .rag-icon { font-size: 15px; flex-shrink: 0; }
         .rag-pass { color: #16a34a; }
         .rag-warn { color: #d97706; }
         .rag-fail { color: #dc2626; }
         .rag-skip { color: #94a3b8; }
+        /* Role badges */
+        .role-badge { display: inline-block; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 4px; vertical-align: middle; margin-left: 5px; letter-spacing: .04em; text-transform: uppercase; line-height: 16px; }
+        .role-edge { background: #dbeafe; color: #1d4ed8; }
+        body.dark .role-edge { background: #1e3a5f; color: #93c5fd; }
+        /* Info env-notice variant (Edge collected) */
+        .env-notice-info { border-left-color: #2563eb; background: #eff6ff; color: #1e40af; }
+        body.dark .env-notice-info { background: #1e3a5f; color: #93c5fd; border-left-color: #3b82f6; }
         /* Filters */
         .filters { display: flex; gap: 12px; flex-wrap: wrap; margin: 12px 0 16px; }
         select { padding: 8px 12px; border-radius: 8px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--fg); font-size: 14px; cursor: pointer; }
@@ -473,6 +582,16 @@ function New-EDCAHtmlReport {
         .clear-btn:hover { opacity: 0.85; }
         .clear-btn:focus-visible { outline: 2px solid #60a5fa; border-radius: 3px; }
         select:focus { outline: 2px solid #3b82f6; }
+        /* Multi-select dropdowns */
+        .ms-wrap { position: relative; display: inline-block; }
+        .ms-btn { padding: 8px 12px; border-radius: 8px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--fg); font-size: 14px; cursor: pointer; text-align: left; white-space: nowrap; min-width: 140px; }
+        .ms-btn::after { content: ' \25BE'; }
+        .ms-panel { display: none; position: absolute; top: calc(100% + 4px); left: 0; z-index: 200; background: var(--input-bg); border: 1px solid var(--input-border); border-radius: 8px; padding: 6px 0; min-width: 180px; max-height: 240px; overflow-y: auto; box-shadow: 0 6px 18px rgba(0,0,0,.15); }
+        .ms-wrap.open .ms-panel { display: block; }
+        .ms-item { display: flex; align-items: center; gap: 8px; padding: 6px 12px; cursor: pointer; font-size: 14px; white-space: nowrap; }
+        .ms-item:hover { background: var(--hover-bg); }
+        .ms-item input[type="checkbox"] { cursor: pointer; }
+        .ms-sep { border: none; border-top: 1px solid var(--td-border); margin: 4px 0; }
         /* Category groups */
         details.category-group { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; margin-bottom: 12px; overflow: hidden; }
         details.category-group > summary { cursor: pointer; list-style: none; padding: 12px 16px; display: flex; gap: 10px; align-items: center; font-weight: 700; user-select: none; }
@@ -511,6 +630,10 @@ function New-EDCAHtmlReport {
         td.evidence-cell { font-family: Consolas, 'Courier New', monospace; font-size: 12px; white-space: pre-wrap; word-break: break-all; }
         pre { margin: 8px 0 0; padding: 10px 14px; background: var(--pre-bg); border: 1px solid var(--pre-border); border-radius: 6px; overflow-x: auto; }
         pre code { font-family: Consolas, 'Courier New', monospace; font-size: 12px; white-space: pre; }
+        .pre-wrapper { position: relative; }
+        .copy-btn { position: absolute; top: 16px; right: 8px; padding: 3px 10px; font-size: 11px; font-family: inherit; background: var(--th-bg); border: 1px solid var(--pre-border); border-radius: 4px; cursor: pointer; color: var(--fg); opacity: 0.7; transition: opacity 0.15s; }
+        .copy-btn:hover { opacity: 1; }
+        .copy-btn.copied { color: #16a34a; border-color: #16a34a; opacity: 1; }
         .evidence-table tr.status-pass td    { background: var(--row-bg-p); }
         .evidence-table tr.status-fail td    { background: var(--row-bg-f); }
         .evidence-table tr.status-unknown td { background: var(--row-bg-u); }
@@ -547,6 +670,13 @@ function New-EDCAHtmlReport {
             details.category-group .finding-row { display: flex !important; box-shadow: none !important; transform: none !important; cursor: default !important; break-inside: avoid; }
             .score-card { box-shadow: none !important; cursor: default !important; }
             a[href]::after { content: none; }
+            .modal-data { display: block !important; margin: 2px 0 6px 0; border-left: 3px solid #cbd5e1; padding-left: 10px; }
+            .modal-data > * { display: none !important; }
+            .modal-data > .evidence-section { display: block !important; }
+            .evidence-section h3 { display: block !important; font-size: 12px; margin: 2px 0 4px; border-top: none; padding-top: 0; color: #334155; }
+            .evidence-table { font-size: 11px; width: 100%; border-collapse: collapse; }
+            .evidence-table th, .evidence-table td { padding: 4px 6px; border-bottom: 1px solid #e2e8f0; }
+            td.evidence-cell { white-space: pre-wrap; word-break: break-word; font-family: Consolas, 'Courier New', monospace; }
         }
     </style>
 </head>
@@ -554,10 +684,15 @@ function New-EDCAHtmlReport {
     <header>
         <div>
             <h1>EDCA: Exchange Deployment &amp; Compliance Assessment $($metadata.ToolVersion)</h1>
-            <p>Generated: $($metadata.CollectionTimestamp) | Executed by: $($metadata.ExecutedBy) | Author: <a href="https://eightwone.com" target="_blank" rel="noopener noreferrer" style="color:#93c5fd">Michel de Rooij</a></p>
+            <p><a href="https://github.com/michelderooij/EDCA" target="_blank" rel="noopener">Source</a> | Data collected: $collectedAtDisplay | Report generated: $reportGeneratedAtDisplay | Executed by: $($metadata.ExecutedBy)</p>
         </div>
         <div class="dark-toggle no-print">
             <button class="print-btn" onclick="window.print()" title="Print or save as PDF">&#128438;&nbsp;Print&nbsp;/&nbsp;PDF</button>
+            <span class="dark-toggle-label">Show skipped</span>
+            <label class="toggle-switch" title="Toggle show skipped controls">
+                <input type="checkbox" id="skipToggle" checked />
+                <span class="toggle-track"></span>
+            </label>
             <span class="dark-toggle-label">Dark mode</span>
             <label class="toggle-switch" title="Toggle dark mode">
                 <input type="checkbox" id="darkToggle" />
@@ -571,6 +706,7 @@ function New-EDCAHtmlReport {
             <h2>Framework Scoreboard</h2>
             <div class="score-grid">
                 $($scoreCards.ToString())
+                $trendCardHtml
             </div>
         </section>
 
@@ -581,28 +717,52 @@ function New-EDCAHtmlReport {
                     <input type="text" class="search-box" id="searchFilter" placeholder="Search by ID, title or description" aria-label="Search findings" />
                     <button class="clear-btn" id="searchClear" aria-label="Clear search" title="Clear search" style="display:none">&#x2715;</button>
                 </div>
-                <select id="statusFilter">
-                    <option value="All">All RAG States</option>
-                    <option value="Pass">&#10004; Passed</option>
-                    <option value="Fail">&#10006; Risk</option>
-                    <option value="Unknown">&#9888; Warning</option>
-                    <option value="Skipped">&#8856; Skipped</option>
-                </select>
-                <select id="frameworkFilter">
-                    <option value="All">All Frameworks</option>
-                    $($frameworkOptions.ToString())
-                </select>
-                <select id="categoryFilter">
-                    <option value="All">All Categories</option>
-                    <option value="Data Security">Data Security</option>
-                    <option value="Governance">Governance</option>
-                    <option value="Identity and Access Control">Identity and Access Control</option>
-                    <option value="Monitoring">Monitoring</option>
-                    <option value="Performance">Performance</option>
-                    <option value="Platform Security">Platform Security</option>
-                    <option value="Resilience">Resilience</option>
-                    <option value="Transport Security">Transport Security</option>
-                </select>
+                <div class="ms-wrap" id="statusFilter-wrap">
+                    <button class="ms-btn no-print" id="statusFilter-btn" type="button">All RAG States</button>
+                    <div class="ms-panel">
+                        <label class="ms-item"><input type="checkbox" value="__all__" checked> All RAG States</label>
+                        <hr class="ms-sep">
+                        <label class="ms-item"><input type="checkbox" value="Pass"> &#10004; Passed</label>
+                        <label class="ms-item"><input type="checkbox" value="Fail"> &#10006; Risk</label>
+                        <label class="ms-item"><input type="checkbox" value="Unknown"> &#9888; Warning</label>
+                        <label class="ms-item"><input type="checkbox" value="Skipped"> &#8856; Skipped</label>
+                    </div>
+                </div>
+                <div class="ms-wrap" id="frameworkFilter-wrap">
+                    <button class="ms-btn no-print" id="frameworkFilter-btn" type="button">All Frameworks</button>
+                    <div class="ms-panel">
+                        <label class="ms-item"><input type="checkbox" value="__all__" checked> All Frameworks</label>
+                        <hr class="ms-sep">
+                        $($frameworkCheckboxes.ToString())
+                    </div>
+                </div>
+                <div class="ms-wrap" id="categoryFilter-wrap">
+                    <button class="ms-btn no-print" id="categoryFilter-btn" type="button">All Categories</button>
+                    <div class="ms-panel">
+                        <label class="ms-item"><input type="checkbox" value="__all__" checked> All Categories</label>
+                        <hr class="ms-sep">
+                        <label class="ms-item"><input type="checkbox" value="Data Security"> Data Security</label>
+                        <label class="ms-item"><input type="checkbox" value="Governance"> Governance</label>
+                        <label class="ms-item"><input type="checkbox" value="Identity and Access Control"> Identity and Access Control</label>
+                        <label class="ms-item"><input type="checkbox" value="Monitoring"> Monitoring</label>
+                        <label class="ms-item"><input type="checkbox" value="Performance"> Performance</label>
+                        <label class="ms-item"><input type="checkbox" value="Platform Security"> Platform Security</label>
+                        <label class="ms-item"><input type="checkbox" value="Resilience"> Resilience</label>
+                        <label class="ms-item"><input type="checkbox" value="Transport Security"> Transport Security</label>
+                    </div>
+                </div>
+                <div class="ms-wrap" id="targetFilter-wrap">
+                    <button class="ms-btn no-print" id="targetFilter-btn" type="button">All Targets</button>
+                    <div class="ms-panel">
+                        <label class="ms-item"><input type="checkbox" value="__all__" checked> All Targets</label>
+                        <hr class="ms-sep">
+                        <label class="ms-item"><input type="checkbox" value="org"> Organisation</label>
+                        <label class="ms-item"><input type="checkbox" value="domain"> Domain Name</label>
+                        <label class="ms-item"><input type="checkbox" value="mailbox"> Mailbox Server</label>
+                        $(if ($collectedEdgeServers.Count -gt 0) { '<label class="ms-item"><input type="checkbox" value="edge"> Edge Transport Server</label>' })
+                        <label class="ms-item"><input type="checkbox" value="database"> Database</label>
+                    </div>
+                </div>
             </div>
             <div id="findingContainer">
                 $($groupedFindingRows.ToString())
@@ -619,6 +779,90 @@ function New-EDCAHtmlReport {
     </div>
 
     <script>
+        /* ── Multi-select helper functions ── */
+        function msGetValues(wrapId) {
+            var wrap = document.getElementById(wrapId);
+            if (!wrap) { return ['__all__']; }
+            var allCb = wrap.querySelector('input[value="__all__"]');
+            if (allCb && allCb.checked) { return ['__all__']; }
+            var checked = wrap.querySelectorAll('input[type="checkbox"]:checked');
+            var vals = [];
+            for (var i = 0; i < checked.length; i++) { vals.push(checked[i].value); }
+            return vals.length > 0 ? vals : ['__all__'];
+        }
+        function msSetSingle(wrapId, value) {
+            var wrap = document.getElementById(wrapId);
+            if (!wrap) { return; }
+            var allCb = wrap.querySelector('input[value="__all__"]');
+            var itemCbs = wrap.querySelectorAll('input[type="checkbox"]:not([value="__all__"])');
+            var isAll = (value === 'All' || value === '__all__' || !value);
+            if (allCb) { allCb.checked = isAll; }
+            for (var i = 0; i < itemCbs.length; i++) {
+                itemCbs[i].checked = (!isAll && itemCbs[i].value === value);
+            }
+            msUpdateBtn(wrapId);
+            wrap.dispatchEvent(new Event('ms-change'));
+        }
+        function msUpdateBtn(wrapId) {
+            var wrap = document.getElementById(wrapId);
+            if (!wrap) { return; }
+            var btn = wrap.querySelector('.ms-btn');
+            if (!btn) { return; }
+            var allCb = wrap.querySelector('input[value="__all__"]');
+            var allLabel = allCb ? allCb.parentElement.textContent.trim() : 'All';
+            if (allCb && allCb.checked) { btn.textContent = allLabel; return; }
+            var checked = wrap.querySelectorAll('input[type="checkbox"]:checked');
+            if (checked.length === 0) { btn.textContent = allLabel; return; }
+            if (checked.length === 1) { btn.textContent = checked[0].parentElement.textContent.trim(); return; }
+            btn.textContent = checked.length + ' selected';
+        }
+        /* ── Multi-select dropdown setup ── */
+        (function () {
+            var wrapIds = ['statusFilter-wrap', 'frameworkFilter-wrap', 'categoryFilter-wrap', 'targetFilter-wrap'];
+            for (var wi = 0; wi < wrapIds.length; wi++) {
+                (function (wrapId) {
+                    var wrap = document.getElementById(wrapId);
+                    if (!wrap) { return; }
+                    var btn = wrap.querySelector('.ms-btn');
+                    var allCb = wrap.querySelector('input[value="__all__"]');
+                    var itemCbs = wrap.querySelectorAll('input[type="checkbox"]:not([value="__all__"])');
+                    btn.addEventListener('click', function (e) {
+                        e.stopPropagation();
+                        /* close all other open wraps */
+                        var allWraps = document.querySelectorAll('.ms-wrap.open');
+                        for (var aw = 0; aw < allWraps.length; aw++) {
+                            if (allWraps[aw] !== wrap) { allWraps[aw].classList.remove('open'); }
+                        }
+                        wrap.classList.toggle('open');
+                    });
+                    document.addEventListener('click', function (e) {
+                        if (!wrap.contains(e.target)) { wrap.classList.remove('open'); }
+                    });
+                    if (allCb) {
+                        allCb.addEventListener('change', function () {
+                            if (allCb.checked) {
+                                for (var i = 0; i < itemCbs.length; i++) { itemCbs[i].checked = false; }
+                            }
+                            msUpdateBtn(wrapId);
+                            wrap.dispatchEvent(new Event('ms-change'));
+                        });
+                    }
+                    for (var j = 0; j < itemCbs.length; j++) {
+                        (function (cb) {
+                            cb.addEventListener('change', function () {
+                                if (allCb) { allCb.checked = false; }
+                                var anyChecked = false;
+                                for (var k = 0; k < itemCbs.length; k++) { if (itemCbs[k].checked) { anyChecked = true; break; } }
+                                if (!anyChecked && allCb) { allCb.checked = true; }
+                                msUpdateBtn(wrapId);
+                                wrap.dispatchEvent(new Event('ms-change'));
+                            });
+                        }(itemCbs[j]));
+                    }
+                }(wrapIds[wi]));
+            }
+        })();
+
         /* ── Doughnut charts (pure Canvas, no CDN) ── */
         (function () {
             var cards = document.querySelectorAll('.score-card');
@@ -679,6 +923,131 @@ function New-EDCAHtmlReport {
                     c2.parentElement.addEventListener('mouseleave', function () { tip.style.display = 'none'; });
                 }(canvas, pass, warn, fail, skip, label));
             }
+        })();
+
+        /* ── Compliance Trend stacked bar chart ── */
+        (function () {
+            var trendCard = document.querySelector('.trend-card');
+            if (!trendCard) { return; }
+            var canvas  = trendCard.querySelector('canvas.trend-canvas');
+            var labelEl = trendCard.querySelector('.card-label');
+            if (!canvas) { return; }
+            var raw = (trendCard.getAttribute('data-trend') || '[]').replace(/&quot;/g, '"');
+            var entries;
+            try { entries = JSON.parse(raw); } catch (e) { return; }
+            if (!entries || entries.length === 0) { return; }
+
+            var W = canvas.width, H = canvas.height;
+            var padL = 32, padR = 8, padT = 10, padB = 30;
+            var chartW = W - padL - padR;
+            var chartH = H - padT - padB;
+            var ctx    = canvas.getContext('2d');
+            var colors = { p: '#16a34a', w: '#d97706', f: '#dc2626', s: '#94a3b8' };
+            var order  = ['s', 'f', 'w', 'p'];
+            var currentEntries = [];
+            var n = 0, slotW = 0;
+
+            /* hover tooltip */
+            var tip = document.createElement('div');
+            tip.style.cssText = 'display:none;position:fixed;background:#0f172a;color:#f8fafc;font-size:12px;padding:6px 10px;border-radius:8px;pointer-events:none;white-space:nowrap;z-index:9999;line-height:1.6;';
+            document.body.appendChild(tip);
+
+            function drawChart(fw) {
+                var key = (fw && fw !== 'All' && fw !== '__all__') ? fw : 'All';
+                /* update card label to reflect active filter */
+                if (labelEl) {
+                    var lbl;
+                    if (!fw || fw === 'All' || fw === '__all__') {
+                        lbl = 'Total';
+                    } else {
+                        lbl = fw;
+                    }
+                    labelEl.textContent = lbl + ' Compliance Trend';
+                }
+                /* build currentEntries for the selected framework; fall back to All */
+                currentEntries = [];
+                for (var i = 0; i < entries.length; i++) {
+                    var e  = entries[i];
+                    var sc = e[key] || e['All'];
+                    if (!sc) { continue; }
+                    currentEntries.push({ d: e.d, p: sc.p || 0, w: sc.w || 0, f: sc.f || 0, s: sc.s || 0 });
+                }
+                n = currentEntries.length;
+                if (n === 0) { ctx.clearRect(0, 0, W, H); return; }
+                slotW = chartW / n;
+                /* derive Y max */
+                var maxTotal = 0;
+                for (var j = 0; j < n; j++) {
+                    var ce = currentEntries[j];
+                    var t  = (ce.p || 0) + (ce.w || 0) + (ce.f || 0) + (ce.s || 0);
+                    if (t > maxTotal) { maxTotal = t; }
+                }
+                var yMax = Math.ceil(maxTotal / 10) * 10 || 10;
+                var textColor = getComputedStyle(document.documentElement).getPropertyValue('--donut-text').trim() || '#64748b';
+                ctx.clearRect(0, 0, W, H);
+                ctx.font = '10px Segoe UI, Arial, sans-serif';
+                /* Y-axis grid lines + labels */
+                var steps = 4;
+                for (var s = 0; s <= steps; s++) {
+                    var yVal = Math.round(yMax * s / steps);
+                    var yPx  = padT + chartH - Math.round((yVal / yMax) * chartH);
+                    ctx.beginPath();
+                    ctx.moveTo(padL, yPx);
+                    ctx.lineTo(padL + chartW, yPx);
+                    ctx.strokeStyle = 'rgba(148,163,184,.25)';
+                    ctx.stroke();
+                    ctx.fillStyle = textColor;
+                    ctx.textAlign = 'right';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(yVal, padL - 4, yPx);
+                }
+                /* bars */
+                var barW = Math.min(Math.floor(slotW) - 4, 40);
+                for (var bi = 0; bi < n; bi++) {
+                    var ce2   = currentEntries[bi];
+                    var xL    = padL + Math.round(bi * slotW + (slotW - barW) / 2);
+                    var yBase = padT + chartH;
+                    var stack = 0;
+                    for (var oi = 0; oi < order.length; oi++) {
+                        var ok   = order[oi];
+                        var val  = ce2[ok] || 0;
+                        if (val <= 0) { continue; }
+                        var barH = Math.round((val / yMax) * chartH);
+                        ctx.fillStyle = colors[ok];
+                        ctx.fillRect(xL, yBase - stack - barH, barW, barH);
+                        stack += barH;
+                    }
+                    /* x-axis date label — omitted */
+                }
+            }
+
+            var fwWrap = document.getElementById('frameworkFilter-wrap');
+            drawChart('All');
+            if (fwWrap) {
+                fwWrap.addEventListener('ms-change', function () {
+                    var vals = msGetValues('frameworkFilter-wrap');
+                    drawChart(vals[0] === '__all__' || vals.length > 1 ? 'All' : vals[0]);
+                });
+            }
+
+            /* mouse hover interaction */
+            canvas.addEventListener('mousemove', function (ev) {
+                if (n === 0) { return; }
+                var rect = canvas.getBoundingClientRect();
+                var mx   = ev.clientX - rect.left;
+                var idx  = Math.floor((mx - padL) / slotW);
+                if (idx < 0 || idx >= n) { tip.style.display = 'none'; return; }
+                var ce = currentEntries[idx];
+                tip.innerHTML = '<strong>' + (ce.d || '') + '</strong><br>' +
+                    '&#10004;&nbsp;Pass:&nbsp;' + (ce.p || 0) + '<br>' +
+                    '&#9888;&nbsp;Unknown:&nbsp;' + (ce.w || 0) + '<br>' +
+                    '&#10006;&nbsp;Fail:&nbsp;' + (ce.f || 0) + '<br>' +
+                    '&#8856;&nbsp;Skip:&nbsp;' + (ce.s || 0);
+                tip.style.display = 'block';
+                tip.style.left = (ev.clientX + 14) + 'px';
+                tip.style.top  = (ev.clientY - 36) + 'px';
+            });
+            canvas.addEventListener('mouseleave', function () { tip.style.display = 'none'; });
         })();
 
         /* ── Modal ── */
@@ -768,11 +1137,19 @@ function New-EDCAHtmlReport {
         /* ── Score card click-to-filter ── */
         (function () {
             var cards = document.querySelectorAll('.score-card');
-            var frameworkFilter = document.getElementById('frameworkFilter');
+            var fwWrap = document.getElementById('frameworkFilter-wrap');
 
-            function setActiveCard(value) {
+            function updateActiveCards() {
+                if (!fwWrap) { return; }
+                var vals = msGetValues('frameworkFilter-wrap');
+                var isAll = (vals[0] === '__all__');
                 for (var i = 0; i < cards.length; i++) {
-                    cards[i].classList.toggle('active', cards[i].getAttribute('data-label') === value);
+                    var cardLabel = cards[i].getAttribute('data-label');
+                    if (isAll) {
+                        cards[i].classList.toggle('active', cardLabel === 'All');
+                    } else {
+                        cards[i].classList.toggle('active', vals.indexOf(cardLabel) >= 0);
+                    }
                 }
             }
 
@@ -782,8 +1159,30 @@ function New-EDCAHtmlReport {
                     card.setAttribute('tabindex', '0');
                     card.addEventListener('click', function () {
                         var lbl = card.getAttribute('data-label') || 'All';
-                        frameworkFilter.value = lbl;
-                        frameworkFilter.dispatchEvent(new Event('change'));
+                        if (!fwWrap) { return; }
+                        if (lbl === 'All') {
+                            /* Total card — reset to All */
+                            msSetSingle('frameworkFilter-wrap', 'All');
+                        } else {
+                            /* Framework card — toggle this framework on/off */
+                            var allCb  = fwWrap.querySelector('input[value="__all__"]');
+                            var cb     = fwWrap.querySelector('input[value="' + lbl + '"]');
+                            if (!cb) { return; }
+                            if (allCb && allCb.checked) {
+                                /* coming from All: switch to just this framework */
+                                allCb.checked = false;
+                                cb.checked = true;
+                            } else {
+                                cb.checked = !cb.checked;
+                                /* if nothing remains checked, revert to All */
+                                var itemCbs = fwWrap.querySelectorAll('input[type="checkbox"]:not([value="__all__"])');
+                                var anyChecked = false;
+                                for (var k = 0; k < itemCbs.length; k++) { if (itemCbs[k].checked) { anyChecked = true; break; } }
+                                if (!anyChecked && allCb) { allCb.checked = true; }
+                            }
+                            msUpdateBtn('frameworkFilter-wrap');
+                            fwWrap.dispatchEvent(new Event('ms-change'));
+                        }
                     });
                     card.addEventListener('keydown', function (e) {
                         if (e.key === 'Enter' || e.key === ' ') { card.click(); e.preventDefault(); }
@@ -791,19 +1190,17 @@ function New-EDCAHtmlReport {
                 }(cards[ci]));
             }
 
-            frameworkFilter.addEventListener('change', function () {
-                setActiveCard(frameworkFilter.value);
-            });
+            if (fwWrap) {
+                fwWrap.addEventListener('ms-change', function () { updateActiveCards(); });
+            }
 
-            setActiveCard('All');
+            updateActiveCards();
         })();
 
         /* ── Filters ── */
         (function () {
-            var statusFilter    = document.getElementById('statusFilter');
-            var frameworkFilter = document.getElementById('frameworkFilter');
-            var categoryFilter  = document.getElementById('categoryFilter');
             var searchFilter    = document.getElementById('searchFilter');
+            var skipToggle      = document.getElementById('skipToggle');
             var groups = document.querySelectorAll('details.category-group');
 
             function getAggStatus(statuses) {
@@ -826,34 +1223,63 @@ function New-EDCAHtmlReport {
                 return '<span class="rag-icon rag-warn" title="Warning">&#9888;</span>';
             }
             function applyFilters() {
+                var hideSkipped = skipToggle ? !skipToggle.checked : false;
                 var searchText = searchFilter ? searchFilter.value.toLowerCase().trim() : '';
                 for (var g = 0; g < groups.length; g++) {
                     var group = groups[g];
                     var groupCategory = group.getAttribute('data-category') || '';
-                    var categoryMatch = categoryFilter.value === 'All' || groupCategory === categoryFilter.value;
+                    var selCategories = msGetValues('categoryFilter-wrap');
+                    var categoryMatch = selCategories[0] === '__all__' || selCategories.indexOf(groupCategory) >= 0;
                     var rows = group.querySelectorAll('.finding-row');
                     var visibleCount = 0;
                     var visibleStatuses = [];
 
                     for (var i = 0; i < rows.length; i++) {
                         var row = rows[i];
-                        var statusMatch    = statusFilter.value === 'All'   || row.getAttribute('data-status') === statusFilter.value;
+                        var rowStatus = row.getAttribute('data-status') || '';
+                        if (hideSkipped && rowStatus === 'Skipped') {
+                            row.style.display = 'none';
+                            continue;
+                        }
+                        var selStatuses = msGetValues('statusFilter-wrap');
+                        var statusMatch = selStatuses[0] === '__all__' || selStatuses.indexOf(rowStatus) >= 0;
                         var frameworkText  = row.getAttribute('data-framework') || '';
-                        var frameworkMatch = frameworkFilter.value === 'All' || frameworkText.indexOf(frameworkFilter.value) >= 0;
+                        var selFrameworks = msGetValues('frameworkFilter-wrap');
+                        var frameworkMatch = selFrameworks[0] === '__all__' || (function () {
+                            for (var fx = 0; fx < selFrameworks.length; fx++) {
+                                if (frameworkText.indexOf(selFrameworks[fx]) >= 0) { return true; }
+                            }
+                            return false;
+                        })();
                         var rowId    = (row.getAttribute('data-id')    || '').toLowerCase();
                         var rowTitle = (row.getAttribute('data-title') || '').toLowerCase();
                         var rowDesc  = (row.getAttribute('data-description') || '').toLowerCase();
                         var searchMatch = searchText === '' || rowId.indexOf(searchText) >= 0 || rowTitle.indexOf(searchText) >= 0 || rowDesc.indexOf(searchText) >= 0;
-                        var rowVisible = statusMatch && frameworkMatch && categoryMatch && searchMatch;
+                        var rowSubject = row.getAttribute('data-subject') || '';
+                        var rowRoles   = row.getAttribute('data-roles')   || '';
+                        var tVals = msGetValues('targetFilter-wrap');
+                        var targetMatch = tVals[0] === '__all__' || (function () {
+                            for (var ti = 0; ti < tVals.length; ti++) {
+                                var tv = tVals[ti];
+                                if ((tv === 'org'      && rowSubject === 'Organization') ||
+                                    (tv === 'domain'   && rowSubject === 'Domain') ||
+                                    (tv === 'mailbox'  && rowRoles.indexOf('Mailbox') >= 0) ||
+                                    (tv === 'edge'     && rowRoles.indexOf('Edge') >= 0) ||
+                                    (tv === 'database' && rowSubject === 'Database')) { return true; }
+                            }
+                            return false;
+                        })();
+                        var rowVisible = statusMatch && frameworkMatch && categoryMatch && searchMatch && targetMatch;
                         row.style.display = rowVisible ? '' : 'none';
                         if (rowVisible) {
                             visibleCount++;
-                            visibleStatuses.push(row.getAttribute('data-status') || 'Unknown');
+                            visibleStatuses.push(rowStatus || 'Unknown');
                         }
                     }
 
                     var countEl = group.querySelector('.category-count');
-                    if (countEl) { countEl.textContent = '(' + visibleCount + ' controls)'; }
+                    var nonSkippedCount = visibleStatuses.filter(function(s) { return s !== 'Skipped'; }).length;
+                    if (countEl) { countEl.textContent = '(' + nonSkippedCount + ' controls)'; }
                     group.style.display = (categoryMatch && visibleCount > 0) ? '' : 'none';
 
                     if (visibleCount > 0) {
@@ -874,10 +1300,25 @@ function New-EDCAHtmlReport {
                 }
             }
 
-            statusFilter.addEventListener('change', applyFilters);
-            frameworkFilter.addEventListener('change', applyFilters);
-            categoryFilter.addEventListener('change', applyFilters);
+            var sfw = document.getElementById('statusFilter-wrap');
+            var ffw = document.getElementById('frameworkFilter-wrap');
+            var cfw = document.getElementById('categoryFilter-wrap');
+            var tfw = document.getElementById('targetFilter-wrap');
+            if (sfw) { sfw.addEventListener('ms-change', applyFilters); }
+            if (ffw) { ffw.addEventListener('ms-change', applyFilters); }
+            if (cfw) { cfw.addEventListener('ms-change', applyFilters); }
+            if (tfw) { tfw.addEventListener('ms-change', applyFilters); }
             if (searchFilter) { searchFilter.addEventListener('input', applyFilters); }
+            if (skipToggle) {
+                try {
+                    var savedSkip = localStorage.getItem('edca-show-skipped');
+                    if (savedSkip === '0') { skipToggle.checked = false; }
+                } catch (e) {}
+                skipToggle.addEventListener('change', function () {
+                    try { localStorage.setItem('edca-show-skipped', skipToggle.checked ? '1' : '0'); } catch (e) {}
+                    applyFilters();
+                });
+            }
             var clearBtn = document.getElementById('searchClear');
             if (searchFilter && clearBtn) {
                 searchFilter.addEventListener('input', function() { clearBtn.style.display = searchFilter.value ? '' : 'none'; });
@@ -899,6 +1340,11 @@ function New-EDCAHtmlReport {
                 rows[j].setAttribute('data-print-orig', rows[j].style.display);
                 if (rows[j].style.display !== 'none') {
                     rows[j].style.display = 'flex';
+                    var modalId = rows[j].getAttribute('data-modal');
+                    if (modalId) {
+                        var modalEl = document.getElementById(modalId);
+                        if (modalEl) { modalEl.removeAttribute('hidden'); }
+                    }
                 }
             }
         });
@@ -911,14 +1357,50 @@ function New-EDCAHtmlReport {
             for (var j = 0; j < rows.length; j++) {
                 rows[j].style.display = rows[j].getAttribute('data-print-orig') || '';
             }
+            var modals = document.querySelectorAll('.modal-data');
+            for (var k = 0; k < modals.length; k++) { modals[k].setAttribute('hidden', ''); }
             var groups = document.querySelectorAll('details.category-group');
-            for (var k = 0; k < groups.length; k++) {
-                var visRows = groups[k].querySelectorAll('.finding-row');
+            for (var m = 0; m < groups.length; m++) {
+                var visRows = groups[m].querySelectorAll('.finding-row');
                 var hasVisible = false;
-                for (var m = 0; m < visRows.length; m++) {
-                    if (visRows[m].style.display !== 'none') { hasVisible = true; break; }
+                for (var n = 0; n < visRows.length; n++) {
+                    if (visRows[n].style.display !== 'none') { hasVisible = true; break; }
                 }
-                groups[k].style.display = hasVisible ? '' : 'none';
+                groups[m].style.display = hasVisible ? '' : 'none';
+            }
+        });
+        /* ── Copy-to-clipboard for remediation script blocks ── */
+        document.addEventListener('click', function (e) {
+            var btn = e.target.closest ? e.target.closest('.copy-btn') : (e.target.className === 'copy-btn' ? e.target : null);
+            if (!btn) { return; }
+            var code = btn.parentElement.querySelector('code');
+            if (!code) { return; }
+            var text = code.innerText || code.textContent || '';
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(function () {
+                    btn.textContent = 'Copied!';
+                    btn.classList.add('copied');
+                    setTimeout(function () { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
+                }, function () {
+                    btn.textContent = 'Failed';
+                    setTimeout(function () { btn.textContent = 'Copy'; }, 2000);
+                });
+            } else {
+                try {
+                    var ta = document.createElement('textarea');
+                    ta.value = text;
+                    ta.style.position = 'fixed'; ta.style.opacity = '0';
+                    document.body.appendChild(ta);
+                    ta.focus(); ta.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(ta);
+                    btn.textContent = 'Copied!';
+                    btn.classList.add('copied');
+                    setTimeout(function () { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
+                } catch (ex) {
+                    btn.textContent = 'Failed';
+                    setTimeout(function () { btn.textContent = 'Copy'; }, 2000);
+                }
             }
         });
     </script>

@@ -1,0 +1,33 @@
+{
+  "id": "EDCA-GOV-005",
+  "title": "Mailbox database issue-warning quota is configured",
+  "description": "The IssueWarningQuota property of each mailbox database SHOULD be set to a specific value rather than Unlimited. Configuring a warning threshold ensures users are notified before their mailbox reaches capacity, reducing the risk of mail delivery failures.",
+  "verify": true,
+  "subject": "Database",
+  "category": "Governance",
+  "severity": "Low",
+  "severityWeight": 3,
+  "frameworks": [
+    "Best Practice",
+    "CIS"
+  ],
+  "references": [
+    {
+      "name": "CIS 2.1.1 (L1): Ensure Mailbox quotas Issue warning at is set",
+      "url": "https://www.cisecurity.org/benchmark/microsoft_exchange_server"
+    },
+    {
+      "name": "Configure storage quotas for a mailbox in Exchange Server",
+      "url": "https://learn.microsoft.com/exchange/recipients/user-mailboxes/storage-quotas"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Set IssueWarningQuota on each mailbox database to a defined quota value.",
+    "scriptTemplate": "# Set issue-warning quota on a specific mailbox database (adjust name and size as needed).\n# To target a specific database: replace 'DatabaseName' with the actual database name.\nSet-MailboxDatabase -Identity 'DatabaseName' -IssueWarningQuota 1.9GB -UseDatabaseQuotaDefaults $true"
+  },
+  "considerations": "The appropriate quota size depends on mailbox storage capacity. Ensure that the configured value aligns with your organisation's mailbox retention and storage policies.",
+  "roles": [
+    "Mailbox"
+  ]
+}

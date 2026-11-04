@@ -1,0 +1,43 @@
+{
+  "id": "EDCA-TLS-041",
+  "title": "SMTP banner must not reveal server version details",
+  "description": "All Receive connectors on both Mailbox and Edge Transport servers MUST present a generic SMTP banner that does not disclose server identity, version, or operating system information. The default Exchange banner includes the server hostname, enabling attackers to fingerprint the software version and target known vulnerabilities. Internet-facing connectors are identified by PermissionGroups containing AnonymousUsers and AuthMechanism of Tls or None. An empty banner causes Exchange to emit the default identity-revealing greeting and is therefore treated as non-compliant.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Transport Security",
+  "severity": "Medium",
+  "severityWeight": 6,
+  "frameworks": [
+    "Best Practice",
+    "DISA",
+    "BSI"
+  ],
+  "references": [
+    {
+      "name": "DISA STIG EX19-ED-000119: The Exchange SMTP automated banner response must not reveal server details (V-259638)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_edge_server/2024-12-06/finding/V-259638"
+    },
+    {
+      "name": "DISA STIG EX19-MB-000232: The Exchange SMTP automated banner response must not reveal server details (V-259707)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259707"
+    },
+    {
+      "name": "Set-ReceiveConnector cmdlet",
+      "url": "https://learn.microsoft.com/powershell/module/exchange/set-receiveconnector"
+    },
+    {
+      "name": "BSI APP.5.2.A9 — Sichere Konfiguration von Exchange-Servern",
+      "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/06_APP_Anwendungen/APP_5_2_Microsoft_Exchange_und_Outlook_Edition_2023.pdf?__blob=publicationFile"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Set a generic SMTP banner on all internet-facing Receive connectors on the server to avoid disclosing server details. Internet-facing connectors are identified by PermissionGroups containing AnonymousUsers and AuthMechanism of Tls or None. The banner must begin with '220' per RFC 5321. A value such as '220 Ready.' reveals no version, hostname, or product information. An empty banner results in Exchange using the default identity-revealing greeting and must be replaced.",
+    "scriptTemplate": "# Set a non-revealing SMTP banner on internet-facing Receive connectors of this server.\n# Internet-facing connectors: PermissionGroups includes AnonymousUsers AND AuthMechanism includes Tls or is None.\n# Adjust the banner text to match your organisation's policy; it must start with '220'.\n$serverName = $env:COMPUTERNAME\n$allConnectors = Get-ReceiveConnector -Server $serverName\n$internetFacing = @($allConnectors | Where-Object {\n    ([string]$_.PermissionGroups -match '\\bAnonymousUsers\\b') -and\n    ([string]$_.AuthMechanism -match '\\bTls\\b' -or [string]$_.AuthMechanism -eq 'None')\n})\nif ($internetFacing.Count -eq 0) {\n    Write-Warning \"No internet-facing Receive connectors found on $serverName.\"\n} else {\n    # Diagnose: show current banners\n    $internetFacing | Select-Object Identity, Banner\n    # Fix: set a generic banner on each connector with an empty or revealing banner\n    foreach ($connector in $internetFacing) {\n        Set-ReceiveConnector -Identity $connector.Identity -Banner '220 Ready.'\n        Write-Host \"Banner updated on $($connector.Identity).\"\n    }\n}"
+  },
+  "considerations": "Changing the SMTP banner is low-risk with no impact on mail delivery. The '220' status code is required by RFC 5321; the greeting text after it is arbitrary. Ensure the banner starts with '220 ' to remain RFC-compliant. An empty Banner field causes Exchange to fall back to the default identity-revealing greeting, so always set an explicit value. Some monitoring solutions parse SMTP banners for version tracking — update them accordingly.",
+  "roles": [
+    "Mailbox",
+    "Edge"
+  ]
+}

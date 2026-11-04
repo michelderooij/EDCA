@@ -1,0 +1,33 @@
+{
+  "id": "EDCA-TLS-042",
+  "title": "Edge internet-facing Send connectors route via a Smart Host",
+  "description": "Internet-facing Send connectors on the Edge Transport server MUST route mail through an approved Smart Host rather than resolving recipients directly via DNS MX. Direct DNS-based delivery bypasses gateway filtering, egress controls, and data-loss-prevention inspection.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Transport Security",
+  "severity": "Medium",
+  "severityWeight": 6,
+  "frameworks": [
+    "Best Practice",
+    "DISA"
+  ],
+  "references": [
+    {
+      "name": "Microsoft — Send connectors",
+      "url": "https://learn.microsoft.com/exchange/mail-flow/connectors/send-connectors"
+    },
+    {
+      "name": "DISA STIG EX19-ED-000057: The Exchange Outbound Connection must use a Smart Host (V-259593)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_edge_server/2024-12-06/finding/V-259593"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Configure Send connectors to route via an approved Smart Host: Set-SendConnector -Identity <name> -SmartHosts <FQDN-or-IP> -SmartHostAuthMechanism None.",
+    "scriptTemplate": "Get-SendConnector | Select-Object Identity, SmartHosts, DNSRoutingEnabled, SmartHostAuthMechanism"
+  },
+  "considerations": "Using a Smart Host adds a single point of egress that can be monitored, filtered, and rate-limited. Ensure the Smart Host is highly available; a misconfigured or unavailable Smart Host will halt all outbound mail flow from the Edge server.",
+  "roles": [
+    "Edge"
+  ]
+}

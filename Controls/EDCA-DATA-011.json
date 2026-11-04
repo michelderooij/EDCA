@@ -1,0 +1,53 @@
+{
+  "id": "EDCA-DATA-011",
+  "title": "Weak Schannel ciphers (NULL, DES, RC4, Triple-DES) are explicitly disabled",
+  "description": "Weak SCHANNEL ciphers - NULL, DES 56/56, RC4 (all variants), and Triple DES 168 - MUST be disabled in the Windows registry. These ciphers offer inadequate confidentiality or integrity protection. NULL provides no encryption; DES and RC4 are cryptographically broken; Triple DES is vulnerable to SWEET32 and other attacks.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Data Security",
+  "severity": "High",
+  "severityWeight": 8,
+  "frameworks": [
+    "Best Practice",
+    "NIS2",
+    "ANSSI",
+    "BSI",
+    "ISM"
+  ],
+  "references": [
+    {
+      "name": "NCSC TLS-Richtlijnen 2025 §3.3.4 - Bulkversleuteling",
+      "url": "https://www.ncsc.nl/transport-layer-security/ICT-beveiligingsrichtlijnen-voor-TLS"
+    },
+    {
+      "name": "Microsoft - How to restrict the use of certain cryptographic algorithms in Schannel",
+      "url": "https://learn.microsoft.com/en-us/troubleshoot/windows-server/windows-security/restrict-cryptographic-algorithms-protocols-schannel"
+    },
+    {
+      "name": "ENISA / NIS2 Directive (EU) 2022/2555 - Article 21(2)(h): cryptography and encryption policies - Section 9, 6.7, 6.3, 6.6",
+      "url": "https://eur-lex.europa.eu/eli/dir/2022/2555/oj"
+    },
+    {
+      "name": "ANSSI - Recommandations de sécurité relatives à TLS (v1.2, 2020)",
+      "url": "https://messervices.cyber.gouv.fr/guides/recommandations-de-securite-relatives-tls"
+    },
+    {
+      "name": "BSI APP.5.2.A11 — Absicherung der Kommunikation zwischen Exchange-Systemen",
+      "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/06_APP_Anwendungen/APP_5_2_Microsoft_Exchange_und_Outlook_Edition_2023.pdf?__blob=publicationFile"
+    },
+    {
+      "name": "ISM: Guidelines for Cryptography (ISM-0471)",
+      "url": "https://www.cyber.gov.au/resources-business-and-government/essential-cyber-security/ism/cyber-security-guidelines/guidelines-for-cryptography"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Explicitly disable each weak cipher by setting the DWORD registry value Enabled=0 under the corresponding SCHANNEL\\Ciphers subkey. A system restart is required for the changes to take effect.",
+    "scriptTemplate": "# Disable weak SCHANNEL ciphers (NULL, DES, RC4 variants, Triple DES).\n# Run on each Exchange / Windows server. Requires a restart to take effect.\n\n$ciphers = @(\n    'NULL',\n    'DES 56/56',\n    'RC4 40/128',\n    'RC4 56/128',\n    'RC4 64/128',\n    'RC4 128/128',\n    'Triple DES 168'\n)\n\nforeach ($cipher in $ciphers) {\n    $path = \"HKLM:\\SYSTEM\\CurrentControlSet\\Control\\SecurityProviders\\SCHANNEL\\Ciphers\\$cipher\"\n    if (-not (Test-Path -Path $path)) {\n        New-Item -Path $path -Force | Out-Null\n    }\n    Set-ItemProperty -Path $path -Name 'Enabled' -Type DWord -Value 0\n    Write-Host \"Disabled: $cipher\"\n}\n\nWrite-Host 'Done. Restart the server for the changes to take effect.'"
+  },
+  "considerations": "Disabling weak Schannel ciphers (NULL, DES, RC4, Triple-DES) affects all TLS-dependent applications on the server, not just Exchange. Legacy monitoring agents, SMTP relay partners, or backup agents that only support RC4 or Triple-DES will fail to connect after this change. Audit all TLS consumers before applying. Monitor for connectivity failures after enforcement.",
+  "roles": [
+    "Mailbox",
+    "Edge"
+  ]
+}

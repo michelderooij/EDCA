@@ -1,0 +1,28 @@
+{
+  "id": "EDCA-SEC-005",
+  "title": "AD site count baseline",
+  "description": "Total AD site count MUST be below Exchange performance warning thresholds: >= 750 sites is a warning, >= 1000 sites is a critical performance risk that degrades Exchange directory service lookups.",
+  "verify": false,
+  "subject": "Organization",
+  "category": "Platform Security",
+  "severity": "Low",
+  "severityWeight": 4,
+  "frameworks": [
+    "Best Practice"
+  ],
+  "references": [
+    {
+      "name": "CSS ADSiteCount",
+      "url": "https://microsoft.github.io/CSS-Exchange/Diagnostics/HealthChecker/ADSiteCount/"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Reduce the number of AD sites. As a workaround, increase the topology cache lifetime to 24 hours by changing ExchangeTopologyCacheLifetime to 1.00:00:00,00:20:00 in %ExchangeInstallPath%\\Bin\\Microsoft.Exchange.Directory.TopologyService.exe.config.",
+    "scriptTemplate": "# Diagnose: List all AD sites visible in the current forest\n$forest = [System.DirectoryServices.ActiveDirectory.Forest]::GetCurrentForest()\n\"Total AD sites: $(($forest.Sites | Measure-Object).Count)\"\n$forest.Sites | Select-Object Name | Sort-Object Name"
+  },
+  "considerations": "Reducing the number of AD sites requires Active Directory topology changes that must be coordinated with the Active Directory team. Unnecessary sites may remain without functional impact but add administrative overhead.",
+  "roles": [
+    "Mailbox"
+  ]
+}

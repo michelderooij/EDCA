@@ -1,3 +1,6 @@
+# Script:  Collection.ps1
+# Synopsis: Part of EDCA (Exchange Deployment & Compliance Assessment)
+#           https://github.com/michelderooij/EDCA
 # Author:  Michel de Rooij
 # Website: https://eightwone.com
 
@@ -31,7 +34,7 @@ function Get-EDCARemoteTlsState {
         $tls13CipherSuiteAvailable = $null
         if ($null -eq $result.Tls13 -and (Get-Command -Name Get-TlsCipherSuite -ErrorAction SilentlyContinue)) {
             try {
-                $tls13Suites = @(Get-TlsCipherSuite -ErrorAction SilentlyContinue | Where-Object { [string]$_.Protocol -eq 'TLS 1.3' })
+                $tls13Suites = @(Get-TlsCipherSuite -ErrorAction SilentlyContinue | Where-Object { ($_.PSObject.Properties.Name -contains 'Protocol') -and [string]$_.Protocol -eq 'TLS 1.3' })
                 $tls13CipherSuiteAvailable = ($tls13Suites.Count -gt 0)
             }
             catch {
@@ -238,6 +241,9 @@ function Get-EDCAExchangeServerInfo {
             Edition                                  = $null
             ProductLine                              = 'Unknown'
             IsExchangeServer                         = $false
+            IsEdge                                   = $false
+            ServerRole                               = 'Unknown'
+            EdgeData                                 = $null
             ExtendedProtectionStatus                 = @()
             OutlookAnywhereSSLOffloading             = @()
             AdminAuditLogEnabled                     = $null
@@ -491,7 +497,7 @@ function Get-EDCAExchangeServerInfo {
                         $exchangeInfo.AuditLogPath = [string]$audit.AdminAuditLogPath
                         try {
                             $auditLogAcl = Get-Acl -Path $exchangeInfo.AuditLogPath -ErrorAction Stop
-                            $exchangeInfo.AuditLogPathAcl = @($auditLogAcl.Access | Where-Object { $_.PSObject.Properties.Name -contains 'IdentityReference' } | ForEach-Object {
+                            $exchangeInfo.AuditLogPathAcl = @($auditLogAcl.Access | ForEach-Object {
                                     [pscustomobject]@{
                                         IdentityReference = [string]$_.IdentityReference
                                         FileSystemRights  = [string]$_.FileSystemRights
@@ -543,10 +549,14 @@ function Get-EDCAExchangeServerInfo {
                     $connectors = @(Get-ReceiveConnector -Server $env:COMPUTERNAME -ErrorAction Stop)
                     foreach ($connector in $connectors) {
                         $exchangeInfo.ReceiveConnectors += [pscustomobject]@{
-                            Identity            = [string]$connector.Identity
-                            PermissionGroups    = [string]$connector.PermissionGroups
-                            AuthMechanism       = [string]$connector.AuthMechanism
-                            RemoteIPRangesCount = @($connector.RemoteIPRanges).Count
+                            Identity                 = [string]$connector.Identity
+                            PermissionGroups         = [string]$connector.PermissionGroups
+                            AuthMechanism            = [string]$connector.AuthMechanism
+                            RemoteIPRangesCount      = @($connector.RemoteIPRanges).Count
+                            Enabled                  = if ($connector.PSObject.Properties.Name -contains 'Enabled') { [bool]$connector.Enabled } else { $null }
+                            TransportRole            = if ($connector.PSObject.Properties.Name -contains 'TransportRole') { [string]$connector.TransportRole } else { $null }
+                            TlsDomainCapabilities    = if ($connector.PSObject.Properties.Name -contains 'TlsDomainCapabilities') { [string]$connector.TlsDomainCapabilities } else { $null }
+                            CloudServicesMailEnabled = if ($connector.PSObject.Properties.Name -contains 'CloudServicesMailEnabled') { [bool]$connector.CloudServicesMailEnabled } else { $null }
                         }
                     }
                 }
@@ -872,8 +882,9 @@ function Get-EDCAExchangeServerInfo {
                     }
 
                     $maxPerDomainOutboundConnections = $null
-                    if ($transportService.PSObject.Properties.Name -contains 'MaxPerDomainOutboundConnections') {
-                        $maxPerDomainOutboundConnections = [int]$transportService.MaxPerDomainOutboundConnections
+                    if ($transportService.PSObject.Properties.Name -contains 'MaxPerDomainOutboundConnections' -and $null -ne $transportService.MaxPerDomainOutboundConnections) {
+                        $mpdocStr = [string]$transportService.MaxPerDomainOutboundConnections
+                        if ($mpdocStr -ne 'Unlimited') { try { $maxPerDomainOutboundConnections = [int]$mpdocStr } catch {} } else { $maxPerDomainOutboundConnections = -1 }
                     }
 
                     $messageRetryIntervalMinutes = $null
@@ -1070,39 +1081,94 @@ function Get-EDCAExchangeServerInfo {
     return Invoke-EDCAServerCommand -Server $Server -ScriptBlock $scriptBlock
 }
 
-function Resolve-EDCADnsRecord {
+function Resolve-DnsNamePlus {
+    # Drop-in wrapper around Resolve-DnsName that adds support for record types not
+    # included in the Windows RecordType enum (e.g. TLSA) by falling back to DoH.
+    # For supported types the system DNS resolver is used transparently.
+    # For unsupported types a DNS-over-HTTPS query is sent to -Server (default: 1.1.1.1).
+    # Returns DNS record objects directly, matching Resolve-DnsName output format.
+    # Throws on resolution failure, consistent with Resolve-DnsName -ErrorAction Stop behavior.
+    # Throws CommandNotFoundException when Resolve-DnsName is unavailable (supported types only).
     [CmdletBinding()]
     param(
         [Parameter(Mandatory = $true)]
         [string]$Name,
         [Parameter(Mandatory = $true)]
-        [string]$Type
+        [string]$Type,
+        [string]$Server = '1.1.1.1'
     )
 
-    if (-not (Get-Command -Name Resolve-DnsName -ErrorAction SilentlyContinue)) {
-        return [pscustomobject]@{
-            ResolverAvailable = $false
-            Success           = $false
-            Records           = @()
-            Error             = 'Resolve-DnsName is not available on this host.'
-        }
-    }
-
-    try {
-        $records = @(Resolve-DnsName -Name $Name -Type $Type -ErrorAction Stop)
-        return [pscustomobject]@{
-            ResolverAvailable = $true
-            Success           = $true
-            Records           = $records
-            Error             = ''
-        }
+    # Determine which types Resolve-DnsName supports by inspecting its RecordType enum at runtime.
+    # This stays automatically in sync with whatever version of the DnsClient module is installed.
+    # If the enum type is unavailable (DnsClient module not loaded / non-Windows), the array is
+    # empty and all lookups are routed through DoH — consistent with Resolve-DnsName being absent.
+    $supportedTypes = try {
+        [Microsoft.DnsClient.Commands.RecordType].GetEnumValues() | ForEach-Object { $_.ToString().ToUpperInvariant() }
     }
     catch {
-        return [pscustomobject]@{
-            ResolverAvailable = $true
-            Success           = $false
-            Records           = @()
-            Error             = $_.Exception.Message
+        @()
+    }
+
+    if ($Type.ToUpperInvariant() -in $supportedTypes) {
+        # Supported type: pass through to Resolve-DnsName using the current system DNS resolver.
+        # Throws CommandNotFoundException if Resolve-DnsName is unavailable, or a DNS exception on lookup failure.
+        Resolve-DnsName -Name $Name -Type $Type -ErrorAction Stop
+        return
+    }
+
+    # Unsupported type: query via DNS-over-HTTPS
+    # Map type names to their IANA DNS type numbers
+    $dnsTypeNumbers = @{
+        TLSA  = 52
+        CAA   = 257
+        SSHFP = 44
+        CERT  = 37
+        NAPTR = 35
+        TKEY  = 249
+        TSIG  = 250
+        URI   = 256
+        SVCB  = 64
+        HTTPS = 65
+    }
+
+    $typeUpper = $Type.ToUpperInvariant()
+    $typeValue = if ($dnsTypeNumbers.ContainsKey($typeUpper)) { $dnsTypeNumbers[$typeUpper] } else { $typeUpper }
+
+    $uri = ('https://{0}/dns-query?name={1}&type={2}' -f $Server, [Uri]::EscapeDataString($Name), $typeValue)
+    $response = Invoke-WebRequest -Uri $uri -Headers @{ Accept = 'application/dns-json' } -UseBasicParsing -TimeoutSec 10 -ErrorAction Stop
+    $json = $response.Content | ConvertFrom-Json
+
+    if ($null -eq $json.Answer -or @($json.Answer).Count -eq 0) {
+        throw ('No {0} records found for {1}.' -f $Type, $Name)
+    }
+
+    foreach ($answer in @($json.Answer)) {
+        switch ($typeUpper) {
+            'TLSA' {
+                # data format: "<CertUsage> <Selector> <MatchingType> <HexHash>"
+                $parts = ($answer.data -split '\s+', 4)
+                if ($parts.Count -ge 3) {
+                    [pscustomobject]@{
+                        Type             = 'TLSA'
+                        Name             = $answer.name.TrimEnd('.')
+                        TTL              = $answer.TTL
+                        Section          = 'Answer'
+                        CertificateUsage = [int]$parts[0]
+                        Selector         = [int]$parts[1]
+                        MatchingType     = [int]$parts[2]
+                        Certificate      = if ($parts.Count -ge 4) { $parts[3] } else { '' }
+                    }
+                }
+            }
+            default {
+                [pscustomobject]@{
+                    Type    = $Type
+                    Name    = $answer.name.TrimEnd('.')
+                    TTL     = $answer.TTL
+                    Section = 'Answer'
+                    Data    = $answer.data
+                }
+            }
         }
     }
 }
@@ -1156,12 +1222,10 @@ function Get-EDCASpfDnsLookupCount {
         return 0
     }
 
-    $txtLookup = Resolve-EDCADnsRecord -Name $Domain -Type 'TXT'
-    if (-not $txtLookup.Success) {
-        return 0
-    }
+    $txtRecords = $null
+    try { $txtRecords = @(Resolve-DnsNamePlus -Name $Domain -Type 'TXT' -ErrorAction Stop) } catch { return 0 }
 
-    $txtValues = Get-EDCATxtRecordValues -Records $txtLookup.Records
+    $txtValues = Get-EDCATxtRecordValues -Records $txtRecords
     $spfRecords = @($txtValues | Where-Object { $_ -match '^v=spf1(\s|$)' })
     if ($spfRecords.Count -ne 1) {
         return 0
@@ -1195,28 +1259,30 @@ function Test-EDCASpfConfiguration {
         [string]$Domain
     )
 
-    $txtLookup = Resolve-EDCADnsRecord -Name $Domain -Type 'TXT'
-    if (-not $txtLookup.ResolverAvailable) {
+    $txtRecords = $null
+    try {
+        $txtRecords = @(Resolve-DnsNamePlus -Name $Domain -Type 'TXT' -ErrorAction Stop)
+    }
+    catch [System.Management.Automation.CommandNotFoundException] {
         return [pscustomobject]@{
             Status                  = 'Unknown'
-            Evidence                = $txtLookup.Error
+            Evidence                = $_.Exception.Message
             Records                 = @()
             PotentialDnsLookupCount = $null
-            Issues                  = @($txtLookup.Error)
+            Issues                  = @($_.Exception.Message)
         }
     }
-
-    if (-not $txtLookup.Success) {
+    catch {
         return [pscustomobject]@{
             Status                  = 'Fail'
-            Evidence                = ('No TXT records resolved for SPF check: {0}' -f $txtLookup.Error)
+            Evidence                = ('No TXT records resolved for SPF check: {0}' -f $_.Exception.Message)
             Records                 = @()
             PotentialDnsLookupCount = $null
             Issues                  = @('No SPF TXT record found.')
         }
     }
 
-    $txtValues = Get-EDCATxtRecordValues -Records $txtLookup.Records
+    $txtValues = Get-EDCATxtRecordValues -Records $txtRecords
     $spfRecords = @($txtValues | Where-Object { $_ -match '^v=spf1(\s|$)' })
     if ($spfRecords.Count -eq 0) {
         return [pscustomobject]@{
@@ -1272,28 +1338,30 @@ function Test-EDCADmarcConfiguration {
     )
 
     $dmarcDomain = ('_dmarc.{0}' -f $Domain)
-    $txtLookup = Resolve-EDCADnsRecord -Name $dmarcDomain -Type 'TXT'
-    if (-not $txtLookup.ResolverAvailable) {
+    $txtRecords = $null
+    try {
+        $txtRecords = @(Resolve-DnsNamePlus -Name $dmarcDomain -Type 'TXT' -ErrorAction Stop)
+    }
+    catch [System.Management.Automation.CommandNotFoundException] {
         return [pscustomobject]@{
             Status   = 'Unknown'
-            Evidence = $txtLookup.Error
+            Evidence = $_.Exception.Message
             Records  = @()
             Policy   = $null
-            Issues   = @($txtLookup.Error)
+            Issues   = @($_.Exception.Message)
         }
     }
-
-    if (-not $txtLookup.Success) {
+    catch {
         return [pscustomobject]@{
             Status   = 'Fail'
-            Evidence = ('No DMARC TXT records resolved: {0}' -f $txtLookup.Error)
+            Evidence = ('No DMARC TXT records resolved: {0}' -f $_.Exception.Message)
             Records  = @()
             Policy   = $null
             Issues   = @('DMARC record missing.')
         }
     }
 
-    $txtValues = Get-EDCATxtRecordValues -Records $txtLookup.Records
+    $txtValues = Get-EDCATxtRecordValues -Records $txtRecords
     $dmarcRecords = @($txtValues | Where-Object { $_ -match '^v=DMARC1\s*;?' })
     if ($dmarcRecords.Count -eq 0) {
         return [pscustomobject]@{
@@ -1385,50 +1453,64 @@ function Test-EDCAMtaStsConfiguration {
     )
 
     $dnsName = ('_mta-sts.{0}' -f $Domain)
-    $txtLookup = Resolve-EDCADnsRecord -Name $dnsName -Type 'TXT'
-    if (-not $txtLookup.ResolverAvailable) {
+    $txtRecords = $null
+    try {
+        $txtRecords = @(Resolve-DnsNamePlus -Name $dnsName -Type 'TXT' -ErrorAction Stop)
+    }
+    catch [System.Management.Automation.CommandNotFoundException] {
         return [pscustomobject]@{
-            Status       = 'Unknown'
-            Evidence     = $txtLookup.Error
-            DnsRecord    = $null
-            PolicyUrl    = ('https://mta-sts.{0}/.well-known/mta-sts.txt' -f $Domain)
-            PolicyStatus = 'Unknown'
-            Issues       = @($txtLookup.Error)
+            Status          = 'Unknown'
+            Evidence        = $_.Exception.Message
+            DnsRecord       = $null
+            PolicyUrl       = ('https://mta-sts.{0}/.well-known/mta-sts.txt' -f $Domain)
+            PolicyStatus    = 'Unknown'
+            PolicyMode      = $null
+            PolicyMaxAge    = $null
+            PolicyMxEntries = @()
+            Issues          = @($_.Exception.Message)
+        }
+    }
+    catch {
+        return [pscustomobject]@{
+            Status          = 'Fail'
+            Evidence        = ('No MTA-STS DNS TXT record resolved: {0}' -f $_.Exception.Message)
+            DnsRecord       = $null
+            PolicyUrl       = ('https://mta-sts.{0}/.well-known/mta-sts.txt' -f $Domain)
+            PolicyStatus    = 'NotChecked'
+            PolicyMode      = $null
+            PolicyMaxAge    = $null
+            PolicyMxEntries = @()
+            Issues          = @('MTA-STS DNS TXT record missing.')
         }
     }
 
-    if (-not $txtLookup.Success) {
-        return [pscustomobject]@{
-            Status       = 'Fail'
-            Evidence     = ('No MTA-STS DNS TXT record resolved: {0}' -f $txtLookup.Error)
-            DnsRecord    = $null
-            PolicyUrl    = ('https://mta-sts.{0}/.well-known/mta-sts.txt' -f $Domain)
-            PolicyStatus = 'NotChecked'
-            Issues       = @('MTA-STS DNS TXT record missing.')
-        }
-    }
-
-    $txtValues = Get-EDCATxtRecordValues -Records $txtLookup.Records
+    $txtValues = Get-EDCATxtRecordValues -Records $txtRecords
     $stsRecords = @($txtValues | Where-Object { $_ -match '^v=STSv1\s*;?' })
     if ($stsRecords.Count -eq 0) {
         return [pscustomobject]@{
-            Status       = 'Fail'
-            Evidence     = 'TXT records exist at _mta-sts, but no record starts with v=STSv1.'
-            DnsRecord    = $null
-            PolicyUrl    = ('https://mta-sts.{0}/.well-known/mta-sts.txt' -f $Domain)
-            PolicyStatus = 'NotChecked'
-            Issues       = @('MTA-STS DNS version marker missing.')
+            Status          = 'Fail'
+            Evidence        = 'TXT records exist at _mta-sts, but no record starts with v=STSv1.'
+            DnsRecord       = $null
+            PolicyUrl       = ('https://mta-sts.{0}/.well-known/mta-sts.txt' -f $Domain)
+            PolicyStatus    = 'NotChecked'
+            PolicyMode      = $null
+            PolicyMaxAge    = $null
+            PolicyMxEntries = @()
+            Issues          = @('MTA-STS DNS version marker missing.')
         }
     }
 
     if ($stsRecords.Count -gt 1) {
         return [pscustomobject]@{
-            Status       = 'Fail'
-            Evidence     = ('Multiple MTA-STS TXT records found ({0}); only one should exist.' -f $stsRecords.Count)
-            DnsRecord    = $stsRecords[0]
-            PolicyUrl    = ('https://mta-sts.{0}/.well-known/mta-sts.txt' -f $Domain)
-            PolicyStatus = 'NotChecked'
-            Issues       = @('Multiple MTA-STS DNS TXT records detected.')
+            Status          = 'Fail'
+            Evidence        = ('Multiple MTA-STS TXT records found ({0}); only one should exist.' -f $stsRecords.Count)
+            DnsRecord       = $stsRecords[0]
+            PolicyUrl       = ('https://mta-sts.{0}/.well-known/mta-sts.txt' -f $Domain)
+            PolicyStatus    = 'NotChecked'
+            PolicyMode      = $null
+            PolicyMaxAge    = $null
+            PolicyMxEntries = @()
+            Issues          = @('Multiple MTA-STS DNS TXT records detected.')
         }
     }
 
@@ -1456,6 +1538,8 @@ function Test-EDCAMtaStsConfiguration {
     $policyUrl = ('https://mta-sts.{0}/.well-known/mta-sts.txt' -f $Domain)
     $policyStatus = 'Unknown'
     $policyMode = ''
+    $policyMaxAge = $null
+    $policyMxEntries = @()
     try {
         $response = Invoke-WebRequest -Uri $policyUrl -UseBasicParsing -TimeoutSec 10 -ErrorAction Stop
         $policyLines = @([string]$response.Content -split "`r?`n") | ForEach-Object { $_.Trim() } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
@@ -1505,6 +1589,8 @@ function Test-EDCAMtaStsConfiguration {
             $issues += 'MTA-STS policy mode requires at least one mx: entry.'
         }
 
+        $policyMaxAge = if ($policyMap.ContainsKey('max_age')) { [string]$policyMap['max_age'] } else { $null }
+        $policyMxEntries = $mxEntries
         $policyStatus = 'Fetched'
     }
     catch {
@@ -1514,12 +1600,15 @@ function Test-EDCAMtaStsConfiguration {
 
     $status = if ($issues.Count -eq 0) { 'Pass' } else { 'Fail' }
     return [pscustomobject]@{
-        Status       = $status
-        Evidence     = ('MTA-STS DNS record: "{0}"; policy status: {1}; issues: {2}' -f $dnsRecord, $policyStatus, $issues.Count)
-        DnsRecord    = $dnsRecord
-        PolicyUrl    = $policyUrl
-        PolicyStatus = $policyStatus
-        Issues       = $issues
+        Status          = $status
+        Evidence        = ('MTA-STS DNS record: "{0}"; policy status: {1}; issues: {2}' -f $dnsRecord, $policyStatus, $issues.Count)
+        DnsRecord       = $dnsRecord
+        PolicyUrl       = $policyUrl
+        PolicyStatus    = $policyStatus
+        PolicyMode      = if ([string]::IsNullOrWhiteSpace($policyMode)) { $null } else { $policyMode }
+        PolicyMaxAge    = $policyMaxAge
+        PolicyMxEntries = $policyMxEntries
+        Issues          = $issues
     }
 }
 
@@ -1530,21 +1619,23 @@ function Test-EDCADaneConfiguration {
         [string]$Domain
     )
 
-    $mxLookup = Resolve-EDCADnsRecord -Name $Domain -Type 'MX'
-    if (-not $mxLookup.ResolverAvailable) {
+    $mxRecords = $null
+    try {
+        $mxRecords = @(Resolve-DnsNamePlus -Name $Domain -Type 'MX' -ErrorAction Stop)
+    }
+    catch [System.Management.Automation.CommandNotFoundException] {
         return [pscustomobject]@{
             Status     = 'Unknown'
-            Evidence   = $mxLookup.Error
+            Evidence   = $_.Exception.Message
             MxHosts    = @()
             TlsaByHost = @()
-            Issues     = @($mxLookup.Error)
+            Issues     = @($_.Exception.Message)
         }
     }
-
-    if (-not $mxLookup.Success) {
+    catch {
         return [pscustomobject]@{
             Status     = 'Fail'
-            Evidence   = ('No MX records resolved for domain: {0}' -f $mxLookup.Error)
+            Evidence   = ('No MX records resolved for domain: {0}' -f $_.Exception.Message)
             MxHosts    = @()
             TlsaByHost = @()
             Issues     = @('MX records missing; SMTP DANE cannot be evaluated.')
@@ -1552,7 +1643,7 @@ function Test-EDCADaneConfiguration {
     }
 
     $mxHosts = @()
-    foreach ($record in $mxLookup.Records) {
+    foreach ($record in $mxRecords) {
         if ($record.PSObject.Properties.Name -contains 'NameExchange') {
             $mxHost = ([string]$record.NameExchange).Trim().TrimEnd('.').ToLowerInvariant()
             if (-not [string]::IsNullOrWhiteSpace($mxHost)) {
@@ -1577,37 +1668,41 @@ function Test-EDCADaneConfiguration {
     foreach ($mxHost in $mxHosts) {
         $tlsaName = ('_25._tcp.{0}' -f $mxHost)
 
-        # Try TLSA type; Windows DNS may not support it on older OS versions
-        $tlsaLookup = Resolve-EDCADnsRecord -Name $tlsaName -Type 'TLSA'
-
+        # Try TLSA type; falls back to DoH automatically for types unsupported by Resolve-DnsName
         $directTlsaRecords = @()
         $cnameTarget = $null
+        $tlsaError = $null
 
-        if ($tlsaLookup.Success) {
-            $directTlsaRecords = @($tlsaLookup.Records | Where-Object { $_.PSObject.Properties.Name -contains 'Type' -and [string]$_.Type -eq 'TLSA' })
+        try {
+            $tlsaRecords = @(Resolve-DnsNamePlus -Name $tlsaName -Type 'TLSA' -ErrorAction Stop)
+            $directTlsaRecords = @($tlsaRecords | Where-Object { $_.PSObject.Properties.Name -contains 'Type' -and [string]$_.Type -eq 'TLSA' })
             # A CNAME at the TLSA name is also valid (e.g. Exchange Online / M365 DANE delegation)
-            $cnameHit = @($tlsaLookup.Records | Where-Object { $_.PSObject.Properties.Name -contains 'Type' -and [string]$_.Type -eq 'CNAME' })
+            $cnameHit = @($tlsaRecords | Where-Object { $_.PSObject.Properties.Name -contains 'Type' -and [string]$_.Type -eq 'CNAME' })
             if ($cnameHit.Count -gt 0 -and ($cnameHit[0].PSObject.Properties.Name -contains 'NameHost')) {
                 $cnameTarget = ([string]$cnameHit[0].NameHost).TrimEnd('.')
             }
         }
+        catch {
+            $tlsaError = $_.Exception.Message
+        }
 
-        # If TLSA type query failed (not supported on this Windows version), try explicit CNAME lookup
-        if (-not $tlsaLookup.Success -and $directTlsaRecords.Count -eq 0 -and $null -eq $cnameTarget) {
-            $cnameLookup = Resolve-EDCADnsRecord -Name $tlsaName -Type 'CNAME'
-            if ($cnameLookup.Success) {
-                $cnameHit = @($cnameLookup.Records | Where-Object { $_.PSObject.Properties.Name -contains 'Type' -and [string]$_.Type -eq 'CNAME' })
+        # If no TLSA records found, also check for CNAME delegation (e.g. Exchange Online / M365 DANE)
+        if ($directTlsaRecords.Count -eq 0 -and $null -eq $cnameTarget) {
+            try {
+                $cnameRecords = @(Resolve-DnsNamePlus -Name $tlsaName -Type 'CNAME' -ErrorAction Stop)
+                $cnameHit = @($cnameRecords | Where-Object { $_.PSObject.Properties.Name -contains 'Type' -and [string]$_.Type -eq 'CNAME' })
                 if ($cnameHit.Count -gt 0 -and ($cnameHit[0].PSObject.Properties.Name -contains 'NameHost')) {
                     $cnameTarget = ([string]$cnameHit[0].NameHost).TrimEnd('.')
                 }
             }
+            catch { }
         }
 
         $hasTlsa = $directTlsaRecords.Count -gt 0
         $hasCname = -not [string]::IsNullOrWhiteSpace($cnameTarget)
 
         if (-not $hasTlsa -and -not $hasCname) {
-            $errorDetail = if (-not $tlsaLookup.Success) { $tlsaLookup.Error } else { 'No TLSA record or CNAME delegation found.' }
+            $errorDetail = if ($null -ne $tlsaError) { $tlsaError } else { 'No TLSA record or CNAME delegation found.' }
             $issues += ('{0}: no TLSA record or CNAME delegation found.' -f $tlsaName)
             $tlsaByHost += [pscustomobject]@{
                 MxHost      = $mxHost
@@ -1620,7 +1715,7 @@ function Test-EDCADaneConfiguration {
             continue
         }
 
-        # CNAME delegation only (no direct TLSA records) — valid Exchange Online / M365 DANE pattern
+        # CNAME delegation only (no direct TLSA records) - valid Exchange Online / M365 DANE pattern
         if ($hasCname -and -not $hasTlsa) {
             $tlsaByHost += [pscustomobject]@{
                 MxHost      = $mxHost
@@ -1633,7 +1728,7 @@ function Test-EDCADaneConfiguration {
             continue
         }
 
-        # Direct TLSA records — validate parameter values
+        # Direct TLSA records - validate parameter values
         $invalidTlsaCount = 0
         foreach ($tlsaRecord in $directTlsaRecords) {
             if (($tlsaRecord.PSObject.Properties.Name -contains 'CertificateUsage') -and ($tlsaRecord.CertificateUsage -notin 0, 1, 2, 3)) {
@@ -1673,7 +1768,7 @@ function Test-EDCADaneConfiguration {
                 ('{0}: {1} TLSA record(s)' -f $_.TlsaName, $_.TlsaCount)
             }
             else {
-                ('{0}: not found — {1}' -f $_.TlsaName, $_.Error)
+                ('{0}: not found - {1}' -f $_.TlsaName, $_.Error)
             }
         })
     return [pscustomobject]@{
@@ -1682,6 +1777,211 @@ function Test-EDCADaneConfiguration {
         MxHosts    = $mxHosts
         TlsaByHost = $tlsaByHost
         Issues     = $issues
+    }
+}
+
+function Test-EDCADkimConfiguration {
+    # Note: Get-DkimSigningConfig and Enable-DkimSigningConfig are Exchange Online PowerShell cmdlets.
+    # They do not exist in the Exchange Management Shell on Exchange Server on-premises.
+    # DKIM signing for on-premises Exchange always requires a third-party agent, gateway, or SaaS service.
+    # This function detects DKIM by probing well-known selectors across popular mail platforms.
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Domain
+    )
+
+    # Selectors used by common mail platforms:
+    #   selector1/selector2  Exchange Online (Microsoft 365)
+    #   google               Google Workspace
+    #   k1/k2                Mailchimp / Mandrill / Klaviyo
+    #   s1/s2                SendGrid / generic
+    #   pm                   Postmark
+    #   proofpoint           Proofpoint
+    #   default/mail/dkim    generic / self-hosted
+    $knownSelectors = @('selector1', 'selector2', 'google', 'k1', 'k2', 's1', 's2', 'pm', 'proofpoint', 'default', 'mail', 'dkim')
+
+    # Map CNAME target suffixes to signing service names.
+    $cnameServiceMap = [ordered]@{
+        '.onmicrosoft.com'   = 'Exchange Online (Microsoft 365)'
+        '.mimecast.com'      = 'Mimecast'
+        '.pphosted.com'      = 'Proofpoint'
+        '.amazonses.com'     = 'Amazon SES'
+        '.sendgrid.net'      = 'SendGrid'
+        '.mtasv.net'         = 'Postmark'
+        '.mandrillapp.com'   = 'Mailchimp / Mandrill'
+        '.klaviyo.com'       = 'Klaviyo'
+        '.mailgun.org'       = 'Mailgun'
+        '.sparkpostmail.com' = 'SparkPost'
+        '.mailjet.com'       = 'Mailjet'
+        '.socketlabs.com'    = 'SocketLabs'
+        '.exacttarget.com'   = 'Salesforce Marketing Cloud'
+        '.salesforce.com'    = 'Salesforce Marketing Cloud'
+        '.messagelabs.com'   = 'Symantec Email Security.cloud'
+    }
+
+    # Fallback service hints based on selector name when no CNAME suffix matches.
+    $selectorServiceHint = @{
+        'google'     = 'Google Workspace'
+        'proofpoint' = 'Proofpoint'
+        'pm'         = 'Postmark'
+    }
+
+    $issues = @()
+    $detectedSelectors = [ordered]@{}
+
+    foreach ($selector in $knownSelectors) {
+        $dnsName = ('{0}._domainkey.{1}' -f $selector, $Domain)
+        $txtRecords = $null
+        try {
+            $txtRecords = @(Resolve-DnsNamePlus -Name $dnsName -Type 'TXT' -ErrorAction Stop)
+        }
+        catch [System.Management.Automation.CommandNotFoundException] {
+            return [pscustomobject]@{
+                Status            = 'Unknown'
+                Evidence          = $_.Exception.Message
+                Selector1         = $null
+                Selector2         = $null
+                DetectedSelectors = $null
+                SigningService    = $null
+                Issues            = @($_.Exception.Message)
+            }
+        }
+        catch {
+            continue
+        }
+
+        # Extract CNAME records (Resolve-DnsName may return the full chain).
+        $cnameTarget = @($txtRecords |
+            Where-Object { $_.PSObject.Properties.Name -contains 'Type' -and [string]$_.Type -eq 'CNAME' } |
+            ForEach-Object { [string]$_.NameHost }) | Select-Object -Last 1
+
+        # Extract TXT values containing a DKIM public key (p= tag).
+        $txtValues = Get-EDCATxtRecordValues -Records $txtRecords
+        $dkimTxt = @($txtValues | Where-Object { $_ -match 'p=' }) | Select-Object -First 1
+
+        if ([string]::IsNullOrWhiteSpace($cnameTarget) -and [string]::IsNullOrWhiteSpace($dkimTxt)) { continue }
+
+        # Determine service name from CNAME target suffix.
+        $service = $null
+        if (-not [string]::IsNullOrWhiteSpace($cnameTarget)) {
+            $lcTarget = $cnameTarget.ToLowerInvariant()
+            foreach ($suffix in $cnameServiceMap.Keys) {
+                if ($lcTarget.EndsWith($suffix)) {
+                    $service = $cnameServiceMap[$suffix]
+                    break
+                }
+            }
+        }
+        if ($null -eq $service -and $selectorServiceHint.ContainsKey($selector)) {
+            $service = $selectorServiceHint[$selector]
+        }
+
+        $detectedSelectors[$selector] = [pscustomobject]@{
+            Type    = if (-not [string]::IsNullOrWhiteSpace($cnameTarget)) { 'CNAME' } else { 'TXT' }
+            Cname   = $cnameTarget
+            Value   = $dkimTxt
+            Service = $service
+        }
+    }
+
+    if ($detectedSelectors.Count -eq 0) {
+        $probed = ($knownSelectors | ForEach-Object { '{0}._domainkey' -f $_ }) -join ', '
+        $issues += ('No DKIM selector records found. Probed: {0}.' -f $probed)
+    }
+
+    $status = if ($issues.Count -eq 0) { 'Pass' } else { 'Fail' }
+
+    $evidenceParts = @(
+        foreach ($sel in $detectedSelectors.Keys) {
+            $entry = $detectedSelectors[$sel]
+            $serviceTag = if ($null -ne $entry.Service) { ' [{0}]' -f $entry.Service } else { '' }
+            if ($entry.Type -eq 'CNAME') {
+                ('{0}._domainkey: CNAME -> {1}{2}' -f $sel, $entry.Cname, $serviceTag)
+            }
+            else {
+                ('{0}._domainkey: TXT found{1}' -f $sel, $serviceTag)
+            }
+        }
+    )
+    if ($evidenceParts.Count -eq 0) { $evidenceParts = @($issues) }
+
+    $signingService = @($detectedSelectors.Values | ForEach-Object { $_.Service } | Where-Object { $null -ne $_ } | Select-Object -Unique) -join ', '
+
+    return [pscustomobject]@{
+        Status            = $status
+        Evidence          = $evidenceParts -join '; '
+        Selector1         = if ($detectedSelectors.Contains('selector1')) { $detectedSelectors['selector1'].Value } else { $null }
+        Selector2         = if ($detectedSelectors.Contains('selector2')) { $detectedSelectors['selector2'].Value } else { $null }
+        DetectedSelectors = $detectedSelectors
+        SigningService    = if ([string]::IsNullOrWhiteSpace($signingService)) { $null } else { $signingService }
+        Issues            = $issues
+    }
+}
+
+function Test-EDCATlsRptConfiguration {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Domain
+    )
+
+    $dnsName = ('_smtp._tls.{0}' -f $Domain)
+    $txtRecords = $null
+    try {
+        $txtRecords = @(Resolve-DnsNamePlus -Name $dnsName -Type 'TXT' -ErrorAction Stop)
+    }
+    catch [System.Management.Automation.CommandNotFoundException] {
+        return [pscustomobject]@{
+            Status   = 'Unknown'
+            Evidence = $_.Exception.Message
+            Record   = $null
+            Issues   = @($_.Exception.Message)
+        }
+    }
+    catch {
+        return [pscustomobject]@{
+            Status   = 'Fail'
+            Evidence = ('No TLS-RPT TXT record resolved at {0}: {1}' -f $dnsName, $_.Exception.Message)
+            Record   = $null
+            Issues   = @('TLS-RPT record missing.')
+        }
+    }
+
+    $txtValues = Get-EDCATxtRecordValues -Records $txtRecords
+    $tlsrptRecords = @($txtValues | Where-Object { $_ -match '^v=TLSRPTv1\s*;?' })
+    if ($tlsrptRecords.Count -eq 0) {
+        return [pscustomobject]@{
+            Status   = 'Fail'
+            Evidence = ('TXT records found at {0} but none starts with v=TLSRPTv1.' -f $dnsName)
+            Record   = $null
+            Issues   = @('TLS-RPT record version marker missing or invalid.')
+        }
+    }
+
+    $record = [string]$tlsrptRecords[0]
+    $issues = @()
+    $tags = @{}
+    foreach ($fragment in ($record -split ';')) {
+        $trimmed = $fragment.Trim()
+        if ([string]::IsNullOrWhiteSpace($trimmed)) { continue }
+        $pair = $trimmed -split '=', 2
+        if ($pair.Count -ne 2) { continue }
+        $key = $pair[0].Trim().ToLowerInvariant()
+        $value = $pair[1].Trim()
+        if (-not [string]::IsNullOrWhiteSpace($key)) { $tags[$key] = $value }
+    }
+
+    if (-not $tags.ContainsKey('rua') -or [string]::IsNullOrWhiteSpace([string]$tags['rua'])) {
+        $issues += 'TLS-RPT record is missing rua= reporting endpoint.'
+    }
+
+    $status = if ($issues.Count -eq 0) { 'Pass' } else { 'Fail' }
+    return [pscustomobject]@{
+        Status   = $status
+        Evidence = ('TLS-RPT record: {0}; issues: {1}' -f $record, $issues.Count)
+        Record   = $record
+        Issues   = $issues
     }
 }
 
@@ -1724,6 +2024,8 @@ function Invoke-EDCAEmailAuthenticationChecks {
             Dmarc  = Test-EDCADmarcConfiguration -Domain $domain
             MtaSts = Test-EDCAMtaStsConfiguration -Domain $domain
             Dane   = Test-EDCADaneConfiguration -Domain $domain
+            Dkim   = Test-EDCADkimConfiguration -Domain $domain
+            TlsRpt = Test-EDCATlsRptConfiguration -Domain $domain
         }
     }
 
@@ -1838,6 +2140,9 @@ function Get-EDCAServerInventory {
             Edition                                  = $null
             ProductLine                              = 'Unknown'
             IsExchangeServer                         = $false
+            IsEdge                                   = $false
+            ServerRole                               = 'Unknown'
+            EdgeData                                 = $null
             ExtendedProtectionStatus                 = @()
             AdminAuditLogEnabled                     = $null
             ReplicationHealthPassed                  = $null
@@ -1898,7 +2203,9 @@ function Get-EDCAServerInventory {
             RpcClientAccessConfig                    = $null
             TransportService                         = $null
             TransportAgents                          = @()
+            AntiSpamConfigs                          = $null
             ExchangeServices                         = @()
+            ServiceHealth                            = $null
             InstallPathAcl                           = @()
             AuditLogPath                             = $null
             AuditLogPathAcl                          = @()
@@ -2083,10 +2390,73 @@ function Get-EDCAServerInventory {
         }
 
         $smb1Value = $null
+        $smbServerRequireSecuritySignature = $null
         try {
             $smbServerParams = Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters' -ErrorAction SilentlyContinue
-            if ($null -ne $smbServerParams -and $smbServerParams.PSObject.Properties.Name -contains 'SMB1') {
-                $smb1Value = [int]$smbServerParams.SMB1
+            if ($null -ne $smbServerParams) {
+                if ($smbServerParams.PSObject.Properties.Name -contains 'SMB1') {
+                    $smb1Value = [int]$smbServerParams.SMB1
+                }
+                if ($smbServerParams.PSObject.Properties.Name -contains 'RequireSecuritySignature') {
+                    $smbServerRequireSecuritySignature = [int]$smbServerParams.RequireSecuritySignature
+                }
+            }
+        }
+        catch {
+        }
+
+        $smbClientRequireSecuritySignature = $null
+        try {
+            $smbClientParams = Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters' -ErrorAction SilentlyContinue
+            if ($null -ne $smbClientParams -and $smbClientParams.PSObject.Properties.Name -contains 'RequireSecuritySignature') {
+                $smbClientRequireSecuritySignature = [int]$smbClientParams.RequireSecuritySignature
+            }
+        }
+        catch {
+        }
+
+        $ldapClientIntegrity = $null
+        try {
+            $ldapParams = Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\LDAP' -ErrorAction SilentlyContinue
+            if ($null -ne $ldapParams -and $ldapParams.PSObject.Properties.Name -contains 'LdapClientIntegrity') {
+                $ldapClientIntegrity = [int]$ldapParams.LdapClientIntegrity
+            }
+        }
+        catch {
+        }
+
+        $netBiosInterfaceOptions = @()
+        try {
+            $netBtInterfacesPath = 'HKLM:\SYSTEM\CurrentControlSet\Services\NetBT\Parameters\Interfaces'
+            if (Test-Path -Path $netBtInterfacesPath) {
+                foreach ($netBtInterface in @(Get-ChildItem -Path $netBtInterfacesPath -ErrorAction SilentlyContinue)) {
+                    $netBtProps = Get-ItemProperty -Path $netBtInterface.PSPath -ErrorAction SilentlyContinue
+                    if ($null -ne $netBtProps -and $netBtProps.PSObject.Properties.Name -contains 'NetbiosOptions') {
+                        $netBiosInterfaceOptions += [pscustomobject]@{
+                            Interface      = [string]$netBtInterface.PSChildName
+                            NetbiosOptions = [int]$netBtProps.NetbiosOptions
+                        }
+                    }
+                }
+            }
+        }
+        catch {
+        }
+
+        $lapsLegacyEnabled = $null
+        $lapsWindowsBackupDirectory = $null
+        try {
+            $lapsLegacyPolicy = Get-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft Services\AdmPwd' -ErrorAction SilentlyContinue
+            if ($null -ne $lapsLegacyPolicy -and $lapsLegacyPolicy.PSObject.Properties.Name -contains 'AdmPwdEnabled') {
+                $lapsLegacyEnabled = ([int]$lapsLegacyPolicy.AdmPwdEnabled -eq 1)
+            }
+        }
+        catch {
+        }
+        try {
+            $lapsWindowsPolicy = Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Policies\LAPS' -ErrorAction SilentlyContinue
+            if ($null -ne $lapsWindowsPolicy -and $lapsWindowsPolicy.PSObject.Properties.Name -contains 'BackupDirectory') {
+                $lapsWindowsBackupDirectory = [int]$lapsWindowsPolicy.BackupDirectory
             }
         }
         catch {
@@ -2258,11 +2628,69 @@ function Get-EDCAServerInventory {
         catch {
         }
 
+        $moduleLoggingEnabled = $null
+        $moduleLoggingAllModules = $null
+        try {
+            $modLogging = Get-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\PowerShell\ModuleLogging' -ErrorAction SilentlyContinue
+            if ($null -ne $modLogging -and $modLogging.PSObject.Properties.Name -contains 'EnableModuleLogging') {
+                $moduleLoggingEnabled = ([int]$modLogging.EnableModuleLogging -eq 1)
+            }
+            if ($moduleLoggingEnabled -eq $true) {
+                $modNames = Get-Item -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\PowerShell\ModuleLogging\ModuleNames' -ErrorAction SilentlyContinue
+                if ($null -ne $modNames) {
+                    $moduleLoggingAllModules = ($modNames.GetValueNames() -contains '*')
+                }
+                else {
+                    $moduleLoggingAllModules = $false
+                }
+            }
+        }
+        catch {
+        }
+
         $netFrameworkRelease = $null
         try {
             $netReg = Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\NET Framework Setup\NDP\v4\Full' -Name Release -ErrorAction SilentlyContinue
             if ($null -ne $netReg -and $netReg.PSObject.Properties.Name -contains 'Release') {
                 $netFrameworkRelease = [int]$netReg.Release
+            }
+        }
+        catch {
+        }
+
+        $schUseStrongCrypto64 = $null
+        $schUseStrongCrypto32 = $null
+        try {
+            $reg64 = Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\.NetFramework\v4.0.30319' -Name SchUseStrongCrypto -ErrorAction SilentlyContinue
+            if ($null -ne $reg64 -and $reg64.PSObject.Properties.Name -contains 'SchUseStrongCrypto') {
+                $schUseStrongCrypto64 = [int]$reg64.SchUseStrongCrypto
+            }
+        }
+        catch {
+        }
+        try {
+            $reg32 = Get-ItemProperty -Path 'HKLM:\SOFTWARE\Wow6432Node\Microsoft\.NetFramework\v4.0.30319' -Name SchUseStrongCrypto -ErrorAction SilentlyContinue
+            if ($null -ne $reg32 -and $reg32.PSObject.Properties.Name -contains 'SchUseStrongCrypto') {
+                $schUseStrongCrypto32 = [int]$reg32.SchUseStrongCrypto
+            }
+        }
+        catch {
+        }
+
+        $schUseStrongCrypto64 = $null
+        $schUseStrongCrypto32 = $null
+        try {
+            $reg64 = Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\.NetFramework\v4.0.30319' -Name SchUseStrongCrypto -ErrorAction SilentlyContinue
+            if ($null -ne $reg64 -and $reg64.PSObject.Properties.Name -contains 'SchUseStrongCrypto') {
+                $schUseStrongCrypto64 = [int]$reg64.SchUseStrongCrypto
+            }
+        }
+        catch {
+        }
+        try {
+            $reg32 = Get-ItemProperty -Path 'HKLM:\SOFTWARE\Wow6432Node\Microsoft\.NetFramework\v4.0.30319' -Name SchUseStrongCrypto -ErrorAction SilentlyContinue
+            if ($null -ne $reg32 -and $reg32.PSObject.Properties.Name -contains 'SchUseStrongCrypto') {
+                $schUseStrongCrypto32 = [int]$reg32.SchUseStrongCrypto
             }
         }
         catch {
@@ -2428,6 +2856,52 @@ function Get-EDCAServerInventory {
             $weakKeyExchangeStates += [pscustomobject]@{ Name = $keaName; Enabled = $keaEnabled }
         }
 
+        $kerberosEncryptionTypes = $null
+        try {
+            $kerbPath = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System\Kerberos\Parameters'
+            if (Test-Path -Path $kerbPath) {
+                $kerbItem = Get-ItemProperty -Path $kerbPath -Name SupportedEncryptionTypes -ErrorAction SilentlyContinue
+                if ($null -ne $kerbItem -and $kerbItem.PSObject.Properties.Name -contains 'SupportedEncryptionTypes') {
+                    $kerberosEncryptionTypes = [int]$kerbItem.SupportedEncryptionTypes
+                }
+            }
+        }
+        catch {
+        }
+
+        $cipherSuiteOrder = $null
+        if (Get-Command -Name Get-TlsCipherSuite -ErrorAction SilentlyContinue) {
+            try {
+                $allSuites = @(Get-TlsCipherSuite -ErrorAction SilentlyContinue)
+                # Treat suites without a Protocol property, or those not labelled TLS 1.3, as TLS 1.2.
+                $tls12Suites = @($allSuites | Where-Object { -not ($_.PSObject.Properties.Name -contains 'Protocol') -or [string]$_.Protocol -ne 'TLS 1.3' })
+                # Keep only suites that expose a non-empty Name property (some CimInstances may lack it).
+                $tls12Suites = @($tls12Suites | Where-Object { ($_.PSObject.Properties.Name -contains 'Name') -and -not [string]::IsNullOrWhiteSpace([string]$_.Name) })
+                $nonPfsSuites = @($tls12Suites | Where-Object { $_.Name -notmatch 'ECDHE|DHE' } | Select-Object -ExpandProperty Name)
+                # Find DHE (non-ECDHE) suites that appear before the first ECDHE suite.
+                $firstEcdheIndex = -1
+                for ($i = 0; $i -lt $tls12Suites.Count; $i++) {
+                    if ($tls12Suites[$i].Name -match 'ECDHE') { $firstEcdheIndex = $i; break }
+                }
+                $dheBeforeEcdhe = @()
+                if ($firstEcdheIndex -gt 0) {
+                    $dheBeforeEcdhe = @($tls12Suites[0..($firstEcdheIndex - 1)] | Where-Object { $_.Name -match '\bDHE\b' -and $_.Name -notmatch 'ECDHE' } | Select-Object -ExpandProperty Name)
+                }
+                $cipherSuiteOrder = [pscustomobject]@{
+                    QuerySucceeded = $true
+                    Tls12Suites    = @($tls12Suites | Select-Object -ExpandProperty Name)
+                    NonPfsSuites   = $nonPfsSuites
+                    DheBeforeEcdhe = $dheBeforeEcdhe
+                }
+            }
+            catch {
+                $cipherSuiteOrder = [pscustomobject]@{
+                    QuerySucceeded = $false
+                    Error          = $_.Exception.Message
+                }
+            }
+        }
+
         $serializedDataSigningEnabled = $null
         try {
             $diagnosticSettings = Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\ExchangeServer\v15\Diagnostics' -ErrorAction SilentlyContinue
@@ -2560,9 +3034,10 @@ function Get-EDCAServerInventory {
         }
 
         $exchangeComputerMembership = [pscustomobject]@{
-            QuerySucceeded = $false
-            MissingGroups  = @()
-            PresentGroups  = @()
+            QuerySucceeded       = $false
+            MissingGroups        = @()
+            PresentGroups        = @()
+            TrustedForDelegation = $null
         }
 
         $amsiProviderIds = @()
@@ -2769,25 +3244,33 @@ function Get-EDCAServerInventory {
                 Adapters         = $vmxnet3Adapters
             }
             CisPolicy                 = [pscustomobject]@{
-                Smb1Value                  = $smb1Value
-                FirewallProfiles           = $firewallProfiles
-                FirewallAllProfilesEnabled = $firewallAllProfilesEnabled
-                LlmnrEnableMulticast       = $llmnrValue
-                LmCompatibilityLevel       = $lmCompatibilityLevel
-                NtlmMinClientSec           = $ntlmMinClientSec
-                NtlmMinServerSec           = $ntlmMinServerSec
-                WdigestUseLogonCredential  = $wdigestUseLogonCredential
-                RdpNlaRequired             = $rdpNlaRequired
-                DefenderAvailable          = $defenderAvailable
-                DefenderRtpEnabled         = $defenderRealtimeProtectionEnabled
-                DefenderExclusionPaths     = $defenderExclusionPaths
-                DefenderExclusionProcesses = $defenderExclusionProcesses
-                CredentialGuardEnabled     = $credentialGuardEnabled
-                ScriptBlockLoggingEnabled  = $scriptBlockLoggingEnabled
-                TcpKeepAlive               = $tcpKeepAliveTime
-                RpcMinConnectionTimeout    = $rpcMinConnectionTimeout
-                IPv6DisabledComponents     = $ipv6DisabledComponents
-                DisableRootAutoUpdate      = $disableRootAutoUpdate
+                Smb1Value                         = $smb1Value
+                FirewallProfiles                  = $firewallProfiles
+                FirewallAllProfilesEnabled        = $firewallAllProfilesEnabled
+                LlmnrEnableMulticast              = $llmnrValue
+                LmCompatibilityLevel              = $lmCompatibilityLevel
+                NtlmMinClientSec                  = $ntlmMinClientSec
+                NtlmMinServerSec                  = $ntlmMinServerSec
+                WdigestUseLogonCredential         = $wdigestUseLogonCredential
+                RdpNlaRequired                    = $rdpNlaRequired
+                DefenderAvailable                 = $defenderAvailable
+                DefenderRtpEnabled                = $defenderRealtimeProtectionEnabled
+                DefenderExclusionPaths            = $defenderExclusionPaths
+                DefenderExclusionProcesses        = $defenderExclusionProcesses
+                CredentialGuardEnabled            = $credentialGuardEnabled
+                ScriptBlockLoggingEnabled         = $scriptBlockLoggingEnabled
+                ModuleLoggingEnabled              = $moduleLoggingEnabled
+                ModuleLoggingAllModules           = $moduleLoggingAllModules
+                TcpKeepAlive                      = $tcpKeepAliveTime
+                RpcMinConnectionTimeout           = $rpcMinConnectionTimeout
+                IPv6DisabledComponents            = $ipv6DisabledComponents
+                DisableRootAutoUpdate             = $disableRootAutoUpdate
+                SmbServerRequireSecuritySignature = $smbServerRequireSecuritySignature
+                SmbClientRequireSecuritySignature = $smbClientRequireSecuritySignature
+                LdapClientIntegrity               = $ldapClientIntegrity
+                NetBiosInterfaceOptions           = $netBiosInterfaceOptions
+                LapsLegacyEnabled                 = $lapsLegacyEnabled
+                LapsWindowsBackupDirectory        = $lapsWindowsBackupDirectory
             }
             PendingReboot             = [pscustomobject]@{
                 Pending   = $pendingReboot
@@ -2812,8 +3295,12 @@ function Get-EDCAServerInventory {
                 WeakCiphers                = $weakCipherStates
                 WeakHashes                 = $weakHashStates
                 WeakKeyExchange            = $weakKeyExchangeStates
+                CipherSuiteOrder           = $cipherSuiteOrder
             }
+            KerberosEncryptionTypes   = $kerberosEncryptionTypes
             NetFrameworkRelease       = $netFrameworkRelease
+            SchUseStrongCrypto64      = $schUseStrongCrypto64
+            SchUseStrongCrypto32      = $schUseStrongCrypto32
             VmwareIntrospection       = $vmwareIntrospection
         }
 
@@ -2836,7 +3323,7 @@ function Get-EDCAServerInventory {
         $tls13CipherSuiteAvailable = $null
         if ($null -eq $tlsRaw.Tls13 -and (Get-Command -Name Get-TlsCipherSuite -ErrorAction SilentlyContinue)) {
             try {
-                $tls13Suites = @(Get-TlsCipherSuite -ErrorAction SilentlyContinue | Where-Object { [string]$_.Protocol -eq 'TLS 1.3' })
+                $tls13Suites = @(Get-TlsCipherSuite -ErrorAction SilentlyContinue | Where-Object { ($_.PSObject.Properties.Name -contains 'Protocol') -and [string]$_.Protocol -eq 'TLS 1.3' })
                 $tls13CipherSuiteAvailable = ($tls13Suites.Count -gt 0)
             }
             catch {
@@ -3051,7 +3538,7 @@ function Get-EDCAServerInventory {
                 if (Test-Path -LiteralPath $defaultAuditLogPath) {
                     try {
                         $defaultAuditAcl = Get-Acl -Path $defaultAuditLogPath -ErrorAction Stop
-                        $exchangeInfo.AuditLogPathAcl = @($defaultAuditAcl.Access | Where-Object { $_.PSObject.Properties.Name -contains 'IdentityReference' } | ForEach-Object {
+                        $exchangeInfo.AuditLogPathAcl = @($defaultAuditAcl.Access | ForEach-Object {
                                 [pscustomobject]@{
                                     IdentityReference = [string]$_.IdentityReference
                                     FileSystemRights  = [string]$_.FileSystemRights
@@ -3482,11 +3969,18 @@ function Get-EDCAServerInventory {
             catch {}
         }
 
+        if ($collectExchangeCmdlets -and $hasExchangeInstall -and -not (Get-Command -Name Get-ExchangeServer -ErrorAction SilentlyContinue)) {
+            try { Add-PSSnapin -Name Microsoft.Exchange.Management.PowerShell.SnapIn -ErrorAction SilentlyContinue } catch {}
+        }
+
         if ($collectExchangeCmdlets -and (Get-Command -Name Get-ExchangeServer -ErrorAction SilentlyContinue)) {
             $exchangeInfo.ExchangeCmdletsAvailable = $true
             try {
                 $serverObject = Get-ExchangeServer -Identity $env:COMPUTERNAME -ErrorAction Stop
                 $exchangeInfo.IsExchangeServer = $true
+                $isEdge = ($serverObject.PSObject.Properties.Name -contains 'ServerRole') -and ([string]$serverObject.ServerRole -match 'Edge')
+                $exchangeInfo.IsEdge = $isEdge
+                $exchangeInfo.ServerRole = if ($isEdge) { 'Edge' } else { 'Mailbox' }
                 $exchangeInfo.Name = $serverObject.Name
                 $exchangeInfo.AdminDisplayVersion = [string]$serverObject.AdminDisplayVersion
                 try {
@@ -3562,7 +4056,7 @@ function Get-EDCAServerInventory {
                         $exchangeInfo.AuditLogPath = [string]$audit.AdminAuditLogPath
                         try {
                             $auditLogAcl = Get-Acl -Path $exchangeInfo.AuditLogPath -ErrorAction Stop
-                            $exchangeInfo.AuditLogPathAcl = @($auditLogAcl.Access | Where-Object { $_.PSObject.Properties.Name -contains 'IdentityReference' } | ForEach-Object {
+                            $exchangeInfo.AuditLogPathAcl = @($auditLogAcl.Access | ForEach-Object {
                                     [pscustomobject]@{
                                         IdentityReference = [string]$_.IdentityReference
                                         FileSystemRights  = [string]$_.FileSystemRights
@@ -3667,18 +4161,21 @@ function Get-EDCAServerInventory {
                     $connectors = @(Get-ReceiveConnector -Server $env:COMPUTERNAME -ErrorAction Stop)
                     foreach ($connector in $connectors) {
                         $exchangeInfo.ReceiveConnectors += [pscustomobject]@{
-                            Identity                = [string]$connector.Identity
-                            PermissionGroups        = [string]$connector.PermissionGroups
-                            AuthMechanism           = [string]$connector.AuthMechanism
-                            RemoteIPRangesCount     = @($connector.RemoteIPRanges).Count
-                            ProtocolLoggingLevel    = if ($connector.PSObject.Properties.Name -contains 'ProtocolLoggingLevel') { [string]$connector.ProtocolLoggingLevel } else { $null }
-                            MaxMessageSize          = if ($connector.PSObject.Properties.Name -contains 'MaxMessageSize' -and $null -ne $connector.MaxMessageSize) { [string]$connector.MaxMessageSize } else { $null }
-                            MaxHopCount             = if ($connector.PSObject.Properties.Name -contains 'MaxHopCount') { [string]$connector.MaxHopCount } else { $null }
-                            ConnectionTimeout       = if ($connector.PSObject.Properties.Name -contains 'ConnectionTimeout' -and $null -ne $connector.ConnectionTimeout) { [string]$connector.ConnectionTimeout } else { $null }
-                            TransportRole           = if ($connector.PSObject.Properties.Name -contains 'TransportRole') { [string]$connector.TransportRole } else { $null }
-                            Banner                  = if ($connector.PSObject.Properties.Name -contains 'Banner') { [string]$connector.Banner } else { $null }
-                            RequireTLS              = if ($connector.PSObject.Properties.Name -contains 'RequireTLS') { [bool]$connector.RequireTLS } else { $null }
-                            MaxRecipientsPerMessage = if ($connector.PSObject.Properties.Name -contains 'MaxRecipientsPerMessage') { [string]$connector.MaxRecipientsPerMessage } else { $null }
+                            Identity                 = [string]$connector.Identity
+                            PermissionGroups         = [string]$connector.PermissionGroups
+                            AuthMechanism            = [string]$connector.AuthMechanism
+                            RemoteIPRangesCount      = @($connector.RemoteIPRanges).Count
+                            Enabled                  = if ($connector.PSObject.Properties.Name -contains 'Enabled') { [bool]$connector.Enabled } else { $null }
+                            ProtocolLoggingLevel     = if ($connector.PSObject.Properties.Name -contains 'ProtocolLoggingLevel') { [string]$connector.ProtocolLoggingLevel } else { $null }
+                            MaxMessageSize           = if ($connector.PSObject.Properties.Name -contains 'MaxMessageSize' -and $null -ne $connector.MaxMessageSize) { [string]$connector.MaxMessageSize } else { $null }
+                            MaxHopCount              = if ($connector.PSObject.Properties.Name -contains 'MaxHopCount') { [string]$connector.MaxHopCount } else { $null }
+                            ConnectionTimeout        = if ($connector.PSObject.Properties.Name -contains 'ConnectionTimeout' -and $null -ne $connector.ConnectionTimeout) { [string]$connector.ConnectionTimeout } else { $null }
+                            TransportRole            = if ($connector.PSObject.Properties.Name -contains 'TransportRole') { [string]$connector.TransportRole } else { $null }
+                            Banner                   = if ($connector.PSObject.Properties.Name -contains 'Banner') { [string]$connector.Banner } else { $null }
+                            RequireTLS               = if ($connector.PSObject.Properties.Name -contains 'RequireTLS') { [bool]$connector.RequireTLS } else { $null }
+                            MaxRecipientsPerMessage  = if ($connector.PSObject.Properties.Name -contains 'MaxRecipientsPerMessage') { [string]$connector.MaxRecipientsPerMessage } else { $null }
+                            TlsDomainCapabilities    = if ($connector.PSObject.Properties.Name -contains 'TlsDomainCapabilities') { [string]$connector.TlsDomainCapabilities } else { $null }
+                            CloudServicesMailEnabled = if ($connector.PSObject.Properties.Name -contains 'CloudServicesMailEnabled') { [bool]$connector.CloudServicesMailEnabled } else { $null }
                         }
                     }
                 }
@@ -4010,16 +4507,35 @@ function Get-EDCAServerInventory {
     }
 
     $invokeTarget = $Server
+    $isLocalTarget = $Server.Equals($env:COMPUTERNAME, [System.StringComparison]::OrdinalIgnoreCase) -or
+    $Server -in @('.', 'localhost')
 
-    Write-Verbose ('Executing unified collection script block on {0} via Invoke-Command -ComputerName.' -f $invokeTarget)
-    $rawInventoryJson = Invoke-Command -ComputerName $invokeTarget -ScriptBlock $collectionScriptBlock -ArgumentList $false -ErrorAction Stop
+    if ($isLocalTarget) {
+        Write-Verbose ('Executing unified collection script block locally (no WinRM).')
+        $rawInventoryJson = & $collectionScriptBlock $true
+    }
+    else {
+        Write-Verbose ('Executing unified collection script block on {0} via Invoke-Command -ComputerName.' -f $invokeTarget)
+        $rawInventoryJson = Invoke-Command -ComputerName $invokeTarget -ScriptBlock $collectionScriptBlock -ArgumentList $false -ErrorAction Stop
+    }
 
     $inventory = $rawInventoryJson | ConvertFrom-Json
     if ($inventory.PSObject.Properties.Name -contains 'Server') {
         $inventory.Server = $Server
     }
 
-    if (($inventory.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $inventory.Exchange -and ($inventory.Exchange.PSObject.Properties.Name -contains 'ExchangeComputerMembership')) {
+    $isEdge = ($inventory.PSObject.Properties.Name -contains 'Exchange') -and
+    $null -ne $inventory.Exchange -and
+    ($inventory.Exchange.PSObject.Properties.Name -contains 'IsEdge') -and
+    [bool]$inventory.Exchange.IsEdge
+
+    if ($isEdge -and -not $isLocalTarget) {
+        $inventory.Exchange.CollectionWarnings = @($inventory.Exchange.CollectionWarnings) + @('Edge Transport server detected: Exchange cmdlet collection requires running EDCA on the Edge server itself (use -Local or target the Edge server by name).')
+        Write-EDCALog -Level 'WARN' -Message ('Edge Transport server {0}: Exchange cmdlet phase skipped. Run EDCA on the Edge server using -Local.' -f $Server)
+        return $inventory
+    }
+
+    if (-not $isEdge -and ($inventory.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $inventory.Exchange -and ($inventory.Exchange.PSObject.Properties.Name -contains 'ExchangeComputerMembership')) {
         $computerCn = $Server -replace '\..*$', ''
         try {
             $gcRootDse = [System.DirectoryServices.DirectoryEntry]::new('GC://RootDSE')
@@ -4031,6 +4547,7 @@ function Get-EDCAServerInventory {
             $searcher.SearchScope = [System.DirectoryServices.SearchScope]::Subtree
             $searcher.PageSize = 1
             [void]$searcher.PropertiesToLoad.Add('memberOf')
+            [void]$searcher.PropertiesToLoad.Add('userAccountControl')
             $computerResult = $searcher.FindOne()
 
             if ($null -ne $computerResult) {
@@ -4055,9 +4572,13 @@ function Get-EDCAServerInventory {
                 }
 
                 $inventory.Exchange.ExchangeComputerMembership = [pscustomobject]@{
-                    QuerySucceeded = $true
-                    MissingGroups  = $missingGroups
-                    PresentGroups  = $presentGroups
+                    QuerySucceeded       = $true
+                    MissingGroups        = $missingGroups
+                    PresentGroups        = $presentGroups
+                    TrustedForDelegation = if ($computerResult.Properties['userAccountControl'].Count -gt 0) {
+                        [bool]([int]$computerResult.Properties['userAccountControl'][0] -band 0x80000)
+                    }
+                    else { $null }
                 }
             }
         }
@@ -4065,9 +4586,9 @@ function Get-EDCAServerInventory {
         }
     }
 
-    if (($inventory.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $inventory.Exchange -and ($inventory.Exchange.PSObject.Properties.Name -contains 'IsExchangeServer') -and [bool]$inventory.Exchange.IsExchangeServer) {
+    $exchEndpointWarnings = @()
+    if (-not $isEdge -and ($inventory.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $inventory.Exchange -and ($inventory.Exchange.PSObject.Properties.Name -contains 'IsExchangeServer') -and [bool]$inventory.Exchange.IsExchangeServer) {
         Write-Verbose ('Collecting Exchange cmdlet data for {0} via Exchange endpoint (ConnectionUri/Kerberos).' -f $invokeTarget)
-        $exchEndpointWarnings = @()
         $cmdletsAvailable = $false
 
         try {
@@ -4077,6 +4598,10 @@ function Get-EDCAServerInventory {
                 $cmdletsAvailable = $true
                 $inventory.Exchange.ExchangeCmdletsAvailable = $true
                 $inventory.Exchange.IsExchangeServer = $true
+                $isRemoteEdge = ($remoteServer.PSObject.Properties.Name -contains 'ServerRole') -and ([string]$remoteServer.ServerRole -match 'Edge')
+                $inventory.Exchange.IsEdge = $isRemoteEdge
+                $inventory.Exchange.ServerRole = if ($isRemoteEdge) { 'Edge' } else { 'Mailbox' }
+                $isEdge = $isRemoteEdge
                 if ($remoteServer.PSObject.Properties.Name -contains 'Name') {
                     $inventory.Exchange.Name = [string]$remoteServer.Name
                 }
@@ -4110,7 +4635,7 @@ function Get-EDCAServerInventory {
             }
         }
         catch {
-            $exchEndpointWarnings += ('Get-ExchangeServer via endpoint failed: ' + $_.Exception.Message)
+            $exchEndpointWarnings += ('Get-ExchangeServer via endpoint failed: ' + (Get-EDCAExceptionMessage -ErrorRecord $_))
         }
 
         if ($cmdletsAvailable) {
@@ -4338,11 +4863,10 @@ function Get-EDCAServerInventory {
             if (-not [string]::IsNullOrWhiteSpace([string]$inventory.Exchange.AuditLogPath)) {
                 try {
                     $auditPathArg = [string]$inventory.Exchange.AuditLogPath
-                    $auditAclObj = Invoke-Command -ComputerName $invokeTarget -ScriptBlock {
-                        param($p) Get-Acl -Path $p -ErrorAction Stop
-                    } -ArgumentList $auditPathArg -ErrorAction Stop
-                    if ($null -ne $auditAclObj -and $auditAclObj.PSObject.Properties.Name -contains 'Access') {
-                        $inventory.Exchange.AuditLogPathAcl = @($auditAclObj.Access | Where-Object { $_.PSObject.Properties.Name -contains 'IdentityReference' } | ForEach-Object {
+                    $auditAclEntries = Invoke-Command -ComputerName $invokeTarget -ScriptBlock {
+                        param($p)
+                        $acl = Get-Acl -Path $p -ErrorAction Stop
+                        @($acl.Access | ForEach-Object {
                                 [pscustomobject]@{
                                     IdentityReference = [string]$_.IdentityReference
                                     FileSystemRights  = [string]$_.FileSystemRights
@@ -4350,6 +4874,9 @@ function Get-EDCAServerInventory {
                                     IsInherited       = [bool]$_.IsInherited
                                 }
                             })
+                    } -ArgumentList $auditPathArg -ErrorAction Stop
+                    if ($null -ne $auditAclEntries) {
+                        $inventory.Exchange.AuditLogPathAcl = @($auditAclEntries)
                     }
                 }
                 catch {
@@ -4385,6 +4912,25 @@ function Get-EDCAServerInventory {
             }
             catch {
                 $exchEndpointWarnings += ('Get-TransportAgent via endpoint failed: ' + $_.Exception.Message)
+            }
+
+            try {
+                $cfCfg = $null; $sfCfg = $null; $sidCfg = $null; $srCfg = $null
+                try { $sb = [scriptblock]::Create('Get-ContentFilterConfig'); $cfCfg = Invoke-EDCAExchangeEndpointCommand -Server $invokeTarget -ScriptBlock $sb } catch {}
+                try { $sb = [scriptblock]::Create('Get-SenderFilterConfig'); $sfCfg = Invoke-EDCAExchangeEndpointCommand -Server $invokeTarget -ScriptBlock $sb } catch {}
+                try { $sb = [scriptblock]::Create('Get-SenderIdConfig'); $sidCfg = Invoke-EDCAExchangeEndpointCommand -Server $invokeTarget -ScriptBlock $sb } catch {}
+                try { $sb = [scriptblock]::Create('Get-SenderReputationConfig'); $srCfg = Invoke-EDCAExchangeEndpointCommand -Server $invokeTarget -ScriptBlock $sb } catch {}
+                if ($null -ne $cfCfg -or $null -ne $sfCfg -or $null -ne $sidCfg -or $null -ne $srCfg) {
+                    $inventory.Exchange.AntiSpamConfigs = [pscustomobject]@{
+                        ContentFilter    = if ($null -ne $cfCfg) { [pscustomobject]@{ Enabled = [bool]$cfCfg.Enabled } } else { $null }
+                        SenderFilter     = if ($null -ne $sfCfg) { [pscustomobject]@{ Enabled = [bool]$sfCfg.Enabled } } else { $null }
+                        SenderIdConfig   = if ($null -ne $sidCfg) { [pscustomobject]@{ Enabled = [bool]$sidCfg.Enabled } } else { $null }
+                        SenderReputation = if ($null -ne $srCfg) { [pscustomobject]@{ Enabled = [bool]$srCfg.Enabled } } else { $null }
+                    }
+                }
+            }
+            catch {
+                $exchEndpointWarnings += ('Anti-spam config collection via endpoint failed: ' + $_.Exception.Message)
             }
 
             try {
@@ -4435,18 +4981,21 @@ function Get-EDCAServerInventory {
                 $connectors = @(Invoke-EDCAExchangeEndpointCommand -Server $invokeTarget -ScriptBlock $sb)
                 foreach ($connector in $connectors) {
                     $inventory.Exchange.ReceiveConnectors = @($inventory.Exchange.ReceiveConnectors) + @([pscustomobject]@{
-                            Identity                = [string]$connector.Identity
-                            PermissionGroups        = [string]$connector.PermissionGroups
-                            AuthMechanism           = [string]$connector.AuthMechanism
-                            RemoteIPRangesCount     = @($connector.RemoteIPRanges).Count
-                            ProtocolLoggingLevel    = if ($connector.PSObject.Properties.Name -contains 'ProtocolLoggingLevel') { [string]$connector.ProtocolLoggingLevel } else { $null }
-                            MaxMessageSize          = if ($connector.PSObject.Properties.Name -contains 'MaxMessageSize' -and $null -ne $connector.MaxMessageSize) { [string]$connector.MaxMessageSize } else { $null }
-                            MaxHopCount             = if ($connector.PSObject.Properties.Name -contains 'MaxHopCount') { [string]$connector.MaxHopCount } else { $null }
-                            ConnectionTimeout       = if ($connector.PSObject.Properties.Name -contains 'ConnectionTimeout' -and $null -ne $connector.ConnectionTimeout) { [string]$connector.ConnectionTimeout } else { $null }
-                            TransportRole           = if ($connector.PSObject.Properties.Name -contains 'TransportRole') { [string]$connector.TransportRole } else { $null }
-                            Banner                  = if ($connector.PSObject.Properties.Name -contains 'Banner') { [string]$connector.Banner } else { $null }
-                            RequireTLS              = if ($connector.PSObject.Properties.Name -contains 'RequireTLS') { [bool]$connector.RequireTLS } else { $null }
-                            MaxRecipientsPerMessage = if ($connector.PSObject.Properties.Name -contains 'MaxRecipientsPerMessage') { [string]$connector.MaxRecipientsPerMessage } else { $null }
+                            Identity                 = [string]$connector.Identity
+                            PermissionGroups         = [string]$connector.PermissionGroups
+                            AuthMechanism            = [string]$connector.AuthMechanism
+                            RemoteIPRangesCount      = @($connector.RemoteIPRanges).Count
+                            Enabled                  = if ($connector.PSObject.Properties.Name -contains 'Enabled') { [bool]$connector.Enabled } else { $null }
+                            ProtocolLoggingLevel     = if ($connector.PSObject.Properties.Name -contains 'ProtocolLoggingLevel') { [string]$connector.ProtocolLoggingLevel } else { $null }
+                            MaxMessageSize           = if ($connector.PSObject.Properties.Name -contains 'MaxMessageSize' -and $null -ne $connector.MaxMessageSize) { [string]$connector.MaxMessageSize } else { $null }
+                            MaxHopCount              = if ($connector.PSObject.Properties.Name -contains 'MaxHopCount') { [string]$connector.MaxHopCount } else { $null }
+                            ConnectionTimeout        = if ($connector.PSObject.Properties.Name -contains 'ConnectionTimeout' -and $null -ne $connector.ConnectionTimeout) { [string]$connector.ConnectionTimeout } else { $null }
+                            TransportRole            = if ($connector.PSObject.Properties.Name -contains 'TransportRole') { [string]$connector.TransportRole } else { $null }
+                            Banner                   = if ($connector.PSObject.Properties.Name -contains 'Banner') { [string]$connector.Banner } else { $null }
+                            RequireTLS               = if ($connector.PSObject.Properties.Name -contains 'RequireTLS') { [bool]$connector.RequireTLS } else { $null }
+                            MaxRecipientsPerMessage  = if ($connector.PSObject.Properties.Name -contains 'MaxRecipientsPerMessage') { [string]$connector.MaxRecipientsPerMessage } else { $null }
+                            TlsDomainCapabilities    = if ($connector.PSObject.Properties.Name -contains 'TlsDomainCapabilities') { [string]$connector.TlsDomainCapabilities } else { $null }
+                            CloudServicesMailEnabled = if ($connector.PSObject.Properties.Name -contains 'CloudServicesMailEnabled') { [bool]$connector.CloudServicesMailEnabled } else { $null }
                         })
                 }
             }
@@ -4483,7 +5032,10 @@ function Get-EDCAServerInventory {
                     $sendConnMaxMsgSize = $null
                     if ($connector.PSObject.Properties.Name -contains 'MaxMessageSize' -and $null -ne $connector.MaxMessageSize) {
                         $scMsgSizeStr = [string]$connector.MaxMessageSize
-                        if ($scMsgSizeStr -ne 'Unlimited') {
+                        if ($scMsgSizeStr -eq 'Unlimited') {
+                            $sendConnMaxMsgSize = -1
+                        }
+                        else {
                             $scMsgSizeMatch = [regex]::Match($scMsgSizeStr, '\(([\d,]+)\s*bytes\)')
                             if ($scMsgSizeMatch.Success) { try { $sendConnMaxMsgSize = [long]($scMsgSizeMatch.Groups[1].Value -replace ',', '') } catch {} }
                         }
@@ -4653,8 +5205,9 @@ function Get-EDCAServerInventory {
                     }
 
                     $maxPerDomainOutboundConnections = $null
-                    if ($transportService.PSObject.Properties.Name -contains 'MaxPerDomainOutboundConnections') {
-                        $maxPerDomainOutboundConnections = [int]$transportService.MaxPerDomainOutboundConnections
+                    if ($transportService.PSObject.Properties.Name -contains 'MaxPerDomainOutboundConnections' -and $null -ne $transportService.MaxPerDomainOutboundConnections) {
+                        $mpdocStr = [string]$transportService.MaxPerDomainOutboundConnections
+                        if ($mpdocStr -ne 'Unlimited') { try { $maxPerDomainOutboundConnections = [int]$mpdocStr } catch {} } else { $maxPerDomainOutboundConnections = -1 }
                     }
 
                     $messageRetryIntervalMinutes = $null
@@ -4936,6 +5489,265 @@ function Get-EDCAServerInventory {
             catch {
                 $exchEndpointWarnings += ('Get-ExchangeCertificate via endpoint failed: ' + $_.Exception.Message)
             }
+
+            try {
+                $inventory.Exchange.ServiceHealth = @(Invoke-EDCAExchangeEndpointCommand -Server $invokeTarget -ScriptBlock {
+                        Test-ServiceHealth -ErrorAction Stop | Select-Object -Property Role, RequiredServicesRunning, ServicesNotRunning
+                    })
+            }
+            catch {
+                $exchEndpointWarnings += ('Test-ServiceHealth via endpoint failed: ' + $_.Exception.Message)
+            }
+        }
+    }
+
+    if ($isEdge -and ($inventory.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $inventory.Exchange -and [bool]$inventory.Exchange.IsExchangeServer) {
+        Write-Verbose ('Collecting Exchange cmdlet data for Edge server {0} via {1}.' -f $invokeTarget, $(if ($isLocalTarget) { 'direct invocation (PSSnapin)' } else { 'Exchange endpoint (ConnectionUri/Negotiate)' }))
+        $edgeEndpointWarnings = @()
+        $edgeCmdletsAvailable = $false
+        $edgeData = [pscustomobject]@{
+            AntispamAgentsEnabled    = $null
+            EdgeSubscriptions        = @()
+            ContentFilterConfig      = $null
+            RecipientFilterConfig    = $null
+            SenderFilterConfig       = $null
+            ConnectionFilteringAgent = $null
+            SendConnectors           = @()
+            ReceiveConnectors        = @()
+            SenderReputationConfig   = $null
+            SenderIdConfig           = $null
+        }
+
+        $invokeEdge = if ($isLocalTarget) {
+            { param([scriptblock]$Cmd) & $Cmd }
+        }
+        else {
+            { param([scriptblock]$Cmd) Invoke-EDCAExchangeEndpointCommand -Server $invokeTarget -Authentication Negotiate -ScriptBlock $Cmd }
+        }
+
+        try {
+            $sbEdgeSrv = [scriptblock]::Create("Get-ExchangeServer -Identity '$invokeTarget'")
+            $edgeServer = & $invokeEdge $sbEdgeSrv
+            if ($null -ne $edgeServer) {
+                $edgeCmdletsAvailable = $true
+                $inventory.Exchange.ExchangeCmdletsAvailable = $true
+                if ($edgeServer.PSObject.Properties.Name -contains 'Name') { $inventory.Exchange.Name = [string]$edgeServer.Name }
+                if ($edgeServer.PSObject.Properties.Name -contains 'AdminDisplayVersion') { $inventory.Exchange.AdminDisplayVersion = [string]$edgeServer.AdminDisplayVersion }
+                if ($edgeServer.PSObject.Properties.Name -contains 'Edition') { $inventory.Exchange.Edition = [string]$edgeServer.Edition }
+                $adv = [string]$inventory.Exchange.AdminDisplayVersion
+                if ($adv -match 'Version 15\.1') { $inventory.Exchange.ProductLine = 'Exchange2016' }
+                elseif ($adv -match 'Version 15\.2') {
+                    $isSe = $false
+                    if ($edgeServer.PSObject.Properties.Name -contains 'IsExchangeServerSubscriptionEdition') { $isSe = [bool]$edgeServer.IsExchangeServerSubscriptionEdition }
+                    if (-not $isSe -and $adv -match 'Subscription|SE') { $isSe = $true }
+                    if (-not $isSe -and $adv -match 'Build\s+(\d+)\.') { if ([int]$matches[1] -ge 2562) { $isSe = $true } }
+                    $inventory.Exchange.ProductLine = if ($isSe) { 'ExchangeSE' } else { 'Exchange2019' }
+                }
+            }
+        }
+        catch {
+            $edgeEndpointWarnings += ('Get-ExchangeServer (Edge/Negotiate) failed: ' + $_.Exception.Message)
+        }
+
+        if ($edgeCmdletsAvailable) {
+            try {
+                $certSvcResult = @(& $invokeEdge {
+                        Get-ExchangeCertificate -ErrorAction Stop | Select-Object -Property Thumbprint, Services
+                    })
+                $certSvcMap = @{}
+                foreach ($ec in $certSvcResult) {
+                    if (-not [string]::IsNullOrWhiteSpace([string]$ec.Thumbprint)) { $certSvcMap[[string]$ec.Thumbprint] = [string]$ec.Services }
+                }
+                $updatedCerts = @()
+                foreach ($cert in @($inventory.Certificates)) {
+                    $svc = if ($certSvcMap.ContainsKey([string]$cert.Thumbprint)) { $certSvcMap[[string]$cert.Thumbprint] } else { 'None' }
+                    $updatedCerts += [pscustomobject]@{
+                        Subject    = [string]$cert.Subject
+                        Thumbprint = [string]$cert.Thumbprint
+                        NotAfter   = $cert.NotAfter
+                        IsExpired  = [bool]$cert.IsExpired
+                        Services   = $svc
+                    }
+                }
+                $inventory | Add-Member -MemberType NoteProperty -Name Certificates -Value $updatedCerts -Force
+            }
+            catch {
+                $edgeEndpointWarnings += ('Get-ExchangeCertificate (Edge/Negotiate) failed: ' + $_.Exception.Message)
+            }
+
+            try {
+                $edgeData.EdgeSubscriptions = @(& $invokeEdge {
+                        Get-EdgeSubscription -ErrorAction Stop | Select-Object -Property Name, Domain, Site, CreateUtc, LifeTime, LeaseType, IsValid
+                    })
+            }
+            catch {
+                $edgeEndpointWarnings += ('Get-EdgeSubscription (Edge/Negotiate) failed: ' + $_.Exception.Message)
+            }
+
+            try {
+                $edgeData.ContentFilterConfig = & $invokeEdge {
+                    Get-ContentFilterConfig -ErrorAction Stop | Select-Object -Property Enabled, QuarantineMailbox, RejectionResponse, SCLRejectEnabled, SCLDeleteEnabled
+                }
+            }
+            catch {
+                $edgeEndpointWarnings += ('Get-ContentFilterConfig (Edge/Negotiate) failed: ' + $_.Exception.Message)
+            }
+
+            try {
+                $edgeData.RecipientFilterConfig = & $invokeEdge {
+                    Get-RecipientFilterConfig -ErrorAction Stop | Select-Object -Property Enabled, BlockListEnabled, RecipientValidationEnabled
+                }
+            }
+            catch {
+                $edgeEndpointWarnings += ('Get-RecipientFilterConfig (Edge/Negotiate) failed: ' + $_.Exception.Message)
+            }
+
+            try {
+                $edgeData.SenderFilterConfig = & $invokeEdge {
+                    Get-SenderFilterConfig -ErrorAction Stop | Select-Object -Property Enabled, BlankSenderBlockingEnabled, BlockedSenders, BlockedDomains
+                }
+            }
+            catch {
+                $edgeEndpointWarnings += ('Get-SenderFilterConfig (Edge/Negotiate) failed: ' + $_.Exception.Message)
+            }
+
+            try {
+                $cfAgent = & $invokeEdge {
+                    Get-TransportAgent -Identity 'Connection Filtering Agent' -ErrorAction Stop
+                }
+                $edgeData.ConnectionFilteringAgent = [pscustomobject]@{
+                    Enabled = if ($null -ne $cfAgent -and $cfAgent.PSObject.Properties.Name -contains 'Enabled') { [bool]$cfAgent.Enabled } else { $false }
+                }
+            }
+            catch {
+                $edgeEndpointWarnings += ('Get-TransportAgent "Connection Filtering Agent" (Edge/Negotiate) failed: ' + $_.Exception.Message)
+            }
+
+            try {
+                $edgeData.SendConnectors = @(& $invokeEdge {
+                        Get-SendConnector -ErrorAction Stop | Select-Object -Property Identity, RequireTls, TlsAuthLevel, TlsDomain, DomainSecureEnabled, Enabled, ProtocolLoggingLevel, SmartHosts, DNSRoutingEnabled, SmartHostAuthMechanism, MaxMessageSize
+                    })
+            }
+            catch {
+                $edgeEndpointWarnings += ('Get-SendConnector (Edge/Negotiate) failed: ' + $_.Exception.Message)
+            }
+
+            try {
+                $edgeData.ReceiveConnectors = @(& $invokeEdge {
+                        Get-ReceiveConnector -ErrorAction Stop | Select-Object -Property Identity, AuthMechanism, PermissionGroups, RequireTLS, DomainSecureEnabled, @{N = 'TarpitInterval'; E = { if ($null -ne $_.TarpitInterval) { [pscustomobject]@{Ticks = [long]$_.TarpitInterval.Ticks } } else { $null } } }, Banner, @{N = 'Bindings'; E = { @($_.Bindings | ForEach-Object { [string]$_ }) } }, Enabled
+                    })
+            }
+            catch {
+                $edgeEndpointWarnings += ('Get-ReceiveConnector (Edge/Negotiate) failed: ' + $_.Exception.Message)
+            }
+
+            try {
+                $edgeData.SenderReputationConfig = & $invokeEdge {
+                    Get-SenderReputationConfig -ErrorAction Stop | Select-Object -Property Enabled, SenderBlockingEnabled, SenderBlockingPeriod, MinimumSenderReputationLevel
+                }
+            }
+            catch {
+                $edgeEndpointWarnings += ('Get-SenderReputationConfig (Edge/Negotiate) failed: ' + $_.Exception.Message)
+            }
+
+            try {
+                $edgeData.SenderIdConfig = & $invokeEdge {
+                    Get-SenderIdConfig -ErrorAction Stop | Select-Object -Property Enabled, SpoofedDomainAction
+                }
+            }
+            catch {
+                $edgeEndpointWarnings += ('Get-SenderIdConfig (Edge/Negotiate) failed: ' + $_.Exception.Message)
+            }
+
+            try {
+                $inventory.Exchange.ServiceHealth = @(& $invokeEdge {
+                        Test-ServiceHealth -ErrorAction Stop | Select-Object -Property Role, RequiredServicesRunning, ServicesNotRunning
+                    })
+            }
+            catch {
+                $edgeEndpointWarnings += ('Test-ServiceHealth (Edge/Negotiate) failed: ' + $_.Exception.Message)
+            }
+
+            try {
+                $sbEdgeTrans = [scriptblock]::Create("Get-TransportService -Identity '$invokeTarget'")
+                $edgeTransportService = & $invokeEdge $sbEdgeTrans
+                if ($null -ne $edgeTransportService) {
+                    $maxOutboundConnections = $null
+                    if ($edgeTransportService.PSObject.Properties.Name -contains 'MaxOutboundConnections' -and $null -ne $edgeTransportService.MaxOutboundConnections) {
+                        $mocStr = [string]$edgeTransportService.MaxOutboundConnections
+                        if ($mocStr -ne 'Unlimited') { try { $maxOutboundConnections = [int]$mocStr } catch {} } else { $maxOutboundConnections = -1 }
+                    }
+
+                    $maxPerDomainOutboundConnections = $null
+                    if ($edgeTransportService.PSObject.Properties.Name -contains 'MaxPerDomainOutboundConnections' -and $null -ne $edgeTransportService.MaxPerDomainOutboundConnections) {
+                        $mpdocStr = [string]$edgeTransportService.MaxPerDomainOutboundConnections
+                        if ($mpdocStr -ne 'Unlimited') { try { $maxPerDomainOutboundConnections = [int]$mpdocStr } catch {} } else { $maxPerDomainOutboundConnections = -1 }
+                    }
+
+                    $messageRetryIntervalMinutes = $null
+                    if ($edgeTransportService.PSObject.Properties.Name -contains 'MessageRetryInterval' -and $null -ne $edgeTransportService.MessageRetryInterval) {
+                        $messageRetryIntervalMinutes = Get-EDCAIntervalMinutes -Value $edgeTransportService.MessageRetryInterval
+                    }
+
+                    $connectivityLogEnabled = $null
+                    if ($edgeTransportService.PSObject.Properties.Name -contains 'ConnectivityLogEnabled') {
+                        $connectivityLogEnabled = [bool]$edgeTransportService.ConnectivityLogEnabled
+                    }
+
+                    $messageTrackingLogEnabled = $null
+                    if ($edgeTransportService.PSObject.Properties.Name -contains 'MessageTrackingLogEnabled') {
+                        $messageTrackingLogEnabled = [bool]$edgeTransportService.MessageTrackingLogEnabled
+                    }
+
+                    $messageTrackingLogSubjectLoggingEnabled = $null
+                    if ($edgeTransportService.PSObject.Properties.Name -contains 'MessageTrackingLogSubjectLoggingEnabled') {
+                        $messageTrackingLogSubjectLoggingEnabled = [bool]$edgeTransportService.MessageTrackingLogSubjectLoggingEnabled
+                    }
+
+                    $pickupDirectoryPath = $null
+                    if ($edgeTransportService.PSObject.Properties.Name -contains 'PickupDirectoryPath' -and -not [string]::IsNullOrWhiteSpace([string]$edgeTransportService.PickupDirectoryPath)) {
+                        $pickupDirectoryPath = [string]$edgeTransportService.PickupDirectoryPath
+                    }
+
+                    if ($edgeTransportService.PSObject.Properties.Name -contains 'AntispamAgentsEnabled') {
+                        $edgeData.AntispamAgentsEnabled = [bool]$edgeTransportService.AntispamAgentsEnabled
+                    }
+
+                    $inventory.Exchange.TransportRetryConfig = [pscustomobject]@{
+                        MaxOutboundConnections                  = $maxOutboundConnections
+                        MaxPerDomainOutboundConnections         = $maxPerDomainOutboundConnections
+                        MessageRetryIntervalMinutes             = $messageRetryIntervalMinutes
+                        ConnectivityLogEnabled                  = $connectivityLogEnabled
+                        MessageTrackingLogEnabled               = $messageTrackingLogEnabled
+                        MessageTrackingLogSubjectLoggingEnabled = $messageTrackingLogSubjectLoggingEnabled
+                        PickupDirectoryPath                     = $pickupDirectoryPath
+                    }
+                }
+            }
+            catch {
+                $edgeEndpointWarnings += ('Get-TransportService (Edge/Negotiate) failed: ' + $_.Exception.Message)
+            }
+
+            try {
+                $edgeTransportAgents = @(& $invokeEdge {
+                        Get-TransportAgent -ErrorAction Stop | Select-Object -Property Identity, Enabled
+                    })
+                foreach ($agent in $edgeTransportAgents) {
+                    $inventory.Exchange.TransportAgents = @($inventory.Exchange.TransportAgents) + @([pscustomobject]@{
+                            Identity = [string]$agent.Identity
+                            Enabled  = if ($agent.PSObject.Properties.Name -contains 'Enabled') { [bool]$agent.Enabled } else { $null }
+                        })
+                }
+            }
+            catch {
+                $edgeEndpointWarnings += ('Get-TransportAgent (Edge/Negotiate) failed: ' + $_.Exception.Message)
+            }
+
+            $inventory.Exchange.EdgeData = $edgeData
+        }
+
+        foreach ($w in $edgeEndpointWarnings) {
+            $inventory.Exchange.CollectionWarnings = @($inventory.Exchange.CollectionWarnings) + @($w)
         }
     }
 
@@ -4993,10 +5805,11 @@ function Invoke-EDCAServerCollectionWorker {
         return $inventory
     }
     catch {
-        Write-EDCALog -Level 'WARN' -Message ('Collection failed on {0}: {1}' -f $Server, $_.Exception.Message)
+        $errorDetail = Get-EDCAExceptionMessage -ErrorRecord $_
+        Write-EDCALog -Level 'WARN' -Message ('Collection failed on {0}: {1}' -f $Server, $errorDetail)
         return [pscustomobject]@{
             Server               = $Server
-            CollectionError      = $_.Exception.Message
+            CollectionError      = $errorDetail
             ConnectivityPrecheck = $connectivity
         }
     }
@@ -5022,8 +5835,11 @@ function Invoke-EDCAParallelServerCollection {
     Write-Verbose ('Using parallel server collection for {0} target(s) with throttle {1} via {2}.' -f $targetServers.Count, $ThrottleLimit, $jobBackend)
     Write-EDCALog -Message ('Collecting data from {0} server(s).' -f $targetServers.Count)
 
-    $commonModulePath = Join-Path -Path $PSScriptRoot -ChildPath 'Common.ps1'
-    $collectionModulePath = Join-Path -Path $PSScriptRoot -ChildPath 'Collection.ps1'
+    # When running as a module, $PSScriptRoot points to the module root, not Modules/.
+    # Fall back to $PSScriptRoot only when running as a plain dot-sourced script.
+    $modulesDir = if ($script:EDCAModuleRoot) { Join-Path $script:EDCAModuleRoot 'Modules' } else { $PSScriptRoot }
+    $commonModulePath = Join-Path -Path $modulesDir -ChildPath 'Common.ps1'
+    $collectionModulePath = Join-Path -Path $modulesDir -ChildPath 'Collection.ps1'
 
     $jobScript = {
         param(
@@ -5108,10 +5924,10 @@ function Invoke-EDCAParallelServerCollection {
         $activeJobs = @($activeJobs | Where-Object { $_.Job.Id -ne $completedJob.Id })
         $collectionError = if ($result.PSObject.Properties.Name -contains 'CollectionError') { $result.CollectionError } else { $null }
         if (-not [string]::IsNullOrWhiteSpace($collectionError)) {
-            Write-Host ('  [{0}/{1}] ERROR {2}: {3}' -f ($meta.Index + 1), $targetServers.Count, $meta.Server, $collectionError) -ForegroundColor Red
+            Write-EDCALog -Level 'ERROR' -Message ('[{0}/{1}] {2}: {3}' -f ($meta.Index + 1), $targetServers.Count, $meta.Server, $collectionError)
         }
         else {
-            Write-Host ('  [{0}/{1}] Done:  {2}' -f ($meta.Index + 1), $targetServers.Count, $meta.Server) -ForegroundColor Green
+            Write-EDCALog -Message ('[{0}/{1}] Done: {2}' -f ($meta.Index + 1), $targetServers.Count, $meta.Server)
         }
     }
 
@@ -5144,14 +5960,20 @@ function Get-EDCAExchangeEnvironmentServers {
     [CmdletBinding()]
     param()
 
-    # Discover Exchange servers via the well-known "Exchange Servers" universal security group.
-    # Exchange Setup adds every Exchange server computer account to this group; membership is
-    # authoritative. Uses .NET System.DirectoryServices — no RSAT/AD module required.
+    # Discover Exchange servers via two complementary AD queries:
+    # 1. The well-known "Exchange Servers" universal security group — Exchange Setup adds every
+    #    domain-joined server computer account to this group; membership is authoritative.
+    # 2. msExchExchangeServer objects in the AD Configuration partition with the Edge Transport
+    #    role bit (64) set — Edge Transport servers are not domain-joined and therefore never
+    #    appear in "Exchange Servers", but EdgeSync creates a Configuration-partition object for
+    #    each subscribed Edge server.
+    # Uses .NET System.DirectoryServices — no RSAT/AD module required.
     Write-Verbose 'Discovering Exchange servers via AD group membership of "Exchange Servers" using .NET DirectoryServices.'
 
     try {
         $rootDse = [System.DirectoryServices.DirectoryEntry]::new('GC://RootDSE')
         $forestRootNC = [string]$rootDse.Properties['rootDomainNamingContext'][0]
+        $configNC     = [string]$rootDse.Properties['configurationNamingContext'][0]
     }
     catch {
         throw ('Failed to connect to Active Directory via LDAP: {0}. Provide -Servers explicitly.' -f $_.Exception.Message)
@@ -5203,15 +6025,52 @@ function Get-EDCAExchangeEnvironmentServers {
         throw ('Exchange server discovery failed while enumerating members: {0}. Provide -Servers explicitly.' -f $_.Exception.Message)
     }
 
-    $unique = @($serverNames | Sort-Object -Unique)
-
-    if ($unique.Count -eq 0) {
-        throw 'The "Exchange Servers" group exists but contains no computer members. Provide -Servers explicitly.'
+    # Discover Edge Transport servers from the AD Configuration partition.
+    # Edge Transport servers are not domain-joined, so they have no computer account in the
+    # domain and are never added to the "Exchange Servers" security group.  EdgeSync creates an
+    # msExchExchangeServer object for every subscribed Edge server in the Configuration partition;
+    # those objects carry msExchCurrentServerRoles with bit 64 (Edge Transport) set.
+    # LDAP_MATCHING_RULE_BIT_AND OID 1.2.840.113556.1.4.803 tests whether a specific bit is set.
+    # Edge servers are returned separately so callers can advise the operator without attempting
+    # a remote collection that will always fail (Edge servers reject domain Kerberos auth).
+    $edgeNames = [System.Collections.Generic.List[string]]::new()
+    try {
+        $configRoot   = [System.DirectoryServices.DirectoryEntry]::new(('LDAP://{0}' -f $configNC))
+        $edgeSearcher = [System.DirectoryServices.DirectorySearcher]::new($configRoot)
+        $edgeSearcher.Filter      = '(&(objectClass=msExchExchangeServer)(msExchCurrentServerRoles:1.2.840.113556.1.4.803:=64))'
+        $edgeSearcher.SearchScope = [System.DirectoryServices.SearchScope]::Subtree
+        $edgeSearcher.PageSize    = 1000
+        $null = $edgeSearcher.PropertiesToLoad.Add('name')
+        $edgeResults = $edgeSearcher.FindAll()
+        foreach ($result in $edgeResults) {
+            $name = if ($result.Properties['name'].Count -gt 0) { [string]$result.Properties['name'][0] } else { $null }
+            if (-not [string]::IsNullOrWhiteSpace($name)) {
+                $edgeNames.Add($name)
+            }
+        }
+        $edgeResults.Dispose()
+    }
+    catch {
+        # Non-fatal: log and continue with whatever domain-joined servers were found.
+        Write-Verbose ('Edge Transport server discovery from Configuration partition failed: {0}' -f $_.Exception.Message)
     }
 
-    Write-Verbose ('Automatic discovery found {0} server(s): {1}' -f $unique.Count, ($unique -join ', '))
+    $uniqueServers = @($serverNames | Sort-Object -Unique)
+    $uniqueEdge    = @($edgeNames   | Sort-Object -Unique)
 
-    return $unique
+    if ($uniqueServers.Count -eq 0) {
+        throw 'No Exchange servers were discovered in Active Directory. Provide -Servers explicitly.'
+    }
+
+    Write-Verbose ('Automatic discovery found {0} server(s): {1}' -f $uniqueServers.Count, ($uniqueServers -join ', '))
+    if ($uniqueEdge.Count -gt 0) {
+        Write-EDCALog -Level 'WARN' -Message ('Edge Transport server(s) detected in AD (not added to collection targets): {0}' -f ($uniqueEdge -join ', '))
+    }
+
+    return [pscustomobject]@{
+        Servers     = $uniqueServers
+        EdgeServers = $uniqueEdge
+    }
 }
 
 function Invoke-EDCAExchangeEndpointCommand {
@@ -5220,7 +6079,9 @@ function Invoke-EDCAExchangeEndpointCommand {
         [Parameter(Mandatory = $true)]
         [string]$Server,
         [Parameter(Mandatory = $true)]
-        [scriptblock]$ScriptBlock
+        [scriptblock]$ScriptBlock,
+        [ValidateSet('Kerberos', 'Negotiate')]
+        [string]$Authentication = 'Kerberos'
     )
 
     $connectionHost = $Server
@@ -5237,7 +6098,7 @@ function Invoke-EDCAExchangeEndpointCommand {
 
     $connectionUri = ('http://{0}/PowerShell' -f $connectionHost)
 
-    return Invoke-Command -ConnectionUri $connectionUri -ConfigurationName Microsoft.Exchange -ScriptBlock $ScriptBlock -Authentication Kerberos -ErrorAction Stop
+    return Invoke-Command -ConnectionUri $connectionUri -ConfigurationName Microsoft.Exchange -ScriptBlock $ScriptBlock -Authentication $Authentication -ErrorAction Stop
 }
 
 function Get-EDCAOrganizationInventory {
@@ -5248,29 +6109,34 @@ function Get-EDCAOrganizationInventory {
     )
 
     $organization = [pscustomobject]@{
-        Available                   = $false
-        SourceServer                = $Server
-        ExchangeCmdletsAvailable    = $true
-        OrganizationIdentity        = $null
-        OAuth2ClientProfileEnabled  = $null
-        AdSplitPermissionEnabled    = $null
-        CustomerFeedbackEnabled     = $null
-        MaxRecipientEnvelopeLimit   = $null
-        UpnPrimarySmtpMismatchCount = $null
-        AcceptedDomains             = @()
-        ForestFunctionalLevel       = $null
-        DomainFunctionalLevel       = $null
-        AdSiteCount                 = $null
-        DefaultAuthPolicyName       = $null
-        DefaultAuthPolicyBasicAuth  = $null
-        AuthCertificate             = $null
-        TransportConfig             = $null
-        RemoteDomains               = @()
-        EdgeServers                 = @()
-        MobileDevicePolicies        = @()
-        IrmConfiguration            = $null
-        DcCoreRatio                 = $null
-        CollectionWarnings          = @()
+        Available                          = $false
+        SourceServer                       = $Server
+        ExchangeCmdletsAvailable           = $true
+        OrganizationIdentity               = $null
+        OAuth2ClientProfileEnabled         = $null
+        AdSplitPermissionEnabled           = $null
+        CustomerFeedbackEnabled            = $null
+        MaxRecipientEnvelopeLimit          = $null
+        UpnPrimarySmtpMismatchCount        = $null
+        AcceptedDomains                    = @()
+        ForestFunctionalLevel              = $null
+        DomainFunctionalLevel              = $null
+        AdSiteCount                        = $null
+        DefaultAuthPolicyName              = $null
+        DefaultAuthPolicyBasicAuth         = $null
+        AuthCertificate                    = $null
+        TransportConfig                    = $null
+        RemoteDomains                      = @()
+        EdgeServers                        = @()
+        MobileDevicePolicies               = @()
+        IrmConfiguration                   = $null
+        DagTopologies                      = @()
+        DcCoreRatio                        = $null
+        DomainObjectDacl                   = $null
+        ClientAccessRules                  = $null
+        NonAdminRemotePowerShellUsers      = $null
+        NonAdminRemotePowerShellCountTotal = $null
+        CollectionWarnings                 = @()
     }
 
     Write-EDCALog -Message ('Collecting organization-level Exchange settings via {0}' -f $Server)
@@ -5433,7 +6299,7 @@ function Get-EDCAOrganizationInventory {
             $rcvDisplay = if ($null -ne $tcRaw.MaxReceiveSize) { [string]$tcRaw.MaxReceiveSize } else { $null }
             $sndBytes = $null
             $rcvBytes = $null
-            # Exchange ByteQuantifiedSize serialises as e.g. "25 MB (26,214,400 bytes)" — parse byte count from string.
+            # Exchange ByteQuantifiedSize serialises as e.g. "25 MB (26,214,400 bytes)" - parse byte count from string.
             if (-not [string]::IsNullOrEmpty($sndDisplay) -and $sndDisplay -match '\(([0-9,]+)\s+bytes?\)') {
                 $null = [long]::TryParse(($Matches[1] -replace ',', ''), [ref]$sndBytes)
             }
@@ -5493,6 +6359,34 @@ function Get-EDCAOrganizationInventory {
     }
     catch {
         $organization.CollectionWarnings += ('Get-ExchangeServer (Edge detection) failed: ' + $_.Exception.Message)
+    }
+
+    try {
+        $dagResults = @(Invoke-EDCAExchangeEndpointCommand -Server $Server -ScriptBlock {
+                Get-DatabaseAvailabilityGroup -ErrorAction Stop | Select-Object Name, WitnessServer, WitnessDirectory, DatacenterActivationMode, Servers
+            })
+
+        foreach ($dag in $dagResults) {
+            $dagServerNames = @()
+            if ($dag.PSObject.Properties.Name -contains 'Servers' -and $null -ne $dag.Servers) {
+                $dagServerNames = @($dag.Servers | ForEach-Object {
+                        $serverText = [string]$_
+                        if ([string]::IsNullOrWhiteSpace($serverText)) { return $null }
+                        ($serverText -split '\\')[0]
+                    } | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | Sort-Object -Unique)
+            }
+
+            $organization.DagTopologies += [pscustomobject]@{
+                Name                     = if ($dag.PSObject.Properties.Name -contains 'Name') { [string]$dag.Name } else { '' }
+                WitnessServer            = if ($dag.PSObject.Properties.Name -contains 'WitnessServer' -and $null -ne $dag.WitnessServer) { [string]$dag.WitnessServer } else { '' }
+                WitnessDirectory         = if ($dag.PSObject.Properties.Name -contains 'WitnessDirectory' -and $null -ne $dag.WitnessDirectory) { [string]$dag.WitnessDirectory } else { '' }
+                DatacenterActivationMode = if ($dag.PSObject.Properties.Name -contains 'DatacenterActivationMode' -and $null -ne $dag.DatacenterActivationMode) { [string]$dag.DatacenterActivationMode } else { '' }
+                Servers                  = $dagServerNames
+            }
+        }
+    }
+    catch {
+        $organization.CollectionWarnings += ('Get-DatabaseAvailabilityGroup failed: ' + $_.Exception.Message)
     }
 
     try {
@@ -5602,7 +6496,7 @@ function Get-EDCAOrganizationInventory {
         # Enumerate all non-Edge Exchange servers with their AD site names via a local
         # DirectorySearcher query against the AD Configuration partition.  msExchExchangeServer
         # objects carry an msExchServerSite attribute (DN of the AD site) so no Exchange PS
-        # endpoint call is needed — and the Exchange remote runspace runs in no-language mode
+        # endpoint call is needed - and the Exchange remote runspace runs in no-language mode
         # which rejects complex scriptblock syntax such as [PSCustomObject]@{}.
         Write-EDCALog -Message 'Collecting Domain Controller system information.'
         $allExSvrs = [System.Collections.Generic.List[object]]::new()
@@ -5679,7 +6573,7 @@ function Get-EDCAOrganizationInventory {
                 if ($gcsBySite.ContainsKey($siteName)) {
                     $gcList = @($gcsBySite[$siteName])
                 }
-                # else: gcsBySite built successfully but no GC in this site — $dcAccessError stays $null
+                # else: gcsBySite built successfully but no GC in this site - $dcAccessError stays $null
             }
 
             # Query DC/GC core counts using CIM
@@ -5727,6 +6621,182 @@ function Get-EDCAOrganizationInventory {
             })
     }
 
+    # Collect domain object DACL state for EDCA-IAC-028 (Exchange-AD-Privesc WriteDACL ACE check).
+    # Uses pure .NET ADSI - no ActiveDirectory PowerShell module required.
+    try {
+        $adDomain = [System.DirectoryServices.ActiveDirectory.Domain]::GetCurrentDomain()
+        $domainDN = $adDomain.GetDirectoryEntry().distinguishedName
+        $domainEntry = [System.DirectoryServices.DirectoryEntry]"LDAP://$domainDN"
+        $domainAcl = $domainEntry.get_objectSecurity()
+
+        # GUIDs for inherited object types carrying the vulnerable WriteDACL ACEs
+        $userObjTypeGuid = [Guid]'bf967aba-0de6-11d0-a285-00aa003049e2'  # User class
+        $inetOrgPersonGuid = [Guid]'4828cc14-1437-45bc-9b07-ad6f015e5f28'  # inetOrgPerson class
+        $groupObjTypeGuid = [Guid]'bf967a9c-0de6-11d0-a285-00aa003049e2'  # Group class (AdminSDHolder, Exchange 2016+)
+        $writeDaclRight = [System.DirectoryServices.ActiveDirectoryRights]::WriteDacl
+        $inheritOnlyFlag = [System.Security.AccessControl.PropagationFlags]::InheritOnly
+
+        # Resolve EWP SID - translate to SecurityIdentifier for reliable matching regardless of domain name
+        $ewpSid = $null
+        try {
+            $ewpSid = (New-Object System.Security.Principal.NTAccount 'Exchange Windows Permissions').Translate([System.Security.Principal.SecurityIdentifier]).Value
+        }
+        catch {
+            # Group may not exist (e.g. split permissions or Exchange not installed in this domain)
+        }
+
+        # Resolve Exchange Trusted Subsystem SID for AdminSDHolder check (Exchange 2016+ only)
+        $etsSid = $null
+        try {
+            $etsSid = (New-Object System.Security.Principal.NTAccount 'Exchange Trusted Subsystem').Translate([System.Security.Principal.SecurityIdentifier]).Value
+        }
+        catch {}
+
+        $domainRules = @($domainAcl.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier]))
+
+        $ewpUserAceInheritOnly = $null
+        $ewpInetOrgPersonAceInheritOnly = $null
+
+        if ($null -ne $ewpSid) {
+            foreach ($guid in @($userObjTypeGuid, $inetOrgPersonGuid)) {
+                $matchingAce = $domainRules | Where-Object {
+                    $_.IdentityReference.Value -eq $ewpSid -and
+                    ($_.ActiveDirectoryRights -band $writeDaclRight) -and
+                    $_.ObjectType -eq [Guid]::Empty -and
+                    $_.InheritedObjectType -eq $guid -and
+                    $_.AccessControlType -eq [System.Security.AccessControl.AccessControlType]::Allow
+                } | Select-Object -First 1
+
+                $hasInheritOnly = $null
+                if ($null -ne $matchingAce) {
+                    $hasInheritOnly = [bool]($matchingAce.PropagationFlags -band $inheritOnlyFlag)
+                }
+                if ($guid -eq $userObjTypeGuid) {
+                    $ewpUserAceInheritOnly = $hasInheritOnly
+                }
+                else {
+                    $ewpInetOrgPersonAceInheritOnly = $hasInheritOnly
+                }
+            }
+        }
+
+        # AdminSDHolder check: ETS WriteDACL Group ACE must be absent (Exchange 2016+)
+        $etsGroupAceOnAdminSdHolderAbsent = $null
+        if ($null -ne $etsSid) {
+            try {
+                $adminSdEntry = [System.DirectoryServices.DirectoryEntry]"LDAP://CN=AdminSDHolder,CN=System,$domainDN"
+                $adminSdAcl = $adminSdEntry.get_objectSecurity()
+                $adminSdRules = @($adminSdAcl.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier]))
+                $etsGroupAce = $adminSdRules | Where-Object {
+                    $_.IdentityReference.Value -eq $etsSid -and
+                    ($_.ActiveDirectoryRights -band $writeDaclRight) -and
+                    $_.ObjectType -eq $groupObjTypeGuid -and
+                    $_.AccessControlType -eq [System.Security.AccessControl.AccessControlType]::Allow
+                } | Select-Object -First 1
+                $etsGroupAceOnAdminSdHolderAbsent = ($null -eq $etsGroupAce)
+            }
+            catch {
+                # AdminSDHolder unreadable - leave $null
+            }
+        }
+
+        $organization.DomainObjectDacl = [pscustomobject]@{
+            EwpUserAceInheritOnly            = $ewpUserAceInheritOnly
+            EwpInetOrgPersonAceInheritOnly   = $ewpInetOrgPersonAceInheritOnly
+            EtsGroupAceOnAdminSdHolderAbsent = $etsGroupAceOnAdminSdHolderAbsent
+            CollectionError                  = $null
+        }
+    }
+    catch {
+        $organization.DomainObjectDacl = [pscustomobject]@{
+            EwpUserAceInheritOnly            = $null
+            EwpInetOrgPersonAceInheritOnly   = $null
+            EtsGroupAceOnAdminSdHolderAbsent = $null
+            CollectionError                  = $_.Exception.Message
+        }
+        $organization.CollectionWarnings += ('DomainObjectDacl collection failed: ' + $_.Exception.Message)
+    }
+
+    # Collect Client Access Rules for EDCA-IAC-010 (ClientAccessRules sub-check)
+    try {
+        $carResults = @(Invoke-EDCAExchangeEndpointCommand -Server $Server -ScriptBlock {
+                Get-ClientAccessRule -ErrorAction Stop | Select-Object Name, Action, AnyOfProtocols, AnyOfClientIPAddressesOrRanges, ExceptAnyOfClientIPAddressesOrRanges, Priority, Enabled
+            })
+        $organization.ClientAccessRules = @($carResults | ForEach-Object {
+                [pscustomobject]@{
+                    Name                                 = [string]$_.Name
+                    Action                               = [string]$_.Action
+                    AnyOfProtocols                       = @($_.AnyOfProtocols | ForEach-Object { [string]$_ })
+                    AnyOfClientIPAddressesOrRanges       = @($_.AnyOfClientIPAddressesOrRanges | ForEach-Object { [string]$_ })
+                    ExceptAnyOfClientIPAddressesOrRanges = @($_.ExceptAnyOfClientIPAddressesOrRanges | ForEach-Object { [string]$_ })
+                    Priority                             = if ($null -ne $_.Priority) { [int]$_.Priority } else { 0 }
+                    Enabled                              = if ($null -ne $_.Enabled) { [bool]$_.Enabled } else { $true }
+                }
+            })
+    }
+    catch {
+        $organization.CollectionWarnings += ('Get-ClientAccessRule failed: ' + $_.Exception.Message)
+    }
+
+    # Collect non-Exchange-admin users with RemotePowerShellEnabled for EDCA-IAC-010 (PS sub-check)
+    try {
+        # Step 1: collect all Exchange role group names
+        $roleGroupNames = @()
+        try {
+            $rgResults = @(Invoke-EDCAExchangeEndpointCommand -Server $Server -ScriptBlock {
+                    Get-RoleGroup -ErrorAction Stop | Select-Object Name
+                })
+            $roleGroupNames = @($rgResults | ForEach-Object { [string]$_.Name } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+        }
+        catch {
+            $organization.CollectionWarnings += ('Get-RoleGroup failed: ' + $_.Exception.Message)
+        }
+
+        # Step 2: collect role group members to identify Exchange admins
+        $exchangeAdminSet = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+        foreach ($rgName in $roleGroupNames) {
+            try {
+                $escapedName = $rgName -replace "'", "''"
+                $sbMembers = [scriptblock]::Create("Get-RoleGroupMember -Identity '$escapedName' -ErrorAction SilentlyContinue | Select-Object SamAccountName, DistinguishedName")
+                $members = @(Invoke-EDCAExchangeEndpointCommand -Server $Server -ScriptBlock $sbMembers)
+                foreach ($m in $members) {
+                    $sam = [string]$m.SamAccountName
+                    $dn = [string]$m.DistinguishedName
+                    if (-not [string]::IsNullOrWhiteSpace($sam)) { $null = $exchangeAdminSet.Add($sam) }
+                    if (-not [string]::IsNullOrWhiteSpace($dn)) { $null = $exchangeAdminSet.Add($dn) }
+                }
+            }
+            catch { }
+        }
+
+        # Step 3: collect users with RemotePowerShellEnabled = $true (capped at 500 for performance)
+        $psEnabledUsers = @(Invoke-EDCAExchangeEndpointCommand -Server $Server -ScriptBlock {
+                Get-User -Filter { RemotePowerShellEnabled -eq $true } -ResultSize 500 -ErrorAction Stop |
+                Select-Object Name, SamAccountName, DistinguishedName, RecipientType, RecipientTypeDetails
+            })
+
+        # Step 4: cross-reference - retain only non-admin users
+        $nonAdminPsUsers = [System.Collections.Generic.List[pscustomobject]]::new()
+        foreach ($u in $psEnabledUsers) {
+            $sam = [string]$u.SamAccountName
+            $dn = [string]$u.DistinguishedName
+            if (-not ($exchangeAdminSet.Contains($sam) -or $exchangeAdminSet.Contains($dn))) {
+                $nonAdminPsUsers.Add([pscustomobject]@{
+                        Name                 = [string]$u.Name
+                        SamAccountName       = $sam
+                        RecipientType        = [string]$u.RecipientType
+                        RecipientTypeDetails = [string]$u.RecipientTypeDetails
+                    })
+            }
+        }
+
+        $organization.NonAdminRemotePowerShellUsers = @($nonAdminPsUsers | Select-Object -First 50)
+        $organization.NonAdminRemotePowerShellCountTotal = $nonAdminPsUsers.Count
+    }
+    catch {
+        $organization.CollectionWarnings += ('Non-admin RemotePowerShellEnabled collection failed: ' + $_.Exception.Message)
+    }
+
     return $organization
 }
 
@@ -5741,14 +6811,65 @@ function Invoke-EDCACollection {
     )
 
     $normalizedServers = @($Servers | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | ForEach-Object { ([string]$_).Trim() } | Sort-Object -Unique)
+    $discoveredEdgeServers = @()   # populated by AD auto-discovery; empty when servers are passed explicitly
     if ($normalizedServers.Count -gt 0) {
         Write-Verbose ('Input server list normalized to {0} target(s): {1}' -f $normalizedServers.Count, ($normalizedServers -join ', '))
     }
 
     if ($normalizedServers.Count -eq 0) {
-        Write-EDCALog -Message 'No servers specified. Discovering all Exchange servers in the current environment.'
-        $normalizedServers = Get-EDCAExchangeEnvironmentServers
-        Write-EDCALog -Message ('Discovered Exchange servers: {0}' -f ($normalizedServers -join ', '))
+        # Determine local Exchange role from registry before attempting AD discovery.
+        # Exchange setup writes a role-specific subkey for each installed role:
+        #   EdgeTransportRole  -> Edge Transport server (not domain-joined; AD lookup will always fail)
+        #   MailboxRole        -> Mailbox server (domain-joined; AD discovery is appropriate)
+        $localExchangeRole = $null
+        if (Test-Path -Path 'HKLM:\SOFTWARE\Microsoft\ExchangeServer\v15\EdgeTransportRole') {
+            $localExchangeRole = 'Edge'
+        }
+        elseif (Test-Path -Path 'HKLM:\SOFTWARE\Microsoft\ExchangeServer\v15\MailboxRole') {
+            $localExchangeRole = 'Mailbox'
+        }
+        elseif (Test-Path -Path 'HKLM:\SOFTWARE\Microsoft\ExchangeServer\v15\Setup') {
+            # The Setup key is also created by Exchange Management Tools on non-Exchange machines.
+            # Only treat this machine as a real Exchange server if the transport service is present;
+            # management workstations (tools only) will not have MSExchangeTransport installed.
+            $transportSvc = Get-Service -Name 'MSExchangeTransport' -ErrorAction SilentlyContinue
+            if ($null -ne $transportSvc) {
+                # Real Exchange server without a recognised role subkey (rare; older or partial installs).
+                # Use MSExchangeADTopology to distinguish Edge (absent) from Mailbox (present).
+                $adTopologySvc = Get-Service -Name 'MSExchangeADTopology' -ErrorAction SilentlyContinue
+                $localExchangeRole = if ($null -eq $adTopologySvc) { 'Edge' } else { 'Mailbox' }
+            }
+            # else: management tools only — $localExchangeRole stays $null and AD discovery runs below.
+        }
+
+        if ($localExchangeRole -eq 'Edge') {
+            # Edge Transport servers are never domain-joined; skip AD discovery entirely.
+            Write-EDCALog -Message ('Exchange Edge Transport Server detected on this machine ({0}). Using local collection.' -f $env:COMPUTERNAME)
+            $normalizedServers = @($env:COMPUTERNAME)
+        }
+        else {
+            Write-EDCALog -Message 'No servers specified. Discovering all Exchange servers in the current environment.'
+            try {
+                $discovery         = Get-EDCAExchangeEnvironmentServers
+                $normalizedServers = @($discovery.Servers)
+                $discoveredEdgeServers = @($discovery.EdgeServers)
+                Write-EDCALog -Message ('Discovered Exchange servers: {0}' -f ($normalizedServers -join ', '))
+            }
+            catch {
+                # AD is unreachable. If Exchange is installed on this machine fall back to local
+                # collection automatically (covers Mailbox servers that lost AD connectivity, or
+                # machines where the role registry key was absent but Exchange is still present).
+                if ($null -ne $localExchangeRole -or (Test-Path -Path 'HKLM:\SOFTWARE\Microsoft\ExchangeServer\v15\Setup')) {
+                    Write-EDCALog -Message ('Active Directory unreachable: {0}' -f $_.Exception.Message)
+                    Write-EDCALog -Message ('Exchange detected on local machine ({0}). Falling back to local collection mode.' -f $env:COMPUTERNAME)
+                    Write-Warning ('Active Directory is unreachable. Falling back to local collection mode - collecting from {0} only.' -f $env:COMPUTERNAME)
+                    $normalizedServers = @($env:COMPUTERNAME)
+                }
+                else {
+                    throw
+                }
+            }
+        }
     }
 
     $results = Invoke-EDCAParallelServerCollection -Servers $normalizedServers -ThrottleLimit $ThrottleLimit
@@ -5777,6 +6898,7 @@ function Invoke-EDCACollection {
         RemoteDomains              = @()
         EdgeServers                = @()
         IrmConfiguration           = $null
+        DagTopologies              = @()
         CollectionWarnings         = @()
     }
 
@@ -5786,6 +6908,10 @@ function Invoke-EDCACollection {
             continue
         }
 
+        $isResultEdge = ($result.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $result.Exchange -and
+        ($result.Exchange.PSObject.Properties.Name -contains 'IsEdge') -and [bool]$result.Exchange.IsEdge
+        if ($isResultEdge) { continue }
+
         if (($result.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $result.Exchange -and ($result.Exchange.PSObject.Properties.Name -contains 'IsExchangeServer') -and [bool]$result.Exchange.IsExchangeServer) {
             $organizationSourceServer = [string]$result.Server
             break
@@ -5793,7 +6919,13 @@ function Invoke-EDCACollection {
     }
 
     if ([string]::IsNullOrWhiteSpace($organizationSourceServer) -and $normalizedServers.Count -gt 0) {
-        $organizationSourceServer = [string]$normalizedServers[0]
+        # Prefer the first server that is not known to be an Edge server.
+        $nonEdgeFallback = $results | Where-Object {
+            -not ($_.PSObject.Properties.Name -contains 'CollectionError') -and
+            ($_.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $_.Exchange -and
+            -not (($_.Exchange.PSObject.Properties.Name -contains 'IsEdge') -and [bool]$_.Exchange.IsEdge)
+        } | Select-Object -First 1
+        $organizationSourceServer = if ($null -ne $nonEdgeFallback) { [string]$nonEdgeFallback.Server } else { [string]$normalizedServers[0] }
     }
 
     if (-not [string]::IsNullOrWhiteSpace($organizationSourceServer)) {
@@ -5878,6 +7010,7 @@ function Invoke-EDCACollection {
                     ForestFunctionalLevel      = $null
                     DomainFunctionalLevel      = $null
                     AdSiteCount                = $null
+                    DagTopologies              = @()
                     CollectionWarnings         = $orgFallbackWarnings
                 }
             }
@@ -5981,15 +7114,16 @@ function Invoke-EDCACollection {
     Write-Verbose 'Email authentication checks completed.'
 
     return [pscustomobject]@{
-        Metadata            = [pscustomobject]@{
+        Metadata              = [pscustomobject]@{
             ToolName            = 'EDCA'
             ToolVersion         = $ToolVersion
             CollectionTimestamp = (Get-Date -Format 'o')
             ExecutedBy          = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
         }
-        Servers             = $results
-        Organization        = $organization
-        EmailAuthentication = $emailAuthentication
+        Servers               = $results
+        Organization          = $organization
+        EmailAuthentication   = $emailAuthentication
+        DiscoveredEdgeServers = $discoveredEdgeServers
     }
 }
 

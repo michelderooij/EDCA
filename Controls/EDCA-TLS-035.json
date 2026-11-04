@@ -1,0 +1,28 @@
+{
+  "id": "EDCA-TLS-035",
+  "title": "Edge send connector protocol logging is Verbose",
+  "description": "All send connectors on the Edge Transport server MUST have protocol logging set to Verbose. Without verbose protocol logging, SMTP conversation details are not captured, making it impossible to diagnose mail flow issues or investigate security incidents involving outbound mail.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Transport Security",
+  "severity": "Medium",
+  "severityWeight": 5,
+  "frameworks": [
+    "Best Practice"
+  ],
+  "references": [
+    {
+      "name": "Microsoft — Protocol logging",
+      "url": "https://learn.microsoft.com/exchange/mail-flow/connectors/protocol-logging"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Enable verbose protocol logging on all send connectors: Get-SendConnector | Set-SendConnector -ProtocolLoggingLevel Verbose.",
+    "scriptTemplate": "Get-SendConnector | Where-Object { $_.ProtocolLoggingLevel -ne 'Verbose' } | Set-SendConnector -ProtocolLoggingLevel Verbose"
+  },
+  "considerations": "Verbose protocol logging increases disk I/O and log file volume. Ensure the log partition has sufficient space and that a log rotation policy is in place.",
+  "roles": [
+    "Edge"
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "id": "EDCA-SEC-037",
+  "title": "LDAP client signing is set to require signing",
+  "description": "LDAP signing is a Windows security setting that requires the Kerberos or NTLM authentication layer to apply cryptographic integrity protection (signing) to every LDAP request and response, ensuring that LDAP traffic between Exchange and Active Directory cannot be tampered with in transit. The LDAP client on the Exchange server MUST be configured to require signing (LdapClientIntegrity=2) for all LDAP connections to Active Directory domain controllers. Without LDAP signing, Exchange LDAP queries to AD are transmitted without cryptographic integrity protection and are susceptible to man-in-the-middle interception and LDAP relay attacks. Exchange performs extensive LDAP queries for recipient resolution, GAL lookups, send connector validation, and distribution group expansion, all of which traverse the AD LDAP channel. ANSSI requires LDAP signing to be set to Require on all member servers.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Platform Security",
+  "severity": "High",
+  "severityWeight": 8,
+  "frameworks": [
+    "ANSSI",
+    "BSI"
+  ],
+  "references": [
+    {
+      "name": "How to enable LDAP signing in Windows Server",
+      "url": "https://learn.microsoft.com/troubleshoot/windows-server/active-directory/enable-ldap-signing-in-windows-server"
+    },
+    {
+      "name": "2020 LDAP channel binding and LDAP signing requirements for Windows",
+      "url": "https://support.microsoft.com/topic/2020-ldap-channel-binding-and-ldap-signing-requirements-for-windows-ef185fb8-00f7-167d-744c-f299a66fc00a"
+    },
+    {
+      "name": "ANSSI - Recommandations pour l'administration sécurisée des SI reposant sur AD (2023)",
+      "url": "https://messervices.cyber.gouv.fr/guides/recommandations-pour-ladministration-securisee-des-si-reposant-sur-ad"
+    },
+    {
+      "name": "BSI APP.2.2.A8 — Absicherung des 'Sicheren Kanals'",
+      "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/06_APP_Anwendungen/APP_2_2_Active_Directory_Domain_Services_Edition_2023.pdf?__blob=publicationFile"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Set LdapClientIntegrity to 2 (Require signing) under HKLM\\SYSTEM\\CurrentControlSet\\Services\\LDAP via Group Policy (Computer Configuration > Windows Settings > Security Settings > Local Policies > Security Options: 'Network security: LDAP client signing requirements' → 'Require signing') or directly via registry. Values: 0 = None, 1 = Negotiate signing, 2 = Require signing.",
+    "scriptTemplate": "# Group Policy equivalent:\n# Computer Configuration > Windows Settings > Security Settings > Local Policies > Security Options\n#   Network security: LDAP client signing requirements = Require signing\n#\n# Check current LDAP client signing setting\n$ldapPath = 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\LDAP'\n$val = (Get-ItemProperty $ldapPath -Name LdapClientIntegrity -ErrorAction SilentlyContinue).LdapClientIntegrity\n$status = switch ($val) {\n    0       { 'None - unsigned LDAP allowed (non-compliant)' }\n    1       { 'Negotiate signing' }\n    2       { 'Require signing (compliant)' }\n    $null   { 'Not set - defaults to Negotiate (1)' }\n    default { \"Unknown ($val)\" }\n}\n\"LdapClientIntegrity: $(if ($null -eq $val) { 'not set' } else { $val }) - $status\"\n\n# Set LDAP client to require signing (2)\nSet-ItemProperty -Path $ldapPath -Name LdapClientIntegrity -Type DWord -Value 2\nWrite-Host 'LDAP client signing set to Require (2). No restart required.'"
+  },
+  "considerations": "Setting LdapClientIntegrity=2 requires that all outbound LDAP connections from this server use signed LDAP. Active Directory domain controllers on Windows Server 2008 and later support LDAP signing universally. If LDAPS (port 636 with TLS) is already in use for Exchange LDAP queries, LDAPS provides both integrity and confidentiality, making LdapClientIntegrity complementary for any remaining plaintext LDAP (port 389) connections. After setting LdapClientIntegrity=2, monitor for LDAP error 81 (LDAP_SERVER_DOWN) or authentication failures in the Exchange application log that may indicate a domain controller refusing unsigned LDAP. If any non-Windows LDAP server is queried from this Exchange server, verify it supports LDAP signing (SASL integrity protection) before enforcing.",
+  "roles": [
+    "Mailbox",
+    "Edge"
+  ]
+}

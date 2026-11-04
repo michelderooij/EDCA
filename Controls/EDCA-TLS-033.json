@@ -1,0 +1,37 @@
+{
+  "id": "EDCA-TLS-033",
+  "title": "Edge blank sender blocking is enabled",
+  "description": "The Edge Transport server MUST have blank sender blocking enabled in the sender filter configuration. Mail with a blank MAIL FROM address is typically used in bounce spam and backscatter attacks. Accepting blank-sender mail generates non-delivery reports directed at innocent third parties.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Transport Security",
+  "severity": "Medium",
+  "severityWeight": 5,
+  "frameworks": [
+    "Best Practice",
+    "DISA"
+  ],
+  "references": [
+    {
+      "name": "Microsoft — Sender filtering on Edge Transport servers",
+      "url": "https://learn.microsoft.com/exchange/antispam-and-antimalware/antispam-protection/sender-filtering"
+    },
+    {
+      "name": "DISA STIG EX19-ED-000085: The Exchange Sender Filter must block messages that have a blank From address (V-259609)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_edge_server/2024-12-06/finding/V-259609"
+    },
+    {
+      "name": "DISA STIG EX19-ED-000087: The Exchange Sender Filter must be enabled (V-259610)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_edge_server/2024-12-06/finding/V-259610"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Enable blank sender blocking with Set-SenderFilterConfig -BlankSenderBlockingEnabled $true.",
+    "scriptTemplate": "Set-SenderFilterConfig -BlankSenderBlockingEnabled $true"
+  },
+  "considerations": "Some automated systems legitimately use a blank MAIL FROM for bounce notifications. Verify that enabling this setting does not block required notification mail before enforcing it in production.",
+  "roles": [
+    "Edge"
+  ]
+}

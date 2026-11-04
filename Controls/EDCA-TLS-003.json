@@ -1,0 +1,33 @@
+{
+  "id": "EDCA-TLS-003",
+  "title": "Hybrid send connector TLS integrity",
+  "description": "The Exchange hybrid send connector is the outbound SMTP connector created by the Hybrid Configuration Wizard to route on-premises mail to Exchange Online; its TLS settings determine how the Exchange Transport service authenticates to and encrypts sessions with Microsoft 365 mail endpoints. Validate hybrid/EXO send connector TLS settings (TlsAuthLevel, RequireTLS, TlsCertificateName, and TlsDomain) to reduce mail flow risk.",
+  "verify": true,
+  "subject": "Organization",
+  "category": "Transport Security",
+  "severity": "High",
+  "severityWeight": 8,
+  "frameworks": [
+    "Best Practice",
+    "NIS2"
+  ],
+  "references": [
+    {
+      "name": "CSS Hybrid Connector checks",
+      "url": "https://aka.ms/HC-HybridConnector"
+    },
+    {
+      "name": "ENISA / NIS2 Directive (EU) 2022/2555 - Article 21(2)(h): cryptography and encryption policies - Section 9, 6.7, 6.3, 6.6",
+      "url": "https://eur-lex.europa.eu/eli/dir/2022/2555/oj"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Correct hybrid send connector TLS settings and certificate bindings to match Exchange hybrid best practices.",
+    "scriptTemplate": "# Diagnose: Inspect send connector TLS configuration for hybrid mail flow\nGet-SendConnector | Select-Object Name, Enabled, RequireTLS, TlsAuthLevel, TlsCertificateName, TlsDomain, CloudServicesMailEnabled | Format-List\n# Hybrid send connector should have: RequireTLS=True, TlsAuthLevel=DomainValidation, TlsDomain=*.mail.protection.outlook.com"
+  },
+  "considerations": "Hybrid send connector TLS settings affect mail routing to Exchange Online. Weakening TLS requirements may allow plaintext transport to Exchange Online. Verify the connector certificate is trusted by Exchange Online before changing TLS settings. Test hybrid mail flow after any connector certificate changes.",
+  "roles": [
+    "Mailbox"
+  ]
+}

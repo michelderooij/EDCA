@@ -1,0 +1,43 @@
+{
+  "id": "EDCA-DATA-003",
+  "title": "Internal transport certificate baseline",
+  "description": "The Exchange internal transport certificate is a self-signed certificate automatically provisioned on each Mailbox server and used exclusively to authenticate and encrypt SMTP sessions between Exchange servers within the same organization. The Exchange internal transport certificate MUST be present in LocalMachine\\My and MUST have at least 30 days remaining before expiry. An expired internal transport certificate breaks server-to-server mail delivery.",
+  "verify": false,
+  "subject": "Server",
+  "category": "Data Security",
+  "severity": "High",
+  "severityWeight": 8,
+  "frameworks": [
+    "Best Practice",
+    "NIS2",
+    "ANSSI",
+    "BSI"
+  ],
+  "references": [
+    {
+      "name": "CSS InternalTransportCertificateCheck",
+      "url": "https://microsoft.github.io/CSS-Exchange/Diagnostics/HealthChecker/InternalTransportCertificateCheck/"
+    },
+    {
+      "name": "ENISA / NIS2 Directive (EU) 2022/2555 - Article 21(2)(h): cryptography and encryption policies - Section 9, 6.7, 6.3, 6.6",
+      "url": "https://eur-lex.europa.eu/eli/dir/2022/2555/oj"
+    },
+    {
+      "name": "ANSSI - Recommandations de sécurité relatives à TLS (v1.2, 2020)",
+      "url": "https://messervices.cyber.gouv.fr/guides/recommandations-de-securite-relatives-tls"
+    },
+    {
+      "name": "BSI APP.5.2.A11 — Absicherung der Kommunikation zwischen Exchange-Systemen",
+      "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/06_APP_Anwendungen/APP_5_2_Microsoft_Exchange_und_Outlook_Edition_2023.pdf?__blob=publicationFile"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "If the Internal Transport Certificate is missing or expired, create a new one using New-ExchangeCertificate with the server NetBIOS name, FQDN, and SMTP service assignment. Run Enable-ExchangeCertificate -Services SMTP after confirming propagation to all Exchange servers.",
+    "scriptTemplate": "# Replace the placeholder values with the actual server FQDN and NetBIOS name before running.\n# The FQDN is the fully qualified DNS name (e.g. ex1.contoso.com); the NetBIOS name is typically $env:COMPUTERNAME.\n$serverFQDN = [System.Net.Dns]::GetHostEntry('').HostName\n$serverNetBIOS = $env:COMPUTERNAME\nNew-ExchangeCertificate -PrivateKeyExportable $false -Services SMTP -SubjectName ('CN=' + $serverFQDN) -DomainName $serverFQDN, $serverNetBIOS"
+  },
+  "considerations": "The internal transport certificate is used for Exchange-to-Exchange SMTP TLS. Replacing it requires the certificate to be propagated to all Exchange servers in the organization before activation. A brief interruption to inter-server TLS may occur during certificate rollover.",
+  "roles": [
+    "Mailbox"
+  ]
+}

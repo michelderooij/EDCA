@@ -1,0 +1,33 @@
+{
+  "id": "EDCA-TLS-032",
+  "title": "Edge recipient validation is enabled",
+  "description": "The Edge Transport server MUST have recipient validation enabled in the recipient filter configuration. Without recipient validation, the Edge server accepts mail for non-existent recipients, consumes resources responding to directory harvest attacks, and delivers non-delivery reports that confirm valid addresses to external senders.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Transport Security",
+  "severity": "Medium",
+  "severityWeight": 6,
+  "frameworks": [
+    "Best Practice",
+    "DISA"
+  ],
+  "references": [
+    {
+      "name": "Microsoft — Recipient filtering on Edge Transport servers",
+      "url": "https://learn.microsoft.com/exchange/antispam-and-antimalware/antispam-protection/recipient-filtering"
+    },
+    {
+      "name": "DISA STIG EX19-ED-000098: The Exchange Recipient Filter must block unaccepted domains (V-259620)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_edge_server/2024-12-06/finding/V-259620"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Enable recipient validation with Set-RecipientFilterConfig -RecipientValidationEnabled $true.",
+    "scriptTemplate": "Set-RecipientFilterConfig -RecipientValidationEnabled $true"
+  },
+  "considerations": "Recipient validation requires an active Edge subscription so the Edge server holds a current copy of the recipient data. Enable the Edge subscription before enabling recipient validation.",
+  "roles": [
+    "Edge"
+  ]
+}

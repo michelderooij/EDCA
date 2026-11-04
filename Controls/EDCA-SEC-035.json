@@ -1,0 +1,33 @@
+{
+  "id": "EDCA-SEC-035",
+  "title": "Exchange application directory is protected from unauthorized access",
+  "description": "The Exchange application directory MUST be protected from unauthorized access. NTFS ACLs on the Exchange installation directory must restrict write access to privileged accounts (Exchange trusted subsystem, local administrators, SYSTEM). Overly permissive file system permissions allow attackers to replace Exchange binaries or configuration files, compromising the entire email platform.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Platform Security",
+  "severity": "Medium",
+  "severityWeight": 6,
+  "frameworks": [
+    "DISA"
+  ],
+  "references": [
+    {
+      "name": "DISA STIG EX19-MB-000194: The Exchange application directory must be protected from unauthorized access (V-259699)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259699"
+    },
+    {
+      "name": "Exchange Server security best practices",
+      "url": "https://learn.microsoft.com/exchange/plan-and-deploy/deployment-ref/exchange-2019-system-requirements"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Review and tighten NTFS ACLs on the Exchange installation directory (default: %ExchangeInstallPath%).",
+    "scriptTemplate": "# Diagnose: Review NTFS ACLs on the Exchange installation directory.\n(Get-Acl $exinstall).Access | Select-Object IdentityReference, FileSystemRights, AccessControlType, IsInherited | Sort-Object IdentityReference | Format-Table -AutoSize\n# Verify that only privileged principals (SYSTEM, Administrators, Exchange Trusted Subsystem) have Write or FullControl.\n# Unexpected Write or FullControl entries should be investigated and removed."
+  },
+  "considerations": "Changing Exchange directory ACLs may break Exchange services or update processes. Only remove permissions that are explicitly not required. Test ACL changes in a non-production environment and verify that all Exchange services start successfully after changes.",
+  "roles": [
+    "Mailbox",
+    "Edge"
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "id": "EDCA-GOV-010",
+  "title": "Exchange mail quota settings do not block mail flow",
+  "description": "Exchange mail quota settings MUST NOT prevent users from sending or receiving mail. ProhibitSend and ProhibitSendReceive quotas must not be configured so restrictively that they block legitimate message flow under normal operational conditions -- overly tight quotas constitute an operational denial-of-service. The send quota requirement is a formal DISA STIG rule for Exchange 2019 and Exchange SE; Exchange 2016 has an exception in that the 2016 STIG only mandates receive quota checks (/320), but the principle of not blocking outbound mail applies to all versions.",
+  "verify": true,
+  "subject": "Database",
+  "category": "Governance",
+  "severity": "Low",
+  "severityWeight": 3,
+  "frameworks": [
+    "DISA"
+  ],
+  "references": [
+    {
+      "name": "DISA STIG EX19-MB-000122: Exchange mail quota settings must not restrict receiving mail (V-259675)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259675"
+    },
+    {
+      "name": "DISA STIG EX19-MB-000123: Exchange mail quota settings must not restrict sending mail (V-259676)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259676"
+    },
+    {
+      "name": "Set-MailboxDatabase cmdlet",
+      "url": "https://learn.microsoft.com/powershell/module/exchange/set-mailboxdatabase"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Review and adjust ProhibitSend and ProhibitSendReceive quota settings on mailbox databases and individual mailboxes to ensure they do not block legitimate mail flow.",
+    "scriptTemplate": "# Review mailbox database quota settings\r\nGet-MailboxDatabase | Select-Object Name, ProhibitSendQuota, ProhibitSendReceiveQuota, IssueWarningQuota\r\n\r\n# Review individual mailbox quota overrides\r\nGet-Mailbox -ResultSize Unlimited | Where-Object { $_.UseDatabaseQuotaDefaults -eq $false } |\r\n    Select-Object DisplayName, ProhibitSendQuota, ProhibitSendReceiveQuota"
+  },
+  "considerations": "Quota values must accommodate normal business mailbox usage. Exchange 2016 DISA STIG explicitly addresses receive quotas (/320). The send quota requirement is a formal STIG rule for Exchange 2019 and Exchange SE; the principle applies to Exchange 2016 as well, but there is no corresponding formal 2016 STIG rule for send quotas.",
+  "roles": [
+    "Mailbox"
+  ]
+}

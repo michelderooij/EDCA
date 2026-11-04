@@ -1,0 +1,33 @@
+{
+  "id": "EDCA-IAC-024",
+  "title": "Mobile device mailbox policy locks after 15 minutes of inactivity",
+  "description": "The MaxInactivityTimeLock property on the default mobile device mailbox policy MUST be 15 minutes or less. Locking the device after a period of inactivity reduces the risk of unauthorised access if a device is left unattended. The CIS benchmark requires a maximum inactivity lock time of 15 minutes.",
+  "verify": true,
+  "subject": "Organization",
+  "category": "Identity and Access Control",
+  "severity": "Medium",
+  "severityWeight": 5,
+  "frameworks": [
+    "Best Practice",
+    "CIS"
+  ],
+  "references": [
+    {
+      "name": "CIS 3.11 (L1): Ensure Time without user input before password must be re-entered is set to 15",
+      "url": "https://www.cisecurity.org/benchmark/microsoft_exchange_server"
+    },
+    {
+      "name": "Mobile device mailbox policies in Exchange Server",
+      "url": "https://learn.microsoft.com/exchange/clients/exchange-activesync/mobile-device-mailbox-policies"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Set the inactivity lock timeout to 15 minutes or less in the default mobile device mailbox policy.",
+    "scriptTemplate": "# Set the inactivity lock to 15 minutes in the default mobile device mailbox policy.\nSet-MobileDeviceMailboxPolicy -Identity Default -MaxInactivityTimeLock 00:15:00"
+  },
+  "considerations": "A shorter inactivity timeout provides more security but may be inconvenient for users. A 15-minute limit is broadly accepted as a good balance. Consider shorter timeouts for high-security environments.",
+  "roles": [
+    "Mailbox"
+  ]
+}

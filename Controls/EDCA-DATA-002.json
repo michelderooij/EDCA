@@ -1,0 +1,38 @@
+{
+  "id": "EDCA-DATA-002",
+  "title": "Auth certificate baseline",
+  "description": "The Exchange OAuth authentication certificate is a self-signed certificate used by Exchange Server to sign and validate OAuth tokens for hybrid features such as free/busy lookups, cross-premises calendar delegation, and Exchange Online Archive routing. The Exchange OAuth authentication certificate MUST be present in the Exchange certificate store and MUST have at least 30 days remaining before expiry. An expired or missing auth certificate breaks OAuth and hybrid authentication flows.",
+  "verify": false,
+  "subject": "Organization",
+  "category": "Data Security",
+  "severity": "High",
+  "severityWeight": 8,
+  "frameworks": [
+    "Best Practice",
+    "NIS2",
+    "ANSSI"
+  ],
+  "references": [
+    {
+      "name": "CSS AuthCertificateCheck",
+      "url": "https://microsoft.github.io/CSS-Exchange/Diagnostics/HealthChecker/AuthCertificateCheck/"
+    },
+    {
+      "name": "ENISA / NIS2 Directive (EU) 2022/2555 - Article 21(2)(h): cryptography and encryption policies - Section 9, 6.7, 6.3, 6.6",
+      "url": "https://eur-lex.europa.eu/eli/dir/2022/2555/oj"
+    },
+    {
+      "name": "ANSSI - Recommandations de sécurité relatives à TLS (v1.2, 2020)",
+      "url": "https://messervices.cyber.gouv.fr/guides/recommandations-de-securite-relatives-tls"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Verify the Auth Certificate is valid and present on all Exchange servers. If the primary Auth Certificate was replaced without rerunning the Hybrid Configuration Wizard, re-run the wizard to sync the Auth Certificate with Azure AD.",
+    "scriptTemplate": "Get-AuthConfig | Format-List CurrentCertificateThumbprint, PreviousCertificateThumbprint"
+  },
+  "considerations": "The OAuth authentication certificate is required for hybrid features (free/busy lookup, mail routing to Exchange Online Archive, cross-premises calendar delegation). Replacing the Auth certificate requires coordinated updates on all Exchange servers and a brief interruption to hybrid connectivity. Follow the Microsoft Auth Certificate renewal procedure precisely.",
+  "roles": [
+    "Mailbox"
+  ]
+}

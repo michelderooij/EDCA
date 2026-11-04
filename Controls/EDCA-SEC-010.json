@@ -1,0 +1,29 @@
+{
+  "id": "EDCA-SEC-010",
+  "title": "OS volume filesystem is NTFS",
+  "description": "The operating system volume SHOULD use NTFS for Exchange server operating system supportability and baseline consistency.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Platform Security",
+  "severity": "Low",
+  "severityWeight": 4,
+  "frameworks": [
+    "Best Practice"
+  ],
+  "references": [
+    {
+      "name": "Exchange Server prerequisites and platform guidance",
+      "url": "https://learn.microsoft.com/exchange/plan-and-deploy/prerequisites"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Use NTFS for the OS volume on Exchange servers.",
+    "scriptTemplate": "# Diagnose: Check filesystem type of the boot/OS volume\nGet-WmiObject -Class Win32_Volume -Filter 'BootVolume = True' | Select-Object Name, FileSystem, BlockSize\n# Exchange is supported only on NTFS OS volumes. ReFS is not supported for the OS drive."
+  },
+  "considerations": "The OS volume filesystem cannot be changed on a live server without reinstalling the operating system. This control is an environmental prerequisite when provisioning new Exchange servers.",
+  "roles": [
+    "Mailbox",
+    "Edge"
+  ]
+}

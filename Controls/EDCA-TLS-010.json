@@ -1,0 +1,38 @@
+{
+  "id": "EDCA-TLS-010",
+  "title": "External send connector uses DNS routing",
+  "description": "DNS routing on an Exchange send connector means the Transport service performs MX record lookups to determine the destination SMTP server for each recipient domain rather than forwarding all mail to a configured smart host; this is the standard delivery path for internet-bound mail and is required for DANE-validated delivery to work correctly. The RequireDNSRouting property on the internet send connector (address space '*') MUST be set to True. Using DNS (MX record) routing ensures mail is delivered to recipient mail servers rather than relying on a smart host.",
+  "verify": true,
+  "subject": "Organization",
+  "category": "Transport Security",
+  "severity": "Medium",
+  "severityWeight": 5,
+  "frameworks": [
+    "Best Practice",
+    "CIS",
+    "DISA"
+  ],
+  "references": [
+    {
+      "name": "CIS 2.2.8 (L1): Ensure UseExternalDNSServersEnabled is configured and RequireDNSRouting is set to True",
+      "url": "https://www.cisecurity.org/benchmark/microsoft_exchange_server"
+    },
+    {
+      "name": "Create a Send connector to send email to the internet in Exchange",
+      "url": "https://learn.microsoft.com/exchange/mail-flow/connectors/internet-mail-send-connectors"
+    },
+    {
+      "name": "DISA STIG EX19-MB-000106: Exchange internet-facing send connectors must specify a smart host (V-259670)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259670"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Enable DNS routing on the send connector used for internet mail.",
+    "scriptTemplate": "# Enable DNS routing on the internet send connector (address space = '*').\nGet-SendConnector | Where-Object { $_.AddressSpaces -like '*SMTP:*;*' -or $_.AddressSpaces -like '*' } |\n    Set-SendConnector -DNSRoutingEnabled $true"
+  },
+  "considerations": "Switching from smart host to DNS routing requires that Exchange servers can resolve MX records and establish direct outbound SMTP connections on port 25. Ensure that firewall rules and DNS are configured accordingly before making this change.",
+  "roles": [
+    "Mailbox"
+  ]
+}

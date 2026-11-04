@@ -1,0 +1,32 @@
+{
+  "id": "EDCA-RES-008",
+  "title": "Exchange mailbox databases reside on a dedicated partition",
+  "description": "Exchange Mailbox databases MUST reside on a dedicated partition. Locating mailbox database files on their own dedicated volume isolates them from OS files, Exchange application files, and log files. This prevents disk contention and contains the impact of volume exhaustion.",
+  "verify": true,
+  "subject": "Database",
+  "category": "Resilience",
+  "severity": "Medium",
+  "severityWeight": 5,
+  "frameworks": [
+    "DISA"
+  ],
+  "references": [
+    {
+      "name": "DISA STIG EX19-MB-000105: Exchange Mailbox databases must reside on a dedicated partition (V-259669)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259669"
+    },
+    {
+      "name": "Exchange storage best practices",
+      "url": "https://learn.microsoft.com/exchange/plan-and-deploy/deployment-ref/preferred-architecture"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Move mailbox database files to a dedicated volume separate from OS, Exchange binaries, and transaction logs.",
+    "scriptTemplate": "# Verify mailbox database paths are on dedicated volumes."
+  },
+  "considerations": "Moving mailbox databases requires a database portability operation or backup-restore cycle. Plan a maintenance window. Ensure the target volume is formatted with 64KB allocation unit size as required by Exchange.",
+  "roles": [
+    "Mailbox"
+  ]
+}

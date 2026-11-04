@@ -1,0 +1,53 @@
+{
+  "id": "EDCA-DATA-012",
+  "title": "Weak Schannel hash algorithms (MD5, SHA-1) are explicitly disabled",
+  "description": "Weak SCHANNEL hash algorithms - MD5 and SHA-1 - MUST be disabled in the Windows registry. MD5 is cryptographically broken due to collision attacks. SHA-1 is vulnerable to proven collision attacks and must no longer be used for new deployments.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Data Security",
+  "severity": "High",
+  "severityWeight": 8,
+  "frameworks": [
+    "Best Practice",
+    "NIS2",
+    "ANSSI",
+    "BSI",
+    "ISM"
+  ],
+  "references": [
+    {
+      "name": "NCSC TLS-Richtlijnen 2025 §3.3.5 - Hashfuncties",
+      "url": "https://www.ncsc.nl/transport-layer-security/ICT-beveiligingsrichtlijnen-voor-TLS"
+    },
+    {
+      "name": "Microsoft - How to restrict the use of certain cryptographic algorithms in Schannel",
+      "url": "https://learn.microsoft.com/en-us/troubleshoot/windows-server/windows-security/restrict-cryptographic-algorithms-protocols-schannel"
+    },
+    {
+      "name": "ENISA / NIS2 Directive (EU) 2022/2555 - Article 21(2)(h): cryptography and encryption policies - Section 9, 6.7, 6.3, 6.6",
+      "url": "https://eur-lex.europa.eu/eli/dir/2022/2555/oj"
+    },
+    {
+      "name": "ANSSI - Recommandations de sécurité relatives à TLS (v1.2, 2020)",
+      "url": "https://messervices.cyber.gouv.fr/guides/recommandations-de-securite-relatives-tls"
+    },
+    {
+      "name": "BSI APP.5.2.A11 — Absicherung der Kommunikation zwischen Exchange-Systemen",
+      "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/06_APP_Anwendungen/APP_5_2_Microsoft_Exchange_und_Outlook_Edition_2023.pdf?__blob=publicationFile"
+    },
+    {
+      "name": "ISM: Guidelines for Cryptography (ISM-0471, ISM-1374, ISM-1375)",
+      "url": "https://www.cyber.gov.au/resources-business-and-government/essential-cyber-security/ism/cyber-security-guidelines/guidelines-for-cryptography"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Explicitly disable MD5 and SHA-1 by setting the DWORD registry value Enabled=0 under the corresponding SCHANNEL\\Hashes subkey. A system restart is required for the changes to take effect.",
+    "scriptTemplate": "# Disable weak SCHANNEL hash algorithms (MD5, SHA-1).\n# Run on each Exchange / Windows server. Requires a restart to take effect.\n\n$hashes = @('MD5', 'SHA')\n\nforeach ($hash in $hashes) {\n    $path = \"HKLM:\\SYSTEM\\CurrentControlSet\\Control\\SecurityProviders\\SCHANNEL\\Hashes\\$hash\"\n    if (-not (Test-Path -Path $path)) {\n        New-Item -Path $path -Force | Out-Null\n    }\n    Set-ItemProperty -Path $path -Name 'Enabled' -Type DWord -Value 0\n    Write-Host \"Disabled: $hash\"\n}\n\nWrite-Host 'Done. Restart the server for the changes to take effect.'"
+  },
+  "considerations": "Disabling MD5 and SHA-1 at the Schannel hash algorithm level affects all TLS handshakes on the server. Some legacy SMTP partners or certificate chains that use SHA-1 signed certificates may fail TLS negotiation. Review active TLS session partner certificate chains before applying. Plan for a short transition period to identify impacted connections.",
+  "roles": [
+    "Mailbox",
+    "Edge"
+  ]
+}

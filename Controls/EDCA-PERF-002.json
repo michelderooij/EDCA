@@ -1,0 +1,33 @@
+{
+  "id": "EDCA-PERF-002",
+  "title": "High Performance power plan is active",
+  "description": "Exchange servers SHOULD use the High Performance power plan to avoid CPU throttling and performance degradation.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Performance",
+  "severity": "Medium",
+  "severityWeight": 7,
+  "frameworks": [
+    "Best Practice"
+  ],
+  "references": [
+    {
+      "name": "CSS power plan recommendation",
+      "url": "https://github.com/microsoft/CSS-Exchange/blob/main/Diagnostics/HealthChecker/HealthChecker.ps1"
+    },
+    {
+      "name": "Exchange deployment and performance guidance",
+      "url": "https://learn.microsoft.com/exchange/plan-and-deploy/deployment-ref/ms-exch-setupreadiness"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Set active power plan to High Performance.",
+    "scriptTemplate": "powercfg /SETACTIVE 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c"
+  },
+  "considerations": "Changing the power plan to High Performance increases power consumption on physical hosts. On virtual machines, the hypervisor controls CPU frequency and this setting has limited effect. Verify that your data center or cloud infrastructure supports and benefits from this configuration.",
+  "roles": [
+    "Mailbox",
+    "Edge"
+  ]
+}

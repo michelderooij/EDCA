@@ -1,0 +1,28 @@
+{
+  "id": "EDCA-GOV-004",
+  "title": "Exchange Hybrid Application baseline",
+  "description": "The Exchange Hybrid Application is a dedicated Microsoft Entra ID app registration that provides Exchange on-premises with a modern, least-privilege identity for authenticating to Microsoft 365 services, replacing the legacy shared first-party app used in older hybrid configurations. The Exchange Hybrid Application MUST be correctly configured to support hybrid coexistence between on-premises Exchange and Exchange Online. Microsoft is transitioning hybrid connectivity from Exchange Web Services (EWS) to Microsoft Graph API, requiring a dedicated Hybrid Application registration created by the ConfigureExchangeHybridApplication tool. Without a correctly configured Hybrid Application, hybrid mail flow, free/busy lookups, and cross-premises mailbox moves will fail. EDCA validates AuthServer and IntraOrganizationConnector configuration to detect missing or misconfigured hybrid application entries.",
+  "verify": false,
+  "subject": "Organization",
+  "category": "Governance",
+  "severity": "Medium",
+  "severityWeight": 6,
+  "frameworks": [
+    "Best Practice"
+  ],
+  "references": [
+    {
+      "name": "CSS ExchangeHybridApplicationCheck",
+      "url": "https://microsoft.github.io/CSS-Exchange/Diagnostics/HealthChecker/ExchangeHybridApplicationCheck/"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Deploy a dedicated Exchange Hybrid Application using the ConfigureExchangeHybridApplication tool to support the transition from EWS to Microsoft Graph API for hybrid functionality.",
+    "scriptTemplate": "# Diagnose: Check Hybrid AuthServer and IntraOrganization Connector configuration\nGet-AuthServer | Where-Object { $_.Type -eq 'AzureAD' } | Select-Object Name, Enabled, ApplicationIdentifier, DomainName | Format-List\nGet-IntraOrganizationConnector | Select-Object Name, Enabled, TargetAddressDomains, DiscoveryEndpoint | Format-List"
+  },
+  "considerations": "The Exchange Hybrid Application is used by Exchange Online to communicate with on-premises Exchange. Removing or changing the hybrid application configuration will disrupt hybrid mail flow, free/busy lookups, and cross-premises mailbox moves. Any reconfiguration must be coordinated with Exchange Online and verified in the Exchange Admin Center.",
+  "roles": [
+    "Mailbox"
+  ]
+}

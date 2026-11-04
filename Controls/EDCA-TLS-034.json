@@ -1,0 +1,39 @@
+{
+  "id": "EDCA-TLS-034",
+  "title": "Edge outbound send connectors require TLS",
+  "description": "All outbound send connectors on the Edge Transport server MUST have RequireTls set to True. Send connectors without mandatory TLS transmit mail in cleartext over the internet, exposing message content and sender/recipient metadata to interception and modification.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Transport Security",
+  "severity": "High",
+  "severityWeight": 8,
+  "frameworks": [
+    "Best Practice",
+    "DISA",
+    "ANSSI",
+    "BSI"
+  ],
+  "references": [
+    {
+      "name": "Microsoft — Send connectors",
+      "url": "https://learn.microsoft.com/exchange/mail-flow/connectors/send-connectors"
+    },
+    {
+      "name": "BSI APP.5.2.A11 — Absicherung der Kommunikation zwischen Exchange-Systemen",
+      "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/06_APP_Anwendungen/APP_5_2_Microsoft_Exchange_und_Outlook_Edition_2023.pdf?__blob=publicationFile"
+    },
+    {
+      "name": "DISA STIG EX19-ED-000073: The Exchange Send connector must use an approved email domain (V-259642)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_edge_server/2024-12-06/finding/V-259642"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Set RequireTls = $true on all send connectors: Set-SendConnector -Identity <name> -RequireTls $true. Verify that receiving mail servers present a valid certificate before enabling, to avoid mail flow disruption.",
+    "scriptTemplate": "Get-SendConnector | Where-Object { -not $_.RequireTls } | Select-Object Identity, RequireTls, TlsAuthLevel, SmartHosts"
+  },
+  "considerations": "Enabling RequireTls means the send connector will fail delivery if the remote server does not present a valid TLS certificate. Test with non-critical connectors first.",
+  "roles": [
+    "Edge"
+  ]
+}

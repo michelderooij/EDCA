@@ -1,0 +1,28 @@
+{
+  "id": "EDCA-PERF-004",
+  "title": "NodeRunner memory limit baseline",
+  "description": "NodeRunner.exe is the Exchange Search content indexing worker process responsible for parsing and indexing mailbox content; its memory allocation is governed by the memoryLimitMegabytes setting in noderunner.exe.config. NodeRunner process memory limit (memoryLimitMegabytes in noderunner.exe.config) MUST be set to 0. Non-zero values restrict Exchange search memory allocation and can cause search index failures.",
+  "verify": false,
+  "subject": "Server",
+  "category": "Performance",
+  "severity": "Medium",
+  "severityWeight": 6,
+  "frameworks": [
+    "Best Practice"
+  ],
+  "references": [
+    {
+      "name": "CSS NodeRunnerMemoryLimitCheck",
+      "url": "https://microsoft.github.io/CSS-Exchange/Diagnostics/HealthChecker/NodeRunnerMemoryLimitCheck/"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Set memoryLimitMegabytes to 0 in the noderunner.exe configuration file for optimal performance. Only apply a non-zero limit as a temporary workaround if the noderunner process is causing measurable server impact.",
+    "scriptTemplate": "# Diagnose: Check NodeRunner.exe.config memory limit setting\n$exchPath = $exinstall\n$cfg = Join-Path $exchPath 'Bin\\Search\\Ceres\\Runtime\\1.0\\noderunner.exe.config'\nif (Test-Path $cfg) { ([xml](Get-Content $cfg)).configuration.noderunner.memorySettings } else { \"Config not found: $cfg\" }"
+  },
+  "considerations": "Adjusting the NodeRunner memory limit affects Exchange content indexing and search performance. Setting the limit too low can cause content index to lag or fail. The change takes effect after a service restart and should be tested against search responsiveness.",
+  "roles": [
+    "Mailbox"
+  ]
+}

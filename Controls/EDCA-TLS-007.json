@@ -1,0 +1,42 @@
+{
+  "id": "EDCA-TLS-007",
+  "title": "Out-of-Office messages to remote domains are set to None",
+  "description": "The AllowedOOFType setting on a remote domain controls whether Exchange sends Out-of-Office (OOF) messages to external recipients. The CIS benchmark recommends setting this to None to prevent OOF messages from revealing information such as employee absence periods and contact details to external parties.",
+  "verify": true,
+  "subject": "Organization",
+  "category": "Transport Security",
+  "severity": "Low",
+  "severityWeight": 4,
+  "frameworks": [
+    "Best Practice",
+    "CIS",
+    "DISA"
+  ],
+  "references": [
+    {
+      "name": "CIS 2.3.2 (L2): Ensure AllowedOOFType is set to None",
+      "url": "https://www.cisecurity.org/benchmark/microsoft_exchange_server"
+    },
+    {
+      "name": "Remote domains in Exchange Server - OOF settings",
+      "url": "https://learn.microsoft.com/exchange/mail-flow/remote-domains/remote-domains"
+    },
+    {
+      "name": "DISA STIG EX19-MB-000136: Exchange external/internet-bound automated response messages must be disabled (V-259688)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259688"
+    },
+    {
+      "name": "DISA STIG EX16-MB-000480: Exchange external/Internet-bound automated response messages must be disabled (V-228392)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2016_mailbox_server/2023-12-18/finding/V-228392"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Set AllowedOOFType to None on all remote domains.",
+    "scriptTemplate": "# Disable Out-of-Office messages to remote domains.\nGet-RemoteDomain | Set-RemoteDomain -AllowedOOFType None"
+  },
+  "considerations": "This is a CIS Level 2 control. Disabling OOF to external recipients may impact customer-facing communication. Evaluate business requirements before applying, and consider creating explicit exceptions for partner domains. In Exchange hybrid deployments, the remote domain representing the Microsoft 365 tenant is configured with IsInternal=True by the Hybrid Configuration Wizard and may legitimately have AllowedOOFType set to a non-None value to support OOF flow between on-premises and cloud mailboxes. Such internal hybrid domains are excluded from this check.",
+  "roles": [
+    "Mailbox"
+  ]
+}

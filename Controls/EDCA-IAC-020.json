@@ -1,0 +1,33 @@
+{
+  "id": "EDCA-IAC-020",
+  "title": "Mobile device mailbox policy refresh interval is 1 day or less",
+  "description": "The DevicePolicyRefreshInterval property on the default mobile device mailbox policy MUST be 1 day or less. A short refresh interval ensures devices re-apply the latest security policy promptly, reducing the risk of policy drift. The CIS benchmark requires the refresh interval to be 1 day or fewer.",
+  "verify": true,
+  "subject": "Organization",
+  "category": "Identity and Access Control",
+  "severity": "Low",
+  "severityWeight": 3,
+  "frameworks": [
+    "Best Practice",
+    "CIS"
+  ],
+  "references": [
+    {
+      "name": "CIS 3.7 (L1): Ensure Refresh interval is set to 1",
+      "url": "https://www.cisecurity.org/benchmark/microsoft_exchange_server"
+    },
+    {
+      "name": "Mobile device mailbox policies in Exchange Server",
+      "url": "https://learn.microsoft.com/exchange/clients/exchange-activesync/mobile-device-mailbox-policies"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Set the device policy refresh interval to 1 day in the default mobile device mailbox policy.",
+    "scriptTemplate": "# Set the policy refresh interval to 1 day in the default mobile device mailbox policy.\nSet-MobileDeviceMailboxPolicy -Identity Default -DevicePolicyRefreshInterval 1.00:00:00"
+  },
+  "considerations": "A refresh interval of 1 day is a reasonable baseline. More frequent intervals increase server-side load. The value is expressed as a TimeSpan.",
+  "roles": [
+    "Mailbox"
+  ]
+}

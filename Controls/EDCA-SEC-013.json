@@ -1,0 +1,43 @@
+{
+  "id": "EDCA-SEC-013",
+  "title": "Credential Guard disabled on Exchange servers",
+  "description": "Each Exchange server MUST have Credential Guard (Virtualization-Based Security) disabled. Microsoft does not support Credential Guard on Exchange servers; enabling it interferes with Exchange service authentication and introduces a performance impact from VBS overhead. Applicability: Windows Server 2019/2022/2025 (build 17763 and later), including Windows Server 2025 where Credential Guard may be active by default.\n\nNote — framework conflict: ANSSI (Recommandations pour l'administration sécurisée des SI reposant sur AD, 2023) and BSI (SYS.1.2.3.A8 — Nutzung des Virtual Secure Mode) recommend enabling Credential Guard on member servers that handle privileged credentials. This recommendation does not apply to Exchange Server because Microsoft states it is unsupported. Organizations subject to ANSSI or BSI compliance must treat Exchange servers as an exception to the Credential Guard enablement requirement and document that exception in their risk register.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Platform Security",
+  "severity": "High",
+  "severityWeight": 8,
+  "frameworks": [
+    "Best Practice",
+    "ANSSI",
+    "BSI"
+  ],
+  "references": [
+    {
+      "name": "CSS Credential Guard check",
+      "url": "https://microsoft.github.io/CSS-Exchange/Diagnostics/HealthChecker/CredentialGuardCheck/"
+    },
+    {
+      "name": "Manage Windows Defender Credential Guard",
+      "url": "https://learn.microsoft.com/windows/security/identity-protection/credential-guard/credential-guard-manage"
+    },
+    {
+      "name": "ANSSI - Recommandations pour l'administration sécurisée des SI reposant sur AD (2023)",
+      "url": "https://messervices.cyber.gouv.fr/guides/recommandations-pour-ladministration-securisee-des-si-reposant-sur-ad"
+    },
+    {
+      "name": "BSI SYS.1.2.3.A8 — Nutzung des Virtual Secure Mode (VSM)",
+      "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/07_SYS_IT_Systeme/SYS_1_2_3_Windows_Server_Edition_2023.pdf?__blob=publicationFile"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Disable Credential Guard via Windows Defender Credential Guard Group Policy or by setting LsaCfgFlags to 0 under HKLM\\SYSTEM\\CurrentControlSet\\Control\\Lsa and EnableVirtualizationBasedSecurity to 0 under HKLM\\SYSTEM\\CurrentControlSet\\Control\\DeviceGuard. A reboot is required.",
+    "scriptTemplate": "# Diagnose: Check whether Credential Guard / VBS is currently enabled\n$lsa = Get-ItemProperty 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Lsa' -Name LsaCfgFlags -ErrorAction SilentlyContinue\n$dg  = Get-ItemProperty 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\DeviceGuard' -Name EnableVirtualizationBasedSecurity -ErrorAction SilentlyContinue\n\"LsaCfgFlags: $(if ($null -ne $lsa) { $lsa.LsaCfgFlags } else { 'not set' }) (0=disabled, 1=enabled with UEFI lock, 2=enabled without lock)\"\n\"EnableVirtualizationBasedSecurity: $(if ($null -ne $dg) { $dg.EnableVirtualizationBasedSecurity } else { 'not set' }) (0=disabled, 1=enabled)\"\n\n# Fix: disable Credential Guard. A reboot is required after making these changes.\n# Option 1: via registry (requires reboot)\nSet-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Lsa' -Name LsaCfgFlags -Type DWord -Value 0\nSet-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\DeviceGuard' -Name EnableVirtualizationBasedSecurity -Type DWord -Value 0\nWrite-Host 'Credential Guard registry settings cleared. Reboot required to complete deactivation.'\n\n# Option 2: via Group Policy (preferred for domain members)\n# Computer Configuration > Administrative Templates > System > Device Guard\n#   Turn On Virtualization Based Security = Disabled"
+  },
+  "considerations": "Credential Guard is not supported on Exchange servers because it can interfere with Exchange service authentication. This control documents the required state (disabled). Do not enable Credential Guard on Exchange hosts without explicit Microsoft support guidance.\n\nANSSI and BSI both recommend Credential Guard on member servers handling privileged credentials (ANSSI AD admin guide 2023; BSI SYS.1.2.3.A8). Exchange servers are an explicit exception to this recommendation due to Microsoft's unsupported-configuration statement. Document this exception in your organization's risk register and reference this control as the formal exception basis.",
+  "roles": [
+    "Mailbox",
+    "Edge"
+  ]
+}

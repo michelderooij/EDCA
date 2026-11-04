@@ -1,0 +1,33 @@
+{
+  "id": "EDCA-TLS-038",
+  "title": "Edge internet-facing Receive connectors offer TLS before basic authentication",
+  "description": "Internet-facing Receive connectors on the Edge Transport server MUST have TLS in the AuthMechanism list. Offering basic authentication before TLS exposes credentials in cleartext during the SMTP handshake. TLS must be offered to encrypt the session before any authentication challenge.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Transport Security",
+  "severity": "High",
+  "severityWeight": 8,
+  "frameworks": [
+    "Best Practice",
+    "DISA"
+  ],
+  "references": [
+    {
+      "name": "Microsoft — Receive connectors",
+      "url": "https://learn.microsoft.com/exchange/mail-flow/connectors/receive-connectors"
+    },
+    {
+      "name": "DISA STIG EX19-ED-000059: Exchange Internet-facing Receive connectors must offer TLS before using basic authentication (V-259595)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_edge_server/2024-12-06/finding/V-259595"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Ensure Tls is in the AuthMechanism of internet-facing Receive connectors. Set-ReceiveConnector -Identity <name> -AuthMechanism Tls.",
+    "scriptTemplate": "Get-ReceiveConnector | Select-Object Identity, AuthMechanism, Bindings"
+  },
+  "considerations": "Internet-facing Receive connectors on an Edge server typically accept connections from external SMTP servers. Modifying AuthMechanism may affect relay partner configurations. Verify with mail flow tests after changes.",
+  "roles": [
+    "Edge"
+  ]
+}

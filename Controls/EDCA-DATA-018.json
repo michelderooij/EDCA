@@ -1,0 +1,47 @@
+{
+  "id": "EDCA-DATA-018",
+  "title": "TLS 1.2 approved cipher suite allowlist enforces forward secrecy",
+  "description": "The TLS 1.2 cipher suite order on Exchange servers MUST include only cipher suites that provide forward secrecy (ECDHE or DHE key exchange) and exclude weak options. Cipher suites without perfect forward secrecy (PFS) such as static RSA key exchange (already addressed by EDCA-DATA-013) MUST NOT be used. The Schannel cipher suite order must prioritise ECDHE-based suites over DHE-based suites for performance. DHE group size must be a minimum of 2048 bits; ECDHE P-256 or P-384 is preferred.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Data Security",
+  "severity": "Medium",
+  "severityWeight": 7,
+  "frameworks": [
+    "ANSSI",
+    "BSI",
+    "ISM"
+  ],
+  "references": [
+    {
+      "name": "Cipher Suites in TLS/SSL (Schannel SSP)",
+      "url": "https://learn.microsoft.com/windows/win32/secauthn/cipher-suites-in-schannel"
+    },
+    {
+      "name": "Configuring TLS cipher suites via Group Policy",
+      "url": "https://learn.microsoft.com/windows-server/security/tls/manage-tls"
+    },
+    {
+      "name": "ANSSI - Recommandations de sécurité relatives à TLS (v1.2, 2020)",
+      "url": "https://messervices.cyber.gouv.fr/guides/recommandations-de-securite-relatives-tls"
+    },
+    {
+      "name": "BSI APP.5.2.A11 — Absicherung der Kommunikation zwischen Exchange-Systemen",
+      "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/06_APP_Anwendungen/APP_5_2_Microsoft_Exchange_und_Outlook_Edition_2023.pdf?__blob=publicationFile"
+    },
+    {
+      "name": "ISM: Guidelines for Cryptography (ISM-1369, ISM-1453, ISM-1372, ISM-1448, ISM-1375)",
+      "url": "https://www.cyber.gov.au/resources-business-and-government/essential-cyber-security/ism/cyber-security-guidelines/guidelines-for-cryptography"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Configure the Schannel cipher suite order via Group Policy (Computer Configuration > Administrative Templates > Network > SSL Configuration Settings > SSL Cipher Suite Order) or via the registry under HKLM\\SOFTWARE\\Policies\\Microsoft\\Cryptography\\Configuration\\SSL\\00010002. Prioritise ECDHE cipher suites with AES-GCM. Remove or demote cipher suites without forward secrecy. Apply IISCrypto or a custom GPO to set the recommended order.",
+    "scriptTemplate": "# Inspect current Schannel cipher suite order\nGet-TlsCipherSuite | Select-Object Name, Exchange, Hash, Cipher, KeyLength | Format-Table -AutoSize\n\n# Check for non-forward-secret suites (no ECDHE or DHE in name)\nGet-TlsCipherSuite | Where-Object { $_.Name -notmatch 'ECDHE|DHE' } | Select-Object Name | Format-Table -AutoSize\n\n# Recommended ANSSI-aligned TLS 1.2 cipher suites (forward-secret, AES-GCM preferred):\n# TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384\n# TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256\n# TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384\n# TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256\n# TLS_DHE_RSA_WITH_AES_256_GCM_SHA384\n# TLS_DHE_RSA_WITH_AES_128_GCM_SHA256\n\n# Example: disable a non-PFS cipher suite\n# Disable-TlsCipherSuite -Name 'TLS_RSA_WITH_AES_256_CBC_SHA256'"
+  },
+  "considerations": "Removing cipher suites from the Schannel order affects ALL TLS-dependent applications on the server. SMTP partner systems, monitoring agents, and internal applications must support at least one remaining cipher suite to maintain connectivity. Before enforcing a restrictive cipher suite list, audit all TLS connections using network capture or transport log analysis. The Windows Schannel cipher suite order is controlled by Group Policy; if a GPO already manages this setting, changes must be made through the GPO. Exchange transport uses Schannel for both inbound and outbound SMTP TLS negotiation. If a restricted cipher suite list causes inbound TLS failures, review receive connector logs for TLS handshake errors.",
+  "roles": [
+    "Mailbox",
+    "Edge"
+  ]
+}

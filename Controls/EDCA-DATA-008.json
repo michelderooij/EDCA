@@ -1,0 +1,34 @@
+{
+  "id": "EDCA-DATA-008",
+  "title": "Trusted root certificates baseline",
+  "description": "The Windows trusted root certificate store automatic update mechanism keeps the set of trusted root CAs current by downloading updates from Windows Update, ensuring that certificates issued by new or updated CAs are trusted for TLS and code signing. The DisableRootAutoUpdate registry policy MUST NOT be set to 1. When set to 1, the Windows trusted root certificate store cannot update automatically, causing certificate validation failures for TLS and OAuth.",
+  "verify": false,
+  "subject": "Server",
+  "category": "Data Security",
+  "severity": "Medium",
+  "severityWeight": 6,
+  "frameworks": [
+    "Best Practice",
+    "NIS2"
+  ],
+  "references": [
+    {
+      "name": "CSS TrustedRootCertificatesCheck",
+      "url": "https://microsoft.github.io/CSS-Exchange/Diagnostics/HealthChecker/TrustedRootCertificatesCheck/"
+    },
+    {
+      "name": "ENISA / NIS2 Directive (EU) 2022/2555 - Article 21(2)(h): cryptography and encryption policies - Section 9, 6.7, 6.3, 6.6",
+      "url": "https://eur-lex.europa.eu/eli/dir/2022/2555/oj"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Enable automatic root certificate updates via Group Policy or manually install required root certificates. Ensure the DigiCert Global Root G2 certificate (thumbprint: DF3C24F9BFD666761B268073FE06D1CC8D4F82A4) is installed on all Exchange servers to prevent certificate validation failures.",
+    "scriptTemplate": "# Diagnose: Check automatic root certificate update policy and presence of DigiCert Global Root G2\n$val = (Get-ItemProperty 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\SystemCertificates\\AuthRoot' -Name DisableRootAutoUpdate -ErrorAction SilentlyContinue).DisableRootAutoUpdate\n\"DisableRootAutoUpdate: $(if ($null -eq $val) { 'not set (auto-update active)' } else { $val })\"\n$cert = Get-ChildItem Cert:\\LocalMachine\\Root | Where-Object { $_.Thumbprint -eq 'DF3C24F9BFD666761B268073FE06D1CC8D4F82A4' }\n\"DigiCert Global Root G2: $(if ($cert) { 'Present (expires ' + $cert.NotAfter.ToString('yyyy-MM-dd') + ')' } else { 'NOT FOUND - required for Exchange hybrid and modern auth' })\""
+  },
+  "considerations": "Automatic root certificate updates require outbound HTTPS access to Windows Update. In isolated environments, certificates must be manually distributed. The DigiCert Global Root G2 certificate is required by Microsoft 365 and Azure services; its absence will cause TLS trust chain failures for Exchange hybrid and modern authentication.",
+  "roles": [
+    "Mailbox",
+    "Edge"
+  ]
+}

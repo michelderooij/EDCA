@@ -1,0 +1,33 @@
+{
+  "id": "EDCA-TLS-037",
+  "title": "Edge Receive connectors have domain secure enabled",
+  "description": "Receive connectors on the Edge Transport server that receive mail from external partner domains MUST have DomainSecureEnabled set to True. Domain security uses mutual TLS (MTLS) to authenticate partner mail servers and protect mail in transit. Without it, the Edge server cannot negotiate MTLS with partner domains.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Transport Security",
+  "severity": "Medium",
+  "severityWeight": 6,
+  "frameworks": [
+    "Best Practice",
+    "DISA"
+  ],
+  "references": [
+    {
+      "name": "Microsoft — Domain security in Exchange Server",
+      "url": "https://learn.microsoft.com/exchange/mail-flow/connectors/domain-security"
+    },
+    {
+      "name": "DISA STIG EX19-ED-000034: The Exchange Receive Connector must use Domain Security (Mutual Auth TLS) (V-259580)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_edge_server/2024-12-06/finding/V-259580"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Enable domain security on Receive connectors: Set-ReceiveConnector -Identity <name> -DomainSecureEnabled $true.",
+    "scriptTemplate": "Get-ReceiveConnector | Select-Object Identity, DomainSecureEnabled\n# To enable:\n# Set-ReceiveConnector -Identity '<name>' -DomainSecureEnabled $true"
+  },
+  "considerations": "DomainSecureEnabled on a Receive connector is a prerequisite for MTLS with external partners. It must be paired with matching Send connector configuration and DNS TXT records for the partner domain. Enabling it alone does not force MTLS; it makes MTLS possible when both sides present valid certificates.",
+  "roles": [
+    "Edge"
+  ]
+}

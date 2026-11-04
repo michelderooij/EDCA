@@ -1,0 +1,51 @@
+{
+  "id": "EDCA-IAC-006",
+  "title": "WDigest UseLogonCredential disabled",
+  "description": "WDigest is a legacy Windows authentication protocol that, when the UseLogonCredential registry value is set to 1, causes Windows to cache the user's plaintext password in LSASS memory to support HTTP Digest and SASL authentication challenges. Each Exchange server MUST have WDigest credential caching disabled (UseLogonCredential set to 0). WDigest authentication stores clear-text credentials in LSASS memory, enabling credential theft via memory dump.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Identity and Access Control",
+  "severity": "High",
+  "severityWeight": 8,
+  "frameworks": [
+    "CIS",
+    "ANSSI",
+    "BSI"
+  ],
+  "references": [
+    {
+      "name": "CIS Microsoft Windows Server 2019/2022/2025 Benchmarks",
+      "url": "https://www.cisecurity.org/benchmark/microsoft_windows_server"
+    },
+    {
+      "name": "UseLogonCredential security guidance",
+      "url": "https://learn.microsoft.com/windows/security/identity-protection/credential-guard/considerations-known-issues"
+    },
+    {
+      "name": "CIS 18.3.7 (L1): Ensure 'MSS: (UseLogonCredential) WDigest Authentication' (UseLogonCredential registry value) is set to 'Disabled'",
+      "url": "https://www.cisecurity.org/benchmark/microsoft_windows_server"
+    },
+    {
+      "name": "ANSSI - Mise en œuvre sécurisée d'un serveur Windows membre AD DS (2025)",
+      "url": "https://messervices.cyber.gouv.fr/guides/mise-en-oeuvre-securisee-dun-serveur-windows"
+    },
+    {
+      "name": "BSI APP.2.2.A9 — Schutz der Authentisierung beim Einsatz von AD DS",
+      "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/06_APP_Anwendungen/APP_2_2_Active_Directory_Domain_Services_Edition_2023.pdf?__blob=publicationFile"
+    },
+    {
+      "name": "BSI SYS.1.2.3.A5 — Sichere Authentisierung und Autorisierung in Windows Server",
+      "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/07_SYS_IT_Systeme/SYS_1_2_3_Windows_Server_Edition_2023.pdf?__blob=publicationFile"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Disable WDigest credential caching by setting UseLogonCredential to 0.",
+    "scriptTemplate": "New-Item -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\SecurityProviders\\WDigest' -Force | Out-Null; Set-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\SecurityProviders\\WDigest' -Name UseLogonCredential -Type DWord -Value 0"
+  },
+  "considerations": "Disabling WDigest UseLogonCredential prevents cleartext password caching in LSASS memory, which is a common credential harvesting technique. There is no operational impact on Exchange functionality from disabling this setting. A reboot may be required for the change to take full effect.",
+  "roles": [
+    "Mailbox",
+    "Edge"
+  ]
+}

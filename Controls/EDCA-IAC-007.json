@@ -1,0 +1,41 @@
+{
+  "id": "EDCA-IAC-007",
+  "title": "Alternate Service Account (ASA) usage follows Kerberos best practice",
+  "description": "The Kerberos Alternate Service Account (ASA) is a shared service account credential deployed on all Exchange Client Access servers to enable Kerberos authentication for clients connecting through a load balancer, where individual server SPNs cannot be used. Detect whether an Alternate Service Account credential is configured for Client Access Kerberos and validate baseline hygiene for credential rollover and server consistency.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Identity and Access Control",
+  "severity": "Low",
+  "severityWeight": 4,
+  "frameworks": [
+    "Best Practice",
+    "CISA"
+  ],
+  "references": [
+    {
+      "name": "Configure Kerberos authentication for load-balanced Client Access services",
+      "url": "https://learn.microsoft.com/exchange/architecture/client-access/kerberos-auth-for-load-balanced-client-access"
+    },
+    {
+      "name": "Get-ClientAccessService cmdlet",
+      "url": "https://learn.microsoft.com/powershell/module/exchange/get-clientaccessservice"
+    },
+    {
+      "name": "ASA rollout and verification guidance",
+      "url": "https://learn.microsoft.com/exchange/architecture/client-access/kerberos-auth-for-load-balanced-client-access#configure-and-then-verify-configuration-of-the-asa-credential-on-each-server-running-client-access-services"
+    },
+    {
+      "name": "CISA AA21-062A: Mitigate Microsoft Exchange Server Vulnerabilities - use Kerberos (Alternate Service Account) rather than NTLM for load-balanced Client Access authentication",
+      "url": "https://www.cisa.gov/news-events/cybersecurity-advisories/aa21-062a"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "If ASA is required, use a dedicated account, keep credentials synchronized across Client Access servers, and rotate with RollAlternateServiceAccountPassword.ps1; otherwise remove ASA credentials.",
+    "scriptTemplate": "# Diagnose: Check Alternate Service Account credential status on Client Access servers\nGet-ClientAccessServer -IncludeAlternateServiceAccountCredentialStatus | Select-Object Name, AlternateServiceAccountConfiguration | Format-List\n# Review for stale or multiple credential entries. Only the current ASA password should be active.\n\n# To initially assign an ASA credential to Client Access services (run once per server):\n# Set-ClientAccessService -Identity $env:COMPUTERNAME -AlternateServiceAccountCredential (Get-Credential)\n\n# To rotate the ASA password across all Client Access servers using the built-in Exchange rollover script:\n$rollScript = Join-Path $exinstall 'Scripts' | Join-Path -ChildPath 'RollAlternateServiceAccountPassword.ps1'\n# & $rollScript -ToEntireForest -GenerateNewPasswordFor 'DOMAIN\\ASAAccountName' -Verbose"
+  },
+  "considerations": "The Kerberos Alternate Service Account (ASA) must be configured identically on all load-balanced Exchange Client Access servers. The ASA password must be periodically rotated and kept consistent across all servers. Misconfiguration will break Kerberos authentication and fall back to NTLM, which may be blocked by other security policies.",
+  "roles": [
+    "Mailbox"
+  ]
+}

@@ -1,0 +1,45 @@
+{
+  "id": "EDCA-IAC-012",
+  "title": "Windows Integrated Authentication (NTLM/Negotiate) is present on Exchange virtual directories",
+  "description": "Windows Integrated Authentication (WIA) — comprising NTLM and Negotiate/Kerberos — is the IIS authentication method that allows domain-joined clients to authenticate silently using their Windows session credentials without prompting for a username and password. NTLM and Negotiate (Windows Integrated Authentication) MUST remain present in the authentication methods of Exchange virtual directories (MAPI, OWA, ECP, EWS, Autodiscover). Removing these is an unsupported configuration that breaks internal client connectivity for Outlook, Autodiscover, and web services clients.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Identity and Access Control",
+  "severity": "Medium",
+  "severityWeight": 6,
+  "frameworks": [
+    "Best Practice",
+    "DISA"
+  ],
+  "references": [
+    {
+      "name": "Default authentication settings for Exchange virtual directories",
+      "url": "https://learn.microsoft.com/exchange/clients/outlook-on-the-web/configure-authentication"
+    },
+    {
+      "name": "Set-OwaVirtualDirectory",
+      "url": "https://learn.microsoft.com/powershell/module/exchange/set-owavirtualdirectory"
+    },
+    {
+      "name": "Set-WebServicesVirtualDirectory",
+      "url": "https://learn.microsoft.com/powershell/module/exchange/set-webservicesvirtualdirectory"
+    },
+    {
+      "name": "DISA STIG EX19-MB-000020: Exchange must have authenticated access set to integrated Windows authentication only (V-259650)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259650"
+    },
+    {
+      "name": "DISA STIG EX19-MB-000203: Exchange Outlook Anywhere clients must use NTLM authentication to access email (V-259703)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259703"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Restore NTLM and WindowsIntegrated (Negotiate) to the authentication methods of the affected virtual directories. For MAPI, restore Ntlm and Negotiate in IISAuthenticationMethods. For all other virtual directories, restore Ntlm and WindowsIntegrated in InternalAuthenticationMethods.",
+    "scriptTemplate": "# Restore Windows Integrated Authentication on affected virtual directories.\n# Replace <Server> with the actual server name and adjust the site name if needed.\n# Run only the line(s) that correspond to the affected virtual directory.\n\n# MAPI virtual directory\nSet-MapiVirtualDirectory -Identity '<Server>\\mapi (Default Web Site)' -IISAuthenticationMethods Ntlm,Negotiate,OAuth\n\n# OWA virtual directory\nSet-OwaVirtualDirectory -Identity '<Server>\\owa (Default Web Site)' -InternalAuthenticationMethods WindowsIntegrated,Basic,Fba\n\n# ECP virtual directory\nSet-EcpVirtualDirectory -Identity '<Server>\\ecp (Default Web Site)' -InternalAuthenticationMethods WindowsIntegrated,Basic,Fba\n\n# EWS virtual directory\nSet-WebServicesVirtualDirectory -Identity '<Server>\\EWS (Default Web Site)' -InternalAuthenticationMethods Ntlm,WindowsIntegrated,WSSecurity,OAuth\n\n# Autodiscover virtual directory\nSet-AutodiscoverVirtualDirectory -Identity '<Server>\\Autodiscover (Default Web Site)' -InternalAuthenticationMethods Ntlm,WindowsIntegrated\n\n# After restoring, run iisreset /noforce on the Exchange server to apply the changes."
+  },
+  "considerations": "Windows Integrated Authentication (NTLM/Negotiate) is required for internal Outlook clients using MAPI over HTTPS on some configurations. Removing it without enabling Modern Authentication as a replacement will break internal Outlook connectivity. This control verifies presence, not absence - the authentication method should be preserved alongside other authentication methods.",
+  "roles": [
+    "Mailbox"
+  ]
+}

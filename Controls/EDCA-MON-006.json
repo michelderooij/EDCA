@@ -1,0 +1,42 @@
+{
+  "id": "EDCA-MON-006",
+  "title": "Transport message subject logging is disabled",
+  "description": "Message tracking subject logging is an optional Exchange transport feature that, when enabled, appends the email subject line to message tracking log entries alongside the standard sender, recipient, and routing metadata. Each Exchange server MUST have message tracking subject logging disabled. Storing message subjects in transport logs may expose sensitive information; subject logging is disabled by default and must remain so.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Monitoring",
+  "severity": "Medium",
+  "severityWeight": 6,
+  "frameworks": [
+    "DISA",
+    "ANSSI"
+  ],
+  "references": [
+    {
+      "name": "Get-TransportService cmdlet",
+      "url": "https://learn.microsoft.com/powershell/module/exchange/get-transportservice"
+    },
+    {
+      "name": "Set-TransportService cmdlet",
+      "url": "https://learn.microsoft.com/powershell/module/exchange/set-transportservice"
+    },
+    {
+      "name": "DISA STIG EX19-MB-000040: Exchange email subject line logging must be disabled (V-259656)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259656"
+    },
+    {
+      "name": "ANSSI - Sécuriser la journalisation dans un environnement Microsoft Active Directory (2022)",
+      "url": "https://messervices.cyber.gouv.fr/guides/securiser-la-journalisation-dans-un-environnement-microsoft-active-directory"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Disable message tracking subject logging.",
+    "scriptTemplate": "Set-TransportService -Identity $env:COMPUTERNAME -MessageTrackingLogSubjectLoggingEnabled $false"
+  },
+  "considerations": "Enabling message subject logging can expose sensitive information in log files. This setting should be disabled in security-sensitive environments. Forensic investigations may require temporary enabling of subject logging with appropriate data governance controls in place.",
+  "roles": [
+    "Mailbox",
+    "Edge"
+  ]
+}

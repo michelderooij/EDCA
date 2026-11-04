@@ -1,0 +1,38 @@
+{
+  "id": "EDCA-TLS-024",
+  "title": "Accepted domains publish SMTP DANE TLSA for MX hosts",
+  "description": "SMTP DANE (DNS-based Authentication of Named Entities) is an email transport security standard that publishes TLS certificate fingerprints in DNSSEC-signed TLSA DNS records, enabling sending mail servers to cryptographically verify that the TLS certificate presented during SMTP delivery matches what was published in DNS rather than trusting the public CA hierarchy alone. Each MX host serving accepted domains MUST have SMTP DANE configured with TLSA records at _25._tcp.<mx-host>.",
+  "verify": true,
+  "subject": "Organization",
+  "category": "Transport Security",
+  "severity": "Medium",
+  "severityWeight": 7,
+  "frameworks": [
+    "Best Practice",
+    "NIS2",
+    "CISA"
+  ],
+  "references": [
+    {
+      "name": "RFC 7672 - SMTP Security via Opportunistic DANE TLS",
+      "url": "https://www.rfc-editor.org/rfc/rfc7672"
+    },
+    {
+      "name": "ENISA / NIS2 Directive (EU) 2022/2555 - Article 21(2)(h): cryptography and encryption policies - Section 9, 6.7, 6.3, 6.6",
+      "url": "https://eur-lex.europa.eu/eli/dir/2022/2555/oj"
+    },
+    {
+      "name": "CISA BOD 18-01 (2017): Enhance Email and Web Security - enforce SMTP encryption for email transport",
+      "url": "https://www.cisa.gov/binding-operational-directive-18-01"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Publish TLSA records for all MX targets and maintain DNSSEC-signed DNS zones for DANE trust validation.",
+    "scriptTemplate": "# DNS change required: publish TLSA records at _25._tcp.<mx-host> and ensure DNSSEC chain of trust."
+  },
+  "considerations": "DANE requires DNSSEC to be enabled on the MX domain and TLSA records published in DNS. Many DNS providers do not support DNSSEC/DANE. Verify that your external DNS provider supports these features before attempting implementation. Incorrect TLSA records will cause legitimate inbound mail to be rejected by DANE-validating sending servers.",
+  "roles": [
+    "Mailbox"
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "id": "EDCA-TLS-018",
+  "title": "Exchange outbound connection timeout is 10 minutes or less",
+  "description": "The outbound connection timeout (ConnectionInactivityTimeOut on send connectors) controls how long the Exchange Transport service will keep an idle outbound SMTP connection open before closing it; connections that remain open indefinitely consume transport worker threads and socket handles, degrading throughput and enabling slow-drip denial-of-service scenarios. The Exchange Outbound Connection Timeout MUST be 10 minutes or less. Outbound connection timeouts that are too long hold transport resources open while waiting for unresponsive remote servers. A 10-minute maximum ensures resources are released promptly and retry cycles are started in a timely manner.",
+  "verify": true,
+  "subject": "Organization",
+  "category": "Transport Security",
+  "severity": "Low",
+  "severityWeight": 3,
+  "frameworks": [
+    "DISA"
+  ],
+  "references": [
+    {
+      "name": "DISA STIG EX19-MB-000132: The Exchange Outbound Connection Timeout must be 10 minutes or less (V-259685)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259685"
+    },
+    {
+      "name": "Set-SendConnector cmdlet",
+      "url": "https://learn.microsoft.com/powershell/module/exchange/set-sendconnector"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Set ConnectionInactivityTimeOut to 10 minutes or less on all send connectors.",
+    "scriptTemplate": "Get-SendConnector | Set-SendConnector -ConnectionInactivityTimeOut 00:10:00"
+  },
+  "considerations": "Reducing timeout values may cause premature connection failures to slow remote mail servers. Monitor NDR rates after applying changes. The default Exchange value is 10 minutes so this is typically already compliant.",
+  "roles": [
+    "Mailbox"
+  ]
+}

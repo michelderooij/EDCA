@@ -1,0 +1,61 @@
+{
+  "id": "EDCA-SEC-025",
+  "title": "Windows Firewall enabled for all profiles",
+  "description": "Each Exchange server MUST have Windows Firewall enabled for all three profiles (Domain, Private, and Public). Disabled firewall profiles expose Exchange ports to unfiltered network access. CIS (Sections 9.1.1, 9.2.1, and 9.3.1 L1) requires Windows Firewall to be enabled for all three profiles.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Platform Security",
+  "severity": "High",
+  "severityWeight": 9,
+  "frameworks": [
+    "Best Practice",
+    "CIS",
+    "NIS2",
+    "ANSSI",
+    "BSI"
+  ],
+  "references": [
+    {
+      "name": "CIS Microsoft Windows Server Benchmark",
+      "url": "https://www.cisecurity.org/benchmark/microsoft_windows_server"
+    },
+    {
+      "name": "Windows Defender Firewall with Advanced Security",
+      "url": "https://learn.microsoft.com/windows/security/operating-system-security/network-security/windows-firewall/"
+    },
+    {
+      "name": "CIS 9.1.1 (L1): Ensure 'Windows Firewall: Domain: Firewall state' is set to 'On'",
+      "url": "https://www.cisecurity.org/benchmark/microsoft_windows_server"
+    },
+    {
+      "name": "CIS 9.2.1 (L1): Ensure 'Windows Firewall: Private: Firewall state' is set to 'On'",
+      "url": "https://www.cisecurity.org/benchmark/microsoft_windows_server"
+    },
+    {
+      "name": "CIS 9.3.1 (L1): Ensure 'Windows Firewall: Public: Firewall state' is set to 'On'",
+      "url": "https://www.cisecurity.org/benchmark/microsoft_windows_server"
+    },
+    {
+      "name": "ENISA / NIS2 Directive (EU) 2022/2555 - Article 21(2)(e): network and information systems security - Section 6.3, 6.4, 3.2-3.4",
+      "url": "https://eur-lex.europa.eu/eli/dir/2022/2555/oj"
+    },
+    {
+      "name": "ANSSI - Mise en œuvre sécurisée d'un serveur Windows membre AD DS (2025)",
+      "url": "https://messervices.cyber.gouv.fr/guides/mise-en-oeuvre-securisee-dun-serveur-windows"
+    },
+    {
+      "name": "BSI SYS.1.1.A19 — Einrichtung lokaler Paketfilter",
+      "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/07_SYS_IT_Systeme/SYS_1_1_Allgemeiner_Server_Edition_2023.pdf?__blob=publicationFile"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Enable all Windows Firewall profiles.",
+    "scriptTemplate": "# Group Policy equivalent:\n# Computer Configuration > Windows Settings > Security Settings\n#   Windows Defender Firewall with Advanced Security\n#   Domain / Private / Public Profile > Firewall state = On\n#\nSet-NetFirewallProfile -Profile Domain,Private,Public -Enabled True"
+  },
+  "considerations": "The Windows Firewall must include all Exchange-required inbound and outbound port rules before enabling. Missing rules will block SMTP transport, client access, or management traffic. Review Exchange port requirements for all installed roles before enabling the firewall. Monitor event logs for blocked connections after enforcement.",
+  "roles": [
+    "Mailbox",
+    "Edge"
+  ]
+}

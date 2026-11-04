@@ -1,0 +1,29 @@
+{
+  "id": "EDCA-PERF-001",
+  "title": "CTS processor affinity baseline",
+  "description": "The CtsProcessorAffinityPercentage registry setting controls what percentage of server processors are allocated to the Exchange Content Transport Search (CTS) worker processes, allowing administrators to restrict search indexing to a CPU subset at the cost of indexing throughput. CtsProcessorAffinityPercentage MUST be set to 0 (Exchange baseline). Any value above 0 restricts Exchange search/CTS to a subset of processors, degrading search performance and indexing throughput.",
+  "verify": false,
+  "subject": "Server",
+  "category": "Performance",
+  "severity": "Medium",
+  "severityWeight": 6,
+  "frameworks": [
+    "Best Practice"
+  ],
+  "references": [
+    {
+      "name": "CSS CTSProcessorAffinityPercentageCheck",
+      "url": "https://microsoft.github.io/CSS-Exchange/Diagnostics/HealthChecker/CTSProcessorAffinityPercentageCheck/"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Remove or reset the CtsProcessorAffinityPercentage DWORD value to 0 under HKLM\\SOFTWARE\\Microsoft\\ExchangeServer\\V15\\Search\\SystemParameters. This setting limits search performance and should not be used as a long-term fix.",
+    "scriptTemplate": "Remove-ItemProperty -Path 'HKLM:\\SOFTWARE\\Microsoft\\ExchangeServer\\V15\\Search\\SystemParameters' -Name CtsProcessorAffinityPercentage -ErrorAction SilentlyContinue"
+  },
+  "considerations": "Changing the CTS processor affinity can reduce throughput on servers with many concurrent connections. This setting is rarely needed and should only be changed based on Microsoft support guidance. Incorrect configuration can degrade search performance.",
+  "roles": [
+    "Mailbox",
+    "Edge"
+  ]
+}

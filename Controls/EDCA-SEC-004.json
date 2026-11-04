@@ -1,0 +1,28 @@
+{
+  "id": "EDCA-SEC-004",
+  "title": "AD Forest functional level compatible with Exchange",
+  "description": "Exchange Server requires minimum AD Forest functional level based on installed version:\n• Exchange 2016: Windows Server 2008 R2 (level 4)\n• Exchange 2019: Windows Server 2012 R2 (level 6)\n• Exchange SE: Windows Server 2016 (level 7)\n\nRunning Exchange in a forest with an insufficient functional level is unsupported.",
+  "verify": false,
+  "subject": "Organization",
+  "category": "Platform Security",
+  "severity": "High",
+  "severityWeight": 8,
+  "frameworks": [
+    "Best Practice"
+  ],
+  "references": [
+    {
+      "name": "Exchange Server system requirements",
+      "url": "https://learn.microsoft.com/exchange/plan-and-deploy/system-requirements"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Raise the AD Forest functional level to the minimum required for the installed Exchange version. All domain controllers in the forest must be running the corresponding Windows Server version before raising the forest functional level.",
+    "scriptTemplate": "# Check current forest functional level and raise if required:\n# Set-ADForestMode -Identity <ForestFQDN> -ForestMode Windows2012R2Forest"
+  },
+  "considerations": "Raising the AD forest functional level requires all domain controllers in all domains in the forest to be running the required Windows Server version. The change is irreversible without a full forest recovery. Coordinate with all domain administrators in the forest before proceeding, as the impact spans every domain and every service relying on AD in the entire forest.",
+  "roles": [
+    "Mailbox"
+  ]
+}

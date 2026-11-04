@@ -1,0 +1,44 @@
+{
+  "id": "EDCA-MON-014",
+  "title": "PowerShell Module Logging is enabled",
+  "description": "PowerShell Module Logging MUST be enabled to capture the full pipeline execution details of all PowerShell commands and functions, including parameters and outputs. Module Logging complements Script Block Logging (EDCA-MON-002) by recording the invocation of each command in a module pipeline. ANSSI recommends enabling PowerShell Module Logging on all member servers as part of a comprehensive logging strategy. The CIS benchmark also requires Module Logging to be enabled.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Monitoring",
+  "severity": "Medium",
+  "severityWeight": 6,
+  "frameworks": [
+    "ANSSI",
+    "BSI",
+    "CIS",
+    "ISM"
+  ],
+  "references": [
+    {
+      "name": "PowerShell Group Policy settings (Module Logging)",
+      "url": "https://learn.microsoft.com/powershell/module/microsoft.powershell.core/about/about_group_policy_settings"
+    },
+    {
+      "name": "ANSSI - Sécuriser la journalisation dans un environnement Microsoft Active Directory (2022)",
+      "url": "https://messervices.cyber.gouv.fr/guides/securiser-la-journalisation-dans-un-environnement-microsoft-active-directory"
+    },
+    {
+      "name": "BSI SYS.1.2.3.A7 — Verwendung der Windows PowerShell",
+      "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/07_SYS_IT_Systeme/SYS_1_2_3_Windows_Server_Edition_2023.pdf?__blob=publicationFile"
+    },
+    {
+      "name": "ISM: Guidelines for System Hardening (ISM-0582)",
+      "url": "https://www.cyber.gov.au/resources-business-and-government/essential-cyber-security/ism/cyber-security-guidelines/guidelines-for-system-hardening"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Enable PowerShell Module Logging via registry or Group Policy. Set EnableModuleLogging to 1 under the ModuleLogging key and configure the ModuleNames value to '*' to log all modules.",
+    "scriptTemplate": "# Check current Module Logging state\n$modLogPath = 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\PowerShell\\ModuleLogging'\n$val = (Get-ItemProperty $modLogPath -Name EnableModuleLogging -ErrorAction SilentlyContinue).EnableModuleLogging\n\"EnableModuleLogging: $(if ($null -eq $val) { 'not set (disabled)' } else { $val })\"\n\n# Enable Module Logging and log all modules\nNew-Item -Path $modLogPath -Force | Out-Null\nSet-ItemProperty -Path $modLogPath -Name EnableModuleLogging -Type DWord -Value 1\n\n$modNamesPath = \"$modLogPath\\ModuleNames\"\nNew-Item -Path $modNamesPath -Force | Out-Null\nSet-ItemProperty -Path $modNamesPath -Name '*' -Type String -Value '*'\n\nWrite-Host 'PowerShell Module Logging enabled for all modules.'"
+  },
+  "considerations": "Enabling PowerShell Module Logging generates verbose log entries in the Windows PowerShell event log (Microsoft-Windows-PowerShell/Operational) for every PowerShell pipeline execution. On Exchange servers running frequent scheduled tasks or automation, this can generate high log volume. Ensure adequate event log size and a log collection or archival policy before enabling. Module Logging and Script Block Logging are complementary; together they provide complete PowerShell visibility. Module Logging captures invocation details while Script Block Logging captures the script content. Both should be enabled for comprehensive coverage.",
+  "roles": [
+    "Mailbox",
+    "Edge"
+  ]
+}

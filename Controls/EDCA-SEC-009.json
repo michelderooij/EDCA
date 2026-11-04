@@ -1,0 +1,32 @@
+{
+  "id": "EDCA-SEC-009",
+  "title": "Exchange database/log volumes use NTFS or ReFS",
+  "description": "Volumes hosting Exchange mailbox database and log paths SHOULD use supported filesystems NTFS or ReFS.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Platform Security",
+  "severity": "Medium",
+  "severityWeight": 6,
+  "frameworks": [
+    "Best Practice"
+  ],
+  "references": [
+    {
+      "name": "Exchange storage best practices",
+      "url": "https://learn.microsoft.com/exchange/plan-and-deploy/deployment-ref/storage-configuration"
+    },
+    {
+      "name": "Exchange CSS storage guidance",
+      "url": "https://github.com/microsoft/CSS-Exchange/blob/main/Diagnostics/HealthChecker/HealthChecker.ps1"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Move Exchange database/log files to NTFS or ReFS-formatted volumes.",
+    "scriptTemplate": "# Diagnose: Check filesystem type on Exchange-related volumes\nGet-WmiObject -Class Win32_Volume | Where-Object { $_.DriveType -eq 3 -and $_.FileSystem -ne 'NTFS' -and $_.FileSystem -ne 'ReFS' } | Select-Object Name, FileSystem\nGet-MailboxDatabase -Server $env:COMPUTERNAME | Select-Object Name, EdbFilePath, LogFolderPath"
+  },
+  "considerations": "Converting an existing FAT32 volume to NTFS or ReFS requires data migration and reformatting if in-place conversion is not supported. ReFS offers resilience advantages but some Exchange administrators prefer NTFS for its wider tool compatibility. Verify ReFS is supported for the Exchange version before using it for database volumes.",
+  "roles": [
+    "Mailbox"
+  ]
+}

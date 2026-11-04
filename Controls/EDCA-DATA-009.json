@@ -1,0 +1,47 @@
+{
+  "id": "EDCA-DATA-009",
+  "title": "IIS HSTS configuration baseline for Exchange sites",
+  "description": "HTTP Strict Transport Security (HSTS) is a web security policy mechanism delivered via an HTTP response header that instructs browsers to connect to a site exclusively over HTTPS for a specified duration, preventing protocol-downgrade and cookie-hijacking attacks. Validate IIS HSTS posture on Exchange-related websites, including unsupported usage on Exchange Back End, redirectHttpToHttps risk, and minimum max-age guidance.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Data Security",
+  "severity": "Medium",
+  "severityWeight": 7,
+  "frameworks": [
+    "Best Practice",
+    "CISA",
+    "ANSSI",
+    "BSI"
+  ],
+  "references": [
+    {
+      "name": "CSS HSTS guidance",
+      "url": "https://aka.ms/HC-HSTS"
+    },
+    {
+      "name": "CISA AA21-062A: Mitigate Microsoft Exchange Server Vulnerabilities - enable HTTP Strict Transport Security (HSTS) on Exchange web virtual directories",
+      "url": "https://www.cisa.gov/news-events/cybersecurity-advisories/aa21-062a"
+    },
+    {
+      "name": "ANSSI - Recommandations de sécurité relatives à TLS (v1.2, 2020)",
+      "url": "https://messervices.cyber.gouv.fr/guides/recommandations-de-securite-relatives-tls"
+    },
+    {
+      "name": "BSI APP.5.2.A11 — Absicherung der Kommunikation zwischen Exchange-Systemen",
+      "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/06_APP_Anwendungen/APP_5_2_Microsoft_Exchange_und_Outlook_Edition_2023.pdf?__blob=publicationFile"
+    },
+    {
+      "name": "BSI APP.5.2.A12 — Einsatz von Outlook Anywhere, MAPI over HTTP und Outlook im Web",
+      "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/06_APP_Anwendungen/APP_5_2_Microsoft_Exchange_und_Outlook_Edition_2023.pdf?__blob=publicationFile"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Review and correct IIS HSTS configuration for Exchange websites, especially Exchange Back End and redirectHttpToHttps settings.",
+    "scriptTemplate": "# Diagnose: Check Strict-Transport-Security header configuration on Exchange IIS sites\nImport-Module WebAdministration -ErrorAction SilentlyContinue\nGet-Website | Where-Object { $_.Name -match 'Default Web Site|Exchange Back End' } | ForEach-Object { $site = $_.Name; Get-WebConfigurationProperty -PSPath \"IIS:\\Sites\\$site\" -Filter 'system.webServer/httpProtocol/customHeaders' -Name '.' | Where-Object { $_.name -eq 'Strict-Transport-Security' } | Select-Object @{N='Site';E={$site}}, name, value }\n# HSTS must NOT be applied to Exchange Back End (port 444) - it breaks internal services."
+  },
+  "considerations": "Enabling HSTS instructs browsers to only connect to Exchange sites over HTTPS. If any IIS HTTP binding is required for any reason (e.g., certificate renewal challenges), HSTS will prevent HTTP connections for the duration of the max-age period. Test all Exchange virtual directories for HTTPS functionality before enabling HSTS.",
+  "roles": [
+    "Mailbox"
+  ]
+}

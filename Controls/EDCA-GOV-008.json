@@ -1,0 +1,37 @@
+{
+  "id": "EDCA-GOV-008",
+  "title": "Exchange Send Fatal Errors to Microsoft is disabled",
+  "description": "The Exchange error reporting feature automatically transmits crash dump data and diagnostic telemetry to Microsoft when Exchange encounters fatal service errors, to assist with product quality analysis and support case diagnostics. Exchange Send Fatal Errors to Microsoft MUST be disabled. The error reporting feature transmits diagnostic data to Microsoft, which may include server configuration and operational details. This must be disabled on DoD/government networks where external data transmission must be controlled.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Governance",
+  "severity": "Medium",
+  "severityWeight": 5,
+  "frameworks": [
+    "DISA"
+  ],
+  "references": [
+    {
+      "name": "DISA STIG EX19-MB-000063: Exchange Send Fatal Errors to Microsoft must be disabled (V-259665)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259665"
+    },
+    {
+      "name": "DISA STIG EX19-ED-000056: Exchange Send Fatal Errors to Microsoft must be disabled (V-259591)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_edge_server/2024-12-06/finding/V-259591"
+    },
+    {
+      "name": "Set-ExchangeDiagnosticInfo cmdlet",
+      "url": "https://learn.microsoft.com/powershell/module/exchange/set-exchangediagnosticinfo"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Run Set-ExchangeServer -Identity <ServerName> -ErrorReportingEnabled $false for each non-compliant Exchange server.",
+    "scriptTemplate": "Set-ExchangeServer -Identity '<ServerName>' -ErrorReportingEnabled $false"
+  },
+  "considerations": "Disabling error reporting reduces Microsoft's ability to diagnose critical Exchange failures. If this setting is mandatory for compliance, compensate with internal diagnostic tooling (e.g., CSS-Exchange Health Checker, SCOM, or equivalent).",
+  "roles": [
+    "Mailbox",
+    "Edge"
+  ]
+}

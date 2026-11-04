@@ -1,4 +1,7 @@
-﻿# Author:  Michel de Rooij
+﻿# Script:  Common.ps1
+# Synopsis: Part of EDCA (Exchange Deployment & Compliance Assessment)
+#           https://github.com/michelderooij/EDCA
+# Author:  Michel de Rooij
 # Website: https://eightwone.com
 
 Set-StrictMode -Version Latest
@@ -41,7 +44,32 @@ function Write-EDCALog {
     )
 
     $timestamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
-    Write-Host ('[{0}] [{1}] {2}' -f $timestamp, $Level, $Message)
+    # Collapse embedded newlines so every log entry stays on a single line.
+    $normalizedMessage = ($Message -replace '\r?\n\s*', ' | ').Trim()
+    Write-Host ('[{0}] [{1}] {2}' -f $timestamp, $Level, $normalizedMessage)
+}
+
+function Get-EDCAExceptionMessage {
+    <#
+    .SYNOPSIS
+        Returns a single-line diagnostic string by walking the full exception chain.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.ErrorRecord]$ErrorRecord
+    )
+
+    $parts = [System.Collections.Generic.List[string]]::new()
+    $ex = $ErrorRecord.Exception
+    while ($null -ne $ex) {
+        $msg = ($ex.Message -replace '\r?\n\s*', ' ').Trim()
+        if (-not [string]::IsNullOrWhiteSpace($msg) -and -not $parts.Contains($msg)) {
+            $parts.Add($msg)
+        }
+        $ex = $ex.InnerException
+    }
+    return ($parts -join ' -> ')
 }
 
 function Invoke-EDCAServerCommand {
@@ -78,6 +106,7 @@ function Test-EDCAServerRemoteConnectivity {
         return [pscustomobject]@{
             Server                = $Server
             IsLocal               = $true
+            CanReachPort          = $true
             CanConnect            = $true
             CanReadRemoteRegistry = $true
             Details               = 'Local execution target.'
@@ -86,15 +115,40 @@ function Test-EDCAServerRemoteConnectivity {
 
     $details = @()
     $canConnect = $true
+    $canReachPort = $false
     $canReadRemoteRegistry = $false
 
+    # Fast TCP port 80 reachability check — if this port is unreachable the
+    # remote endpoint is guaranteed to be unreachable, so we short-circuit immediately.
     try {
-        Write-Verbose ('Connectivity precheck for {0}: probing WinRM endpoint.' -f $Server)
-        Test-WSMan -ComputerName $Server -ErrorAction Stop | Out-Null
+        Write-Verbose ('Connectivity precheck for {0}: TCP port 80 reachability check.' -f $Server)
+        $tcpClient = [System.Net.Sockets.TcpClient]::new()
+        try {
+            $connectTask = $tcpClient.ConnectAsync($Server, 80)
+            if (-not $connectTask.Wait(5000)) {
+                $canConnect = $false
+                $details += 'TCP port 80 reachability check timed out after 5 seconds.'
+            }
+            elseif ($connectTask.IsFaulted) {
+                $canConnect = $false
+                $innerMsg = if ($null -ne $connectTask.Exception -and $null -ne $connectTask.Exception.InnerException) {
+                    $connectTask.Exception.InnerException.Message
+                }
+                else { [string]$connectTask.Exception }
+                $details += ('TCP port 80 reachability check failed: {0}' -f $innerMsg)
+            }
+            else {
+                $canReachPort = $true
+                $details += 'TCP port 80 reachability check passed.'
+            }
+        }
+        finally {
+            $tcpClient.Dispose()
+        }
     }
     catch {
         $canConnect = $false
-        $details += ('WinRM probe failed: {0}' -f $_.Exception.Message)
+        $details += ('TCP port 80 reachability check error: {0}' -f $_.Exception.Message)
     }
 
     if ($canConnect) {
@@ -124,6 +178,7 @@ function Test-EDCAServerRemoteConnectivity {
     return [pscustomobject]@{
         Server                = $Server
         IsLocal               = $false
+        CanReachPort          = $canReachPort
         CanConnect            = $canConnect
         CanReadRemoteRegistry = $canReadRemoteRegistry
         Details               = ($details -join ' ')
@@ -138,5 +193,50 @@ function ConvertTo-EDCAJson {
     )
 
     return ($InputObject | ConvertTo-Json -Depth 12)
+}
+
+function ConvertFrom-EDCAJson {
+    # Wrapper around ConvertFrom-Json that handles JSON files containing keys with different
+    # casing (e.g. EnhancedTimeSpan serialises with both a "value" field and a "Value" property).
+    # When PS7's strict parser rejects such a file, falls back to -AsHashTable and recursively
+    # converts the resulting hashtable tree back to PSCustomObjects so all downstream code that
+    # uses .PSObject.Properties continues to work without modification.
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true, ValueFromPipeline = $true)]
+        [string]$InputObject
+    )
+
+    try {
+        return $InputObject | ConvertFrom-Json
+    }
+    catch {
+        if ($_.Exception.Message -notmatch 'duplicated keys|keys with different casing') { throw }
+        if ($PSVersionTable.PSVersion.Major -ge 6) {
+            # PS 6.2+ supports -AsHashtable, which tolerates duplicate case-variant keys.
+            return ConvertFrom-EDCAJsonHashTableNode ($InputObject | ConvertFrom-Json -AsHashtable)
+        }
+        # PS 5.1 fallback: JavaScriptSerializer (always present in .NET 4.x) absorbs
+        # duplicate case-variant keys via last-write-wins without throwing.
+        $null = [System.Reflection.Assembly]::LoadWithPartialName('System.Web.Extensions')
+        $jss = New-Object System.Web.Script.Serialization.JavaScriptSerializer
+        $jss.MaxJsonLength = [int]::MaxValue
+        return ConvertFrom-EDCAJsonHashTableNode ($jss.DeserializeObject($InputObject))
+    }
+}
+
+function ConvertFrom-EDCAJsonHashTableNode {
+    param([object]$Node)
+    if ($Node -is [System.Collections.IDictionary]) {
+        $obj = [pscustomobject]@{}
+        foreach ($k in $Node.Keys) {
+            $obj | Add-Member -MemberType NoteProperty -Name ([string]$k) -Value (ConvertFrom-EDCAJsonHashTableNode $Node[$k]) -Force
+        }
+        return $obj
+    }
+    if ($Node -is [System.Collections.IList] -and $Node -isnot [string]) {
+        return , @($Node | ForEach-Object { ConvertFrom-EDCAJsonHashTableNode $_ })
+    }
+    return $Node
 }
 

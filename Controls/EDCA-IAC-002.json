@@ -1,0 +1,28 @@
+{
+  "id": "EDCA-IAC-002",
+  "title": "Exchange computer membership baseline",
+  "description": "Exchange relies on specific Active Directory security groups — Exchange Servers and Exchange Trusted Subsystem — to grant each server's computer account the permissions it needs to read configuration, process mail, and manage recipient objects across the organization. The Exchange server computer account MUST be a member of the Exchange Servers and Exchange Trusted Subsystem Active Directory security groups. Missing group membership causes permission failures across Exchange management operations.",
+  "verify": false,
+  "subject": "Server",
+  "category": "Identity and Access Control",
+  "severity": "Medium",
+  "severityWeight": 6,
+  "frameworks": [
+    "Best Practice"
+  ],
+  "references": [
+    {
+      "name": "CSS ExchangeComputerMembership",
+      "url": "https://microsoft.github.io/CSS-Exchange/Diagnostics/HealthChecker/ExchangeComputerMembership/"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Add the Exchange server's computer object to both the Exchange Trusted Subsystem and Exchange Servers universal security groups in Active Directory. Perform an IISReset after updating group membership.",
+    "scriptTemplate": "# Diagnose: Check Exchange server computer account AD group membership\n$groups = (Get-ADComputer $env:COMPUTERNAME -Properties MemberOf -ErrorAction SilentlyContinue).MemberOf\n$groups | ForEach-Object { (Get-ADGroup $_ -ErrorAction SilentlyContinue).Name } | Where-Object { $_ } | Sort-Object\n# Expected: 'Exchange Servers', 'Exchange Trusted Subsystem', 'Exchange Windows Permissions'"
+  },
+  "considerations": "Exchange Server computer accounts must be members of the Exchange Servers universal security group for correct service operation. Removing Exchange from this group will break Exchange service functionality. This control is informational - remediation should only be performed if the membership was accidentally altered.",
+  "roles": [
+    "Mailbox"
+  ]
+}

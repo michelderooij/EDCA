@@ -1,0 +1,33 @@
+{
+  "id": "EDCA-TLS-044",
+  "title": "Edge Sender Filter blocks messages from unaccepted domains",
+  "description": "The Edge Transport server Sender Filter MUST be configured to block senders from domains that are not in the organisation's accepted domain list. Permitting mail from unaccepted sender domains allows spoofed messages that impersonate internal addresses to reach recipients.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Transport Security",
+  "severity": "Medium",
+  "severityWeight": 6,
+  "frameworks": [
+    "Best Practice",
+    "DISA"
+  ],
+  "references": [
+    {
+      "name": "Microsoft — Sender filtering on Edge Transport servers",
+      "url": "https://learn.microsoft.com/exchange/antispam-and-antimalware/antispam-protection/sender-filtering"
+    },
+    {
+      "name": "DISA STIG EX19-ED-000089: The Exchange Sender Filter must block senders from unaccepted domains (V-259612)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_edge_server/2024-12-06/finding/V-259612"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Enable blocking of unaccepted domain senders: Set-SenderFilterConfig -BlockedSendersAndDomains @{Add='<domain>'} and ensure the filter is enabled.",
+    "scriptTemplate": "Get-SenderFilterConfig | Select-Object Enabled, BlankSenderBlockingEnabled, BlockedSendersAndDomains"
+  },
+  "considerations": "Blocking unaccepted domains in the sender filter prevents spoofed internal-domain mail from external sources. This is most effective when combined with SPF, DKIM, and DMARC enforcement. Ensure legitimate partner relays are whitelisted before enabling domain-based blocking.",
+  "roles": [
+    "Edge"
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "id": "EDCA-DATA-016",
+  "title": "AES256-CBC encryption mode is enabled for IRM-protected messages",
+  "description": "Exchange Server SHOULD be configured to support AES256-CBC mode encryption for IRM-protected messages. Starting with the October 2023 Security Update, the EnableEncryptionAlgorithmCBC setting override enables Exchange to encrypt messages and attachments using AES256-CBC mode - the more secure successor to AES128-ECB. Organizations using Information Rights Management (IRM) with AD RMS or Azure RMS should enable this setting to align with Microsoft Purview Information Protection defaults and to ensure compatibility with Microsoft 365 Apps which use AES256-CBC by default since August 2023.",
+  "verify": false,
+  "subject": "Organization",
+  "category": "Data Security",
+  "severity": "Medium",
+  "severityWeight": 5,
+  "frameworks": [
+    "Best Practice",
+    "ISM"
+  ],
+  "references": [
+    {
+      "name": "Enable support for AES256-CBC-encrypted content in Exchange Server August 2023 SU",
+      "url": "https://support.microsoft.com/en-us/topic/enable-support-for-aes256-cbc-encrypted-content-in-exchange-server-august-2023-su-add63652-ee17-4428-8928-ddc45339f99e"
+    },
+    {
+      "name": "ISM: Guidelines for Cryptography (ISM-0479, ISM-1769)",
+      "url": "https://www.cyber.gov.au/resources-business-and-government/essential-cyber-security/ism/cyber-security-guidelines/guidelines-for-cryptography"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "On Exchange 2016 CU23 or Exchange 2019 CU13 with October 2023 SU or later, create the EnableEncryptionAlgorithmCBC setting override to enable AES256-CBC mode encryption. On November 2024 SU or later, MSIPC is enabled by default and only the EnableEncryptionAlgorithmCBC override is required. Refresh VariantConfiguration and restart W3SVC and WAS after applying the override.",
+    "scriptTemplate": "New-SettingOverride -Name 'EnableEncryptionAlgorithmCBC' -Parameters @('Enabled=True') -Component Encryption -Reason 'Enable AES256-CBC encryption' -Section EnableEncryptionAlgorithmCBC\nGet-ExchangeDiagnosticInfo -Process Microsoft.Exchange.Directory.TopologyService -Component VariantConfiguration -Argument Refresh\nRestart-Service -Name W3SVC, WAS -Force"
+  },
+  "considerations": "Only applicable when IRM (AD RMS or Azure RMS) is in use. Requires Exchange 2016 CU23 with October 2023 SU or Exchange 2019 CU13 with October 2023 SU, or any later build. In a hybrid Exchange Online environment, additional steps are required to enable AES256-CBC on the Exchange Online side - contact Microsoft Support. In a coexistence environment with Exchange Server 2013 (end of life), enabling AES256-CBC may cause intermittent mail delivery and journaling failures.",
+  "roles": [
+    "Mailbox"
+  ]
+}

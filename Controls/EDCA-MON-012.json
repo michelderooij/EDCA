@@ -1,0 +1,41 @@
+{
+  "id": "EDCA-MON-012",
+  "title": "Exchange diagnostic event log levels are set to Lowest",
+  "description": "Exchange diagnostic event logging is a per-component verbosity setting (configured via Set-EventLogLevel) that controls how much detail each Exchange service writes to the Windows Application event log, with levels ranging from Lowest through Highest. All Exchange diagnostic event log categories MUST be configured at the Lowest logging level. Setting diagnostic categories above Lowest causes excessive logging which can fill disk space and degrade server performance.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Monitoring",
+  "severity": "Medium",
+  "severityWeight": 5,
+  "frameworks": [
+    "DISA"
+  ],
+  "references": [
+    {
+      "name": "DISA STIG EX19-MB-000032: Exchange diagnostic event-log must be configured to the minimum level (V-259653)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259653"
+    },
+    {
+      "name": "DISA STIG EX19-ED-000032: Exchange email diagnostic log level must be set to the lowest level (V-259581)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_edge_server/2024-12-06/finding/V-259581"
+    },
+    {
+      "name": "DISA STIG EX16-MB-000050: Exchange diagnostic event-log must be configured to the minimum level (V-228358)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2016_mailbox_server/2023-12-18/finding/V-228358"
+    },
+    {
+      "name": "Set-EventLogLevel cmdlet",
+      "url": "https://learn.microsoft.com/powershell/module/exchange/set-eventloglevel"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Set all Exchange diagnostic event log categories to Lowest.",
+    "scriptTemplate": "Get-EventLogLevel | Set-EventLogLevel -Level Lowest"
+  },
+  "considerations": "Setting all categories to Lowest reduces diagnostic logging granularity. If an issue is actively being investigated, consider temporarily raising specific category levels during the investigation period and returning them to Lowest afterwards.",
+  "roles": [
+    "Mailbox",
+    "Edge"
+  ]
+}

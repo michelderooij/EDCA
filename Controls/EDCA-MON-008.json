@@ -1,0 +1,33 @@
+{
+  "id": "EDCA-MON-008",
+  "title": "Send connector protocol logging is set to Verbose",
+  "description": "Send connector protocol logging records the full SMTP conversation for every outbound mail delivery attempt made through a send connector, capturing the complete SMTP exchange between the Exchange Transport service and the remote receiving server. Each Exchange server MUST have ProtocolLoggingLevel set to Verbose on all send connectors. Verbose SMTP transaction logging captures outbound mail flow details for all outbound connections.",
+  "verify": true,
+  "subject": "Organization",
+  "category": "Monitoring",
+  "severity": "Medium",
+  "severityWeight": 6,
+  "frameworks": [
+    "Best Practice",
+    "CIS"
+  ],
+  "references": [
+    {
+      "name": "CIS 4.4 (L1): Ensure ProtocolLoggingLevel is set to Verbose on Send Connectors",
+      "url": "https://www.cisecurity.org/benchmark/microsoft_exchange_server"
+    },
+    {
+      "name": "Configure protocol logging in Exchange Server",
+      "url": "https://learn.microsoft.com/exchange/mail-flow/connectors/configure-protocol-logging"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Set ProtocolLoggingLevel to Verbose on all send connectors.",
+    "scriptTemplate": "# Enable verbose protocol logging on all send connectors.\nGet-SendConnector | Set-SendConnector -ProtocolLoggingLevel Verbose"
+  },
+  "considerations": "Same storage and rotation considerations as receive connector protocol logging. Coordinate log archival so that verbose logs are retained for at least 90 days for forensic purposes.",
+  "roles": [
+    "Mailbox"
+  ]
+}

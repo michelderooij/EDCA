@@ -1,0 +1,33 @@
+{
+  "id": "EDCA-TLS-047",
+  "title": "Edge Sender ID filter rejects malformed From addresses",
+  "description": "The Edge Transport server MUST have the Sender ID filter enabled and configured to reject messages with malformed From headers. Sender ID validates the Purported Responsible Address (PRA) in the message header against the sending domain's SPF record. Without it, spoofed header-From addresses are not challenged.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Transport Security",
+  "severity": "Medium",
+  "severityWeight": 6,
+  "frameworks": [
+    "Best Practice",
+    "DISA"
+  ],
+  "references": [
+    {
+      "name": "Microsoft — Sender ID on Edge Transport servers",
+      "url": "https://learn.microsoft.com/exchange/antispam-and-antimalware/antispam-protection/sender-id"
+    },
+    {
+      "name": "DISA STIG EX19-ED-000096: The Exchange Sender ID filter must identify the sender (V-259619)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_edge_server/2024-12-06/finding/V-259619"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Enable Sender ID and configure it to reject spoofed messages: Set-SenderIdConfig -Enabled $true -SpoofedDomainAction Reject.",
+    "scriptTemplate": "Get-SenderIdConfig | Select-Object Enabled, SpoofedDomainAction\n# To enable:\n# Set-SenderIdConfig -Enabled $true -SpoofedDomainAction Reject"
+  },
+  "considerations": "Sender ID is a predecessor to modern SPF/DMARC enforcement. Some sending organisations do not publish SPF records, and Sender ID validation against those domains will return None (not a failure). Configure the SpoofedDomainAction to match your policy: StampStatus (tag only), Reject (block), or Delete.",
+  "roles": [
+    "Edge"
+  ]
+}

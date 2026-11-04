@@ -1,0 +1,28 @@
+{
+  "id": "EDCA-SEC-031",
+  "title": "TokenCacheModule loaded status reviewed",
+  "description": "The IIS TokenCacheModule is a native IIS module added to Exchange by the August 2023 Security Update as the permanent server-side remediation for CVE-2023-21709, replacing the temporary registry-based workaround by enforcing token validation at the IIS request pipeline level. The IIS TokenCacheModule MUST be present on all Exchange servers running builds that include the August 2023 Security Update or later. Microsoft added TokenCacheModule to Exchange IIS configuration as the permanent remediation for CVE-2023-21709 (privilege escalation via elevation of service account) and CVE-2023-36434. Its presence on a fully-patched Exchange build is expected and correct. Absence of the module on a patched server indicates it was accidentally removed or the security update was rolled back, leaving the server exposed to both CVEs.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Platform Security",
+  "severity": "Low",
+  "severityWeight": 4,
+  "frameworks": [
+    "Best Practice"
+  ],
+  "references": [
+    {
+      "name": "CVE-2023-21709 mitigation script guidance",
+      "url": "https://aka.ms/CVE-2023-21709ScriptDoc"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "If TokenCacheModule is present, no action is required — this is the expected state on a patched server. If TokenCacheModule is absent on a server running Exchange 2019 CU13 or later (or Exchange SE), re-run Exchange Setup /Mode:Upgrade to restore the module, or re-apply the August 2023 Security Update. Do not manually remove TokenCacheModule from IIS; doing so re-exposes the server to CVE-2023-21709 and CVE-2023-36434.",
+    "scriptTemplate": "# Diagnose: Check if TokenCacheModule is loaded in IIS global modules\nImport-Module WebAdministration -ErrorAction SilentlyContinue\nGet-WebConfiguration 'system.webServer/globalModules/*' | Where-Object { $_.Name -eq 'TokenCacheModule' } | Select-Object Name, Image\nGet-ExchangeServer $env:COMPUTERNAME | Select-Object Name, AdminDisplayVersion\n# If TokenCacheModule is present on November 2021-patched Exchange, apply KB5008631 rollback guidance."
+  },
+  "considerations": "The TokenCacheModule mitigates CVE-2023-21709 and CVE-2023-36434. Removing it would re-expose the server to these vulnerabilities. If the module is not present after patching, check whether the rollback procedure was applied and re-apply the Exchange patch that includes the module.",
+  "roles": [
+    "Mailbox"
+  ]
+}

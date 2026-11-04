@@ -1,0 +1,29 @@
+{
+  "id": "EDCA-PERF-007",
+  "title": "Receive Side Scaling (RSS) enabled",
+  "description": "Receive Side Scaling (RSS) is a network driver feature that distributes inbound network packet processing across multiple CPU cores using a hash of packet header fields, preventing a single core from becoming a bottleneck on high-throughput network interfaces. Receive Side Scaling (RSS) MUST be enabled on active network adapters. RSS distributes network receive processing across multiple processor cores, improving throughput for Exchange workloads.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Performance",
+  "severity": "Medium",
+  "severityWeight": 6,
+  "frameworks": [
+    "Best Practice"
+  ],
+  "references": [
+    {
+      "name": "CSS NIC/RSS checks",
+      "url": "https://github.com/microsoft/CSS-Exchange/blob/main/Diagnostics/HealthChecker/HealthChecker.ps1"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Enable RSS on adapters where supported.",
+    "scriptTemplate": "Get-NetAdapterRss | Where-Object { -not $_.Enabled } | ForEach-Object { Enable-NetAdapterRss -Name $_.Name -Confirm:$false }"
+  },
+  "considerations": "Enabling or reconfiguring RSS settings may require a network adapter driver update and a server reboot. Changes to RSS may briefly interrupt network connectivity. Verify that the network adapter firmware supports the target RSS configuration.",
+  "roles": [
+    "Mailbox",
+    "Edge"
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "id": "EDCA-SEC-042",
+  "title": "NetBIOS over TCP/IP is disabled on all network interfaces",
+  "description": "NetBIOS over TCP/IP (NetBT) is a legacy Windows networking service that enables NetBIOS name resolution and session services over TCP/IP networks; it is exploited in NTLM relay and poisoning attacks via NBT-NS broadcast responses and is not required on DNS-reliant domain-joined servers. NetBIOS over TCP/IP (NetBT) MUST be disabled on all network interfaces on Exchange servers. NetBIOS name resolution is a legacy protocol that exposes servers to NBNS poisoning, NTLM relay via NBT-NS spoofing, and unnecessary broadcast-based service discovery. On domain-joined servers, DNS provides all required name resolution. ANSSI recommends disabling NetBIOS over TCP/IP on all member server interfaces as part of attack surface reduction.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Platform Security",
+  "severity": "Low",
+  "severityWeight": 4,
+  "frameworks": [
+    "ANSSI",
+    "BSI"
+  ],
+  "references": [
+    {
+      "name": "NetBIOS over TCP/IP configuration",
+      "url": "https://learn.microsoft.com/troubleshoot/windows-server/networking/configure-tcpip-networking"
+    },
+    {
+      "name": "Disable NetBIOS over TCP/IP",
+      "url": "https://learn.microsoft.com/previous-versions/windows/it-pro/windows-server-2003/cc787035(v=ws.10)"
+    },
+    {
+      "name": "ANSSI - Mise en œuvre sécurisée d'un serveur Windows membre AD DS (2025)",
+      "url": "https://messervices.cyber.gouv.fr/guides/mise-en-oeuvre-securisee-dun-serveur-windows"
+    },
+    {
+      "name": "BSI APP.2.2.A3 — Planung der Gruppenrichtlinien unter Windows",
+      "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/06_APP_Anwendungen/APP_2_2_Active_Directory_Domain_Services_Edition_2023.pdf?__blob=publicationFile"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Disable NetBIOS over TCP/IP on all network adapters by setting the NetbiosOptions registry value to 2 (disabled) under each interface GUID key in HKLM\\SYSTEM\\CurrentControlSet\\Services\\NetBT\\Parameters\\Interfaces. Alternatively, configure via Group Policy using a startup script or use the Network Adapter advanced properties in the GUI.",
+    "scriptTemplate": "# Group Policy equivalent:\n# Computer Configuration > Preferences > Windows Settings > Registry\n#   Key: HKLM\\SYSTEM\\CurrentControlSet\\Services\\NetBT\\Parameters\\Interfaces\\Tcpip_{GUID}\n#   Value: NetbiosOptions = 2 (DWORD) — Disabled\n#\n# Check current NetBIOS over TCP/IP setting per interface\n$interfacesPath = 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\NetBT\\Parameters\\Interfaces'\nGet-ChildItem $interfacesPath | ForEach-Object {\n    $val = (Get-ItemProperty $_.PSPath -Name NetbiosOptions -ErrorAction SilentlyContinue).NetbiosOptions\n    $status = switch ($val) { 0 { 'Default (use DHCP)' } 1 { 'Enabled' } 2 { 'Disabled' } default { \"Unknown ($val)\" } }\n    [PSCustomObject]@{ Interface = $_.PSChildName; NetbiosOptions = $val; Status = $status }\n} | Format-Table -AutoSize\n\n# Disable NetBIOS on all interfaces (set to 2 = disabled)\nGet-ChildItem $interfacesPath | ForEach-Object {\n    Set-ItemProperty -Path $_.PSPath -Name NetbiosOptions -Type DWord -Value 2\n    Write-Host \"Disabled NetBIOS on interface: $($_.PSChildName)\"\n}\nWrite-Host 'Done. Changes take effect immediately (no reboot required).'"
+  },
+  "considerations": "Disabling NetBIOS over TCP/IP on Exchange servers is safe in modern Active Directory environments where DNS provides all name resolution. Verify that no legacy applications, backup agents, or monitoring tools rely on NetBIOS name resolution before disabling. In environments with very old Windows clients (pre-Windows 2000) or legacy SMB-dependent systems, NetBIOS may still be required on specific segments. If the server hosts any application that broadcasts NetBIOS names (e.g., legacy file sharing over NBT), connectivity to those shares from NetBIOS-dependent clients will be lost. After disabling, monitor for any connectivity failures, particularly from older SMTP relay devices that use NetBIOS for host lookup.",
+  "roles": [
+    "Mailbox",
+    "Edge"
+  ]
+}

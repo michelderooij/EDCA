@@ -1,0 +1,38 @@
+{
+  "id": "EDCA-GOV-003",
+  "title": "EEMS baseline",
+  "description": "The Exchange Emergency Mitigation Service (EEMS) is a Windows service that automatically downloads and applies temporary security mitigations from Microsoft for critical Exchange Server vulnerabilities, enabling rapid response before a full Cumulative Update is available. The Exchange Emergency Mitigation Service (MSExchangeMitigation) MUST be Running with Automatic start mode and mitigations enabled. EEMS enables Microsoft to deliver emergency mitigations for critical Exchange vulnerabilities.",
+  "verify": false,
+  "subject": "Server",
+  "category": "Governance",
+  "severity": "High",
+  "severityWeight": 8,
+  "frameworks": [
+    "Best Practice",
+    "CISA",
+    "BSI"
+  ],
+  "references": [
+    {
+      "name": "CSS EEMSCheck",
+      "url": "https://microsoft.github.io/CSS-Exchange/Diagnostics/HealthChecker/EEMSCheck/"
+    },
+    {
+      "name": "CISA AA21-062A: Mitigate Microsoft Exchange Server Vulnerabilities - enable the Microsoft Exchange Emergency Mitigation Service",
+      "url": "https://www.cisa.gov/news-events/cybersecurity-advisories/aa21-062a"
+    },
+    {
+      "name": "BSI APP.5.2.A9 — Sichere Konfiguration von Exchange-Servern",
+      "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/06_APP_Anwendungen/APP_5_2_Microsoft_Exchange_und_Outlook_Edition_2023.pdf?__blob=publicationFile"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Ensure the MSExchangeMitigation Windows service is set to Automatic startup and is in a Running state. Verify the server has outbound connectivity to the Office Configuration Service (OCS) mitigation endpoint at officeclient.microsoft.com.",
+    "scriptTemplate": "Get-Service MSExchangeMitigation | Format-List Name, Status, StartType"
+  },
+  "considerations": "EEMS automatically applies mitigations from Microsoft without requiring manual patching. If organizational policy requires change control approval before applying any system changes, EEMS may not be appropriate in enforce mode. Review EEMS logs after automatic mitigations are applied to assess impact.",
+  "roles": [
+    "Mailbox"
+  ]
+}

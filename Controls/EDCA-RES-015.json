@@ -1,0 +1,32 @@
+{
+  "id": "EDCA-RES-015",
+  "title": "DAG witness server configuration is present",
+  "description": "Each deployed Database Availability Group (DAG) MUST have witness server settings configured (WitnessServer and WitnessDirectory). Missing witness configuration increases quorum risk and can prevent automatic recovery behavior during failures.",
+  "verify": true,
+  "subject": "Organization",
+  "category": "Resilience",
+  "severity": "High",
+  "severityWeight": 8,
+  "frameworks": [
+    "Best Practice"
+  ],
+  "references": [
+    {
+      "name": "Exchange Server Preferred Architecture: Witness server placement",
+      "url": "https://learn.microsoft.com/en-us/exchange/plan-and-deploy/deployment-ref/preferred-architecture"
+    },
+    {
+      "name": "Manage database availability groups",
+      "url": "https://learn.microsoft.com/en-us/exchange/high-availability/manage-ha/manage-dags"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Configure witness server and witness directory for each DAG, and verify witness host accessibility from DAG members.",
+    "scriptTemplate": "# Diagnose: Show DAG witness configuration\nGet-DatabaseAvailabilityGroup | Select-Object Name, WitnessServer, WitnessDirectory, DatacenterActivationMode | Format-Table -AutoSize"
+  },
+  "considerations": "If no DAG is deployed, this control is not applicable and should report Skipped. This control validates presence of witness settings, not the full witness placement topology recommendation.",
+  "roles": [
+    "Mailbox"
+  ]
+}

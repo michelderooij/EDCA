@@ -1,0 +1,29 @@
+{
+  "id": "EDCA-PERF-005",
+  "title": "NUMA BIOS baseline",
+  "description": "Non-Uniform Memory Access (NUMA) is a multi-processor memory architecture where each processor socket has local memory it can access faster than memory attached to other sockets; BIOS NUMA configuration determines how the operating system perceives and schedules across these memory domains. BIOS/boot NUMA group size optimization MUST be set to 0 (flat/clustered NUMA). Non-zero values (node interleaving) degrade Exchange memory access performance across NUMA nodes.",
+  "verify": false,
+  "subject": "Server",
+  "category": "Performance",
+  "severity": "Medium",
+  "severityWeight": 6,
+  "frameworks": [
+    "Best Practice"
+  ],
+  "references": [
+    {
+      "name": "CSS NumaBiosCheck",
+      "url": "https://microsoft.github.io/CSS-Exchange/Diagnostics/HealthChecker/NumaBiosCheck/"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Verify BIOS NUMA settings are configured so the OS can detect all processor cores. If only half the logical cores are visible to the OS, consult your server or OS vendor to correct the NUMA BIOS configuration.",
+    "scriptTemplate": "# Diagnose: Check NUMA node and processor visibility from the OS\nGet-WmiObject -Class Win32_Processor | Select-Object Name, NumberOfCores, NumberOfLogicalProcessors, NumberOfEnabledCore\n\"OS-visible logical processor count: $([System.Environment]::ProcessorCount)\"\n# Uneven core distribution across sockets or mismatched totals may indicate a NUMA misconfiguration - verify BIOS settings."
+  },
+  "considerations": "BIOS-level NUMA configuration changes require server restart and must be coordinated with the hardware vendor. Incorrect NUMA configuration can degrade memory access performance on multi-socket systems.",
+  "roles": [
+    "Mailbox",
+    "Edge"
+  ]
+}

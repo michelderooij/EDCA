@@ -1,0 +1,35 @@
+{
+  "id": "EDCA-TLS-036",
+  "title": "Edge SMTP certificate has the SMTP service assigned",
+  "description": "The Edge Transport server MUST have at least one non-expired certificate with the SMTP service assigned. Without an SMTP-assigned certificate, the Edge server cannot present a certificate during STARTTLS negotiation, forcing all inbound and outbound SMTP sessions to communicate in cleartext.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Transport Security",
+  "severity": "High",
+  "severityWeight": 8,
+  "frameworks": [
+    "Best Practice",
+    "ANSSI",
+    "BSI",
+    "NIS2"
+  ],
+  "references": [
+    {
+      "name": "Microsoft Exchange certificate procedures",
+      "url": "https://learn.microsoft.com/exchange/architecture/client-access/certificates"
+    },
+    {
+      "name": "BSI APP.5.2.A11 — Absicherung der Kommunikation zwischen Exchange-Systemen",
+      "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/06_APP_Anwendungen/APP_5_2_Microsoft_Exchange_und_Outlook_Edition_2023.pdf?__blob=publicationFile"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Import or request a certificate suitable for SMTP and assign the SMTP service: Enable-ExchangeCertificate -Thumbprint <thumb> -Services SMTP.",
+    "scriptTemplate": "Get-ExchangeCertificate | Where-Object { $_.Services -match 'SMTP' } | Select-Object Thumbprint, Subject, NotAfter, Services"
+  },
+  "considerations": "The self-signed certificate installed by Exchange Setup is assigned to the SMTP service by default and is sufficient for opportunistic TLS between Edge and Mailbox servers. Replace it with a CA-signed certificate for inbound connections from external senders that enforce domain security.",
+  "roles": [
+    "Edge"
+  ]
+}

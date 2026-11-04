@@ -1,0 +1,36 @@
+{
+  "id": "EDCA-PERF-012",
+  "title": "Exchange-to-DC/GC processor core ratio does not exceed 8:1",
+  "description": "For every eight Exchange Server processor cores in an Active Directory site there MUST be at least one Global Catalog (GC) processor core in the same site. An insufficient number of GC cores relative to Exchange load causes increased LDAP lookup latency, resulting in degraded client responsiveness and potential service disruptions. Recommendation is a maximum 8:1 ratio of Exchange cores to DC/GC cores.",
+  "verify": false,
+  "subject": "Organization",
+  "category": "Performance",
+  "severity": "High",
+  "severityWeight": 8,
+  "frameworks": [
+    "Best Practice"
+  ],
+  "references": [
+    {
+      "name": "Exchange Server preferred architecture: directory server design",
+      "url": "https://learn.microsoft.com/en-us/exchange/plan-and-deploy/deployment-ref/preferred-architecture#site-resilient-datacenter-pair-design"
+    },
+    {
+      "name": "Microsoft CSS Exchange HealthChecker: DCCoreRatio",
+      "url": "https://aka.ms/HC-ADCoreCount"
+    },
+    {
+      "name": "Exchange Server Performance recommendations: processor",
+      "url": "https://aka.ms/HC-PerfSize"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Add additional Global Catalog servers (or promote existing DCs to GC role) in the Exchange AD site to bring the ratio to 8:1 or better. Alternatively, reduce the number of Exchange processor cores by adjusting the virtual machine configuration or decommissioning servers.",
+    "scriptTemplate": "# STEP 1: Discover GC-enabled domain controllers per AD site\n$gcsBySite = @{}\nGet-ADDomainController -Filter { IsGlobalCatalog -eq $true } | ForEach-Object {\n    $siteName = $_.Site\n    if (-not $gcsBySite.ContainsKey($siteName)) { $gcsBySite[$siteName] = @() }\n    $gcsBySite[$siteName] += $_.HostName\n}\n\n# STEP 2: Exchange server core counts per site\n$exchangeBySite = @{}\nGet-ExchangeServer | Where-Object { $_.ServerRole -notlike '*Edge*' } | ForEach-Object {\n    $siteName = (([string]$_.Site -split '/')[-1]).Trim()\n    $srvName  = [string]$_.Name\n    $cores    = (@(Get-CimInstance -ComputerName $srvName -ClassName Win32_Processor -ErrorAction SilentlyContinue) | Measure-Object -Property NumberOfCores -Sum).Sum\n    [PSCustomObject]@{ Server = $srvName; Site = $siteName; Cores = if ($null -ne $cores) { $cores } else { 'N/A' } }\n    if (-not $exchangeBySite.ContainsKey($siteName)) { $exchangeBySite[$siteName] = 0 }\n    if ($null -ne $cores) { $exchangeBySite[$siteName] += $cores }\n} | Format-Table Server, Site, Cores -AutoSize\n\n# STEP 3: GC core counts per site + ratio\nforeach ($site in ($exchangeBySite.Keys | Sort-Object)) {\n    $exCores = $exchangeBySite[$site]\n    $gcNames = if ($gcsBySite.ContainsKey($site)) { $gcsBySite[$site] } else { @() }\n    if ($gcNames.Count -eq 0) { Write-Warning ('No GC found in site ' + $site); continue }\n    $totalGcCores = 0\n    foreach ($dcName in $gcNames) {\n        $dcCores = (@(Get-CimInstance -ComputerName $dcName -ClassName Win32_Processor -ErrorAction SilentlyContinue) | Measure-Object -Property NumberOfCores -Sum).Sum\n        [PSCustomObject]@{ DC = $dcName; Site = $site; Cores = if ($null -ne $dcCores) { $dcCores } else { 'N/A' } }\n        if ($null -ne $dcCores) { $totalGcCores += $dcCores }\n    }\n    if ($totalGcCores -gt 0) {\n        $ratio = [math]::Round($exCores / $totalGcCores, 2)\n        $status = if ($ratio -le 8) { 'PASS' } else { 'FAIL' }\n        Write-Host ($status + ': Site=' + $site + '  Exchange=' + $exCores + ' cores  GC=' + $totalGcCores + ' cores  Ratio=' + $ratio + ':1 (limit 8:1)')\n    }\n}"
+  },
+  "considerations": "When the Exchange-to-DC/GC core ratio exceeds 8:1 in an Active Directory site, Exchange Server cannot service LDAP lookup requests at the required rate. This manifests as increased LDAP query latency, causing slow mailbox logons, delayed Free/Busy lookups, and sluggish recipient resolution in Outlook. Under sustained load, GC servers experience elevated CPU utilization that can cascade into authentication failures and client disconnections. During peak periods, transport components may time out waiting for LDAP responses, resulting in delivery delays or NDRs. In severe cases, Exchange Managed Availability health probes fail, causing the frontend service to be disabled and users to lose access entirely. The impact is site-scoped - sites where the ratio is within limits remain unaffected while non-compliant sites degrade independently.",
+  "roles": [
+    "Mailbox"
+  ]
+}

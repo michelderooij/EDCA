@@ -1,0 +1,44 @@
+{
+  "id": "EDCA-TLS-011",
+  "title": "External send connector does not ignore STARTTLS",
+  "description": "The IgnoreStartTLS property on an Exchange send connector suppresses the STARTTLS upgrade for all outbound sessions on that connector, causing Exchange to deliver mail in plaintext even when the remote server advertises TLS capability; disabling this protection exposes message content and metadata to interception by any party on the network path. The IgnoreStartTLS property on the external send connector MUST be False. If set to True, Exchange will connect to remote SMTP servers in plaintext even when the server advertises STARTTLS, exposing mail content to interception.",
+  "verify": true,
+  "subject": "Organization",
+  "category": "Transport Security",
+  "severity": "High",
+  "severityWeight": 8,
+  "frameworks": [
+    "Best Practice",
+    "BSI",
+    "CIS",
+    "NIS2",
+    "ISM"
+  ],
+  "references": [
+    {
+      "name": "CIS 2.2.9 (L1): Ensure IgnoreSTARTTLS is set to False",
+      "url": "https://www.cisecurity.org/benchmark/microsoft_exchange_server"
+    },
+    {
+      "name": "Send connector TLS configuration in Exchange Server",
+      "url": "https://learn.microsoft.com/exchange/mail-flow/connectors/connector-selection"
+    },
+    {
+      "name": "BSI APP.5.2.A11 — Absicherung der Kommunikation zwischen Exchange-Systemen",
+      "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/06_APP_Anwendungen/APP_5_2_Microsoft_Exchange_und_Outlook_Edition_2023.pdf?__blob=publicationFile"
+    },
+    {
+      "name": "ISM: Guidelines for Email (ISM-0567)",
+      "url": "https://www.cyber.gov.au/resources-business-and-government/essential-cyber-security/ism/cyber-security-guidelines/guidelines-for-email"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Set IgnoreStartTLS to False on the external send connector.",
+    "scriptTemplate": "# Ensure STARTTLS is not ignored on the internet send connector.\nGet-SendConnector | Where-Object { $_.AddressSpaces -like '*' } |\n    Set-SendConnector -IgnoreStartTLS $false"
+  },
+  "considerations": "Setting IgnoreStartTLS to False means Exchange will attempt STARTTLS whenever a remote server advertises it. If the remote server presents an invalid or untrusted certificate and RequireTLS is also True, delivery may fail. Test with a non-production connector first.",
+  "roles": [
+    "Mailbox"
+  ]
+}

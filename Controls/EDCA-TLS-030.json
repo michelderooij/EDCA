@@ -1,0 +1,28 @@
+{
+  "id": "EDCA-TLS-030",
+  "title": "Edge subscription is active and valid",
+  "description": "An Edge subscription is an authenticated synchronization relationship between an Exchange Edge Transport server and a Mailbox server that replicates recipient, configuration, and anti-spam data from Active Directory to the Edge server's ADAM instance, allowing the Edge server to perform recipient validation and apply organization-specific transport rules without direct AD connectivity. The Edge Transport server MUST have at least one active Edge subscription synchronising routing and recipient data with the internal Exchange organisation. An Edge server without a valid subscription cannot perform recipient validation or update anti-spam data, and mail routing decisions are made without current directory data.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Transport Security",
+  "severity": "High",
+  "severityWeight": 8,
+  "frameworks": [
+    "Best Practice"
+  ],
+  "references": [
+    {
+      "name": "Microsoft — Edge Subscriptions",
+      "url": "https://learn.microsoft.com/exchange/architecture/edge-transport-servers/edge-subscriptions"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Run the Edge Subscription wizard or New-EdgeSubscription and ImportEdgeConfig to establish a new subscription. Verify with Get-EdgeSubscription.",
+    "scriptTemplate": "Get-EdgeSubscription | Format-List Name, Domain, Site, CreateUtc, LeaseType, IsValid"
+  },
+  "considerations": "After creating an Edge subscription, allow up to 60 minutes for EdgeSync to complete the initial synchronisation. The LeaseType value should be Leader to indicate a healthy subscription.",
+  "roles": [
+    "Edge"
+  ]
+}

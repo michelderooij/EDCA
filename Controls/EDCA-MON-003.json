@@ -1,0 +1,29 @@
+{
+  "id": "EDCA-MON-003",
+  "title": "Server pending reboot cleared",
+  "description": "Each Exchange server MUST have no pending reboot indicators in the registry (pending file rename operations, Windows Update pending reboot, or Component-Based Servicing pending keys). Pending reboots block Exchange cumulative update installation.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Monitoring",
+  "severity": "Medium",
+  "severityWeight": 6,
+  "frameworks": [
+    "Best Practice"
+  ],
+  "references": [
+    {
+      "name": "CSS reboot pending guidance",
+      "url": "https://aka.ms/HC-RebootPending"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Reboot the server to clear pending reboot flags. If registry keys persist after the reboot, manually delete them from the indicated registry locations. Always back up the registry before making manual edits.",
+    "scriptTemplate": "# Diagnose: Check for pending reboot indicators in registry\n@{ 'CBS RebootPending'='HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Component Based Servicing\\RebootPending'; 'WU RebootRequired'='HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\WindowsUpdate\\Auto Update\\RebootRequired'; 'PFRO PendingRename'='HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Session Manager' }.GetEnumerator() | ForEach-Object { \"$($_.Key): $(if (Test-Path $_.Value) { 'REBOOT PENDING' } else { 'clear' })\" }\n# Plan an approved maintenance window to reboot the server to clear all pending indicators."
+  },
+  "considerations": "Clearing a pending reboot clears only the state flag - the actual rebooted state is required for changes (such as software updates or service changes) to take effect. Schedule a maintenance window with DAG failover for the reboot. Verify all DAG members are in a healthy state before rebooting any member.",
+  "roles": [
+    "Mailbox",
+    "Edge"
+  ]
+}

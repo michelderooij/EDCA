@@ -1,0 +1,45 @@
+{
+  "id": "EDCA-MON-010",
+  "title": "Exchange audit data is protected from unauthorized access",
+  "description": "Exchange MUST protect audit data against unauthorized read access, unauthorized access, and unauthorized deletion. Audit data (logs, mailbox audit logs, admin audit logs) must have file-level and RBAC-level access controls applied to prevent tampering or unauthorized disclosure.",
+  "verify": false,
+  "subject": "Server",
+  "category": "Monitoring",
+  "severity": "Medium",
+  "severityWeight": 6,
+  "frameworks": [
+    "DISA",
+    "ANSSI"
+  ],
+  "references": [
+    {
+      "name": "DISA STIG EX19-MB-000052: Exchange must protect audit data against unauthorized read access (V-259660)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259660"
+    },
+    {
+      "name": "DISA STIG EX19-MB-000053: Exchange must protect audit data against unauthorized access (V-259661)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259661"
+    },
+    {
+      "name": "DISA STIG EX19-MB-000054: Exchange must protect audit data against unauthorized deletion (V-259662)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259662"
+    },
+    {
+      "name": "Audit logging in Exchange Server",
+      "url": "https://learn.microsoft.com/exchange/policy-and-compliance/admin-audit-logging/admin-audit-logging"
+    },
+    {
+      "name": "ANSSI - Sécuriser la journalisation dans un environnement Microsoft Active Directory (2022)",
+      "url": "https://messervices.cyber.gouv.fr/guides/securiser-la-journalisation-dans-un-environnement-microsoft-active-directory"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Restrict NTFS permissions on Exchange log directories and limit RBAC access to audit management roles.",
+    "scriptTemplate": "# Review NTFS permissions on exchange log directories and restrict to Exchange Admin and SYSTEM only."
+  },
+  "considerations": "Audit log protection requires both file-system (NTFS) and RBAC controls. Overly restrictive permissions may interfere with Exchange service accounts that must write to log directories. Review default Exchange service account permissions before making changes. Admin audit entries are recorded in the AuditLog system mailbox; verify its existence and accessibility with: Get-Mailbox -AuditLog.",
+  "roles": [
+    "Mailbox"
+  ]
+}

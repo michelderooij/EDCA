@@ -1,0 +1,33 @@
+{
+  "id": "EDCA-TLS-015",
+  "title": "Exchange Receive Connector maximum hop count is 60",
+  "description": "The receive connector MaxHopCount property controls the maximum number of Received: headers that Exchange will accept on an inbound message before treating it as a routing loop and rejecting it with an NDR. The Exchange Receive Connector Maximum Hop Count MUST be 60. The hop count limit controls the maximum number of times a message is allowed to be relayed before Exchange rejects it as looping. Setting this value lower could reject legitimate complex routing paths.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Transport Security",
+  "severity": "Low",
+  "severityWeight": 3,
+  "frameworks": [
+    "DISA"
+  ],
+  "references": [
+    {
+      "name": "DISA STIG EX19-MB-000125: The Exchange Receive Connector Maximum Hop Count must be 60 (V-259678)",
+      "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259678"
+    },
+    {
+      "name": "Set-ReceiveConnector cmdlet",
+      "url": "https://learn.microsoft.com/powershell/module/exchange/set-receiveconnector"
+    }
+  ],
+  "remediation": {
+    "automatable": true,
+    "description": "Set MaxHopCount to 60 on all receive connectors.",
+    "scriptTemplate": "Get-ReceiveConnector | Set-ReceiveConnector -MaxHopCount 60"
+  },
+  "considerations": "A hop count below 60 may cause legitimate messages with complex routing paths to be rejected. The default Exchange value is 60. Only modify if directed by STIG guidance or confirmed routing loop analysis.",
+  "roles": [
+    "Mailbox",
+    "Edge"
+  ]
+}
