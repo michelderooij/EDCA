@@ -9,7 +9,8 @@
   "severityWeight": 6,
   "frameworks": [
     "DISA",
-    "BSI"
+    "BSI",
+    "CISA"
   ],
   "references": [
     {
@@ -31,6 +32,10 @@
     {
       "name": "BSI APP.5.2.A9 — Sichere Konfiguration von Exchange-Servern",
       "url": "https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/06_APP_Anwendungen/APP_5_2_Microsoft_Exchange_und_Outlook_Edition_2023.pdf?__blob=publicationFile"
+    },
+    {
+      "name": "CISA/NSA Microsoft Exchange Server Security Best Practices (October 2025) - enable Exchange anti-spam and anti-malware protections",
+      "url": "https://www.cisa.gov/resources-tools/resources/microsoft-exchange-server-security-best-practices"
     }
   ],
   "remediation": {

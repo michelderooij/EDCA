@@ -18,8 +18,8 @@
       "url": "https://learn.microsoft.com/exchange/permissions/split-permissions"
     },
     {
-      "name": "CISA AA21-062A: Mitigate Microsoft Exchange Server Vulnerabilities - enable Exchange split permissions to limit Exchange Server's Active Directory write access",
-      "url": "https://www.cisa.gov/news-events/cybersecurity-advisories/aa21-062a"
+      "name": "CISA/NSA Microsoft Exchange Server Security Best Practices (October 2025): Use role management and split permissions",
+      "url": "https://www.cisa.gov/resources-tools/resources/microsoft-exchange-server-security-best-practices"
     },
     {
       "name": "ISM: Guidelines for System Hardening (ISM-1833)",
@@ -28,6 +28,10 @@
     {
       "name": "ENISA / NIS2 Directive (EU) 2022/2555 - Article 21(2)(i): access control, authentication and authorization - Section 11.5-11.7, 11.3, 10, 2.2",
       "url": "https://eur-lex.europa.eu/eli/dir/2022/2555/oj"
+    },
+    {
+      "name": "Commission Implementing Regulation (EU) 2024/2690 - Annex, Sections 11.5-11.7, 11.3, 10, 2.2 (technical requirements for NIS2 Article 21(2))",
+      "url": "https://eur-lex.europa.eu/eli/reg_impl/2024/2690/oj"
     }
   ],
   "remediation": {

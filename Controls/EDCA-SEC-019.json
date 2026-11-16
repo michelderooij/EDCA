@@ -19,8 +19,8 @@
       "url": "https://learn.microsoft.com/exchange/antispam-and-antimalware/windows-antivirus-software"
     },
     {
-      "name": "CISA AA21-062A: Mitigate Microsoft Exchange Server Vulnerabilities - configure Microsoft Defender antivirus with correct Exchange-specific exclusions",
-      "url": "https://www.cisa.gov/news-events/cybersecurity-advisories/aa21-062a"
+      "name": "CISA/NSA Microsoft Exchange Server Security Best Practices (October 2025): Configure Exchange-specific antivirus exclusions",
+      "url": "https://www.cisa.gov/resources-tools/resources/microsoft-exchange-server-security-best-practices"
     },
     {
       "name": "DISA STIG EX19-MB-000134 (HIGH): Exchange servers must have an approved DOD email-aware virus protection software installed (V-259686)",

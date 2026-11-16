@@ -10,6 +10,7 @@
   "frameworks": [
     "DISA",
     "BSI",
+    "CISA",
     "NIS2",
     "ISM"
   ],
@@ -29,6 +30,14 @@
     {
       "name": "ISM: Guidelines for Email (ISM-0567)",
       "url": "https://www.cyber.gov.au/resources-business-and-government/essential-cyber-security/ism/cyber-security-guidelines/guidelines-for-email"
+    },
+    {
+      "name": "Commission Implementing Regulation (EU) 2024/2690 - Annex, Sections 9, 6.7 (technical requirements for NIS2 Article 21(2))",
+      "url": "https://eur-lex.europa.eu/eli/reg_impl/2024/2690/oj"
+    },
+    {
+      "name": "CISA/NSA Microsoft Exchange Server Security Best Practices (October 2025) - encrypt and authenticate SMTP connections",
+      "url": "https://www.cisa.gov/resources-tools/resources/microsoft-exchange-server-security-best-practices"
     }
   ],
   "remediation": {

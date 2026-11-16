@@ -1,5 +1,24 @@
 # Changelog
 
+## v1.0.1.2
+
+- Updated the bundled Exchange 2016, 2019, and SE build baselines.
+- Framework currency review (November 2026):
+  - Exchange lifecycle: added Microsoft's explicit 2016/2019 end-of-support and migration-to-SE guidance to `EDCA-GOV-002`; confirmed the control warns on out-of-support product lines even when current on updates.
+  - BSI: corrected the transition timeline. BSI Standard 300-1 v1.0 (Grundschutz++) was published in October 2026 and is certifiable from 2027; classic IT-Grundschutz certification ends 30 November 2031. Retained the current Exchange-specific APP.5.2 Edition 2023 mapping because the new requirements catalog is solution-independent.
+  - NIS2: confirmed NCSC-NL TLS Guidelines 2025-05 remain current with March 2026 errata; updated the README version/date.
+  - NIS2: added explicit Commission Implementing Regulation (EU) 2024/2690 references to NIS2-mapped controls, carrying the Annex section numbers already cited.
+  - CIS: reference versions updated to current benchmark releases — Windows Server 2022 Benchmark v5.1.0 (`EDCA-DATA-005`, `EDCA-DATA-006`), Windows Server 2019 Benchmark v5.0.0 (`EDCA-MON-002`), Exchange Server 2019 Benchmark v1.0.1 (`EDCA-SEC-014`). CIS Controls v8.1 remains current.
+  - ISM September 2026: `ISM-1448` was merged into `ISM-1372`; removed the merged identifier from `EDCA-DATA-018` and `EDCA-DATA-013`.
+  - CISA: replaced the retired 2021 `CSI_MS_Exchange_Security_Best_Practices_Final.pdf` reference (URL now returns 404) with the joint CISA/NSA Microsoft Exchange Server Security Best Practices guide (October 2025) in `EDCA-IAC-004`, the README framework table, and directly mapped controls.
+  - CISA: consolidated superseded AA21-062A citations with section-specific references to the October 2025 guide where both sources mapped to the same requirement. Updated the corresponding Mapping.md cells and retained AA21-062A for distinct recommendations, including Alternate Service Account usage and dedicated hybrid app identity.
+  - DISA: the 2026-09-30 STIG releases (Exchange 2019 Mailbox V2R4, Exchange 2019 Edge V2R3, Exchange 2016 Mailbox V2R7) contain wording-only changes to cited rules; stigviewer.com reference URLs still resolve to the cited revisions and remain unchanged.
+  - DISA: added Edge Transport rule V-288847 to `EDCA-SEC-038`.
+  - NIS2: added Implementing Regulation (EU) 2024/2690 references to `EDCA-TLS-011`, `EDCA-TLS-021`, and `EDCA-TLS-036`.
+  - Added manual-review controls `EDCA-SEC-044` for the Defender webshell ASR rule and `EDCA-SEC-045` for kernel-mode driver restrictions.
+  - Updated README framework versions for CIS, DISA, ISM, and NIS2; documented the BSI IT-Grundschutz++ transition and refreshed the ISM changes-document link.
+  - Replaced the retired CISA PDF link in `report_sample.html`; updated the generated mapping matrix for affected framework references and IDs.
+
 ## v1.0.1.1
 
 - Fixed categorizing DAG-related controls resulting in `Control evaluator not implemented`.

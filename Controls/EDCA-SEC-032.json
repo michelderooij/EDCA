@@ -16,8 +16,8 @@
       "url": "https://learn.microsoft.com/exchange/plan-and-deploy/post-installation-tasks/security-best-practices/exchange-non-compliant-p2from-detection"
     },
     {
-      "name": "CISA AA21-062A: Mitigate Microsoft Exchange Server Vulnerabilities - enable P2 FROM header manipulation detection to reduce spoofing risk",
-      "url": "https://www.cisa.gov/news-events/cybersecurity-advisories/aa21-062a"
+      "name": "CISA/NSA Microsoft Exchange Server Security Best Practices (October 2025): Use P2 FROM header manipulation detection",
+      "url": "https://www.cisa.gov/resources-tools/resources/microsoft-exchange-server-security-best-practices"
     }
   ],
   "remediation": {

@@ -18,8 +18,8 @@
       "url": "https://microsoft.github.io/CSS-Exchange/Diagnostics/HealthChecker/EEMSCheck/"
     },
     {
-      "name": "CISA AA21-062A: Mitigate Microsoft Exchange Server Vulnerabilities - enable the Microsoft Exchange Emergency Mitigation Service",
-      "url": "https://www.cisa.gov/news-events/cybersecurity-advisories/aa21-062a"
+      "name": "CISA/NSA Microsoft Exchange Server Security Best Practices (October 2025): Ensure Emergency Mitigation Service remains enabled",
+      "url": "https://www.cisa.gov/resources-tools/resources/microsoft-exchange-server-security-best-practices"
     },
     {
       "name": "BSI APP.5.2.A9 — Sichere Konfiguration von Exchange-Servern",

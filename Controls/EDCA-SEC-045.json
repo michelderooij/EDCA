@@ -1,0 +1,34 @@
+{
+  "id": "EDCA-SEC-045",
+  "title": "Kernel-mode code loading is restricted",
+  "description": "Kernel-mode drivers on Exchange servers MUST be restricted to approved, properly signed code. Limit SeLoadDriverPrivilege to authorized administrators, enable the Microsoft vulnerable driver blocklist where supported, and ensure test-signing and no-integrity-check boot options are disabled.",
+  "verify": false,
+  "subject": "Server",
+  "category": "Platform Security",
+  "severity": "Medium",
+  "severityWeight": 6,
+  "frameworks": [
+    "Best Practice",
+    "ISM"
+  ],
+  "references": [
+    {
+      "name": "ISM September 2026 - ISM-2127 and ISM-2128, kernel-mode driver restrictions",
+      "url": "https://www.cyber.gov.au/resources-business-and-government/essential-cyber-security/ism/cyber-security-guidelines/guidelines-for-system-hardening"
+    },
+    {
+      "name": "Microsoft vulnerable driver blocklist",
+      "url": "https://learn.microsoft.com/windows/security/application-security/application-control/app-control-for-business/design/microsoft-recommended-driver-block-rules"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Apply the relevant Windows security baseline and Group Policy to restrict driver-loading privileges, enable driver block protections, and prevent test-signed or integrity-check-bypassed boot configurations.",
+    "scriptTemplate": "# Review local policy assignments for SeLoadDriverPrivilege.\n# Confirm the vulnerable-driver blocklist is enabled where supported.\nGet-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\CI\\Config' -Name VulnerableDriverBlocklistEnable -ErrorAction SilentlyContinue\n\n# Confirm test-signing and no-integrity-checks are not enabled.\nbcdedit.exe /enum '{current}' | Select-String -Pattern 'testsigning|nointegritychecks'\n\n# Review the effective user-rights assignment for Load and unload device drivers."
+  },
+  "considerations": "Restricting driver installation can affect approved monitoring, backup, antivirus, and storage software. Validate required drivers and vendor support before enforcement. The vulnerable-driver blocklist is platform- and policy-dependent; confirm its effective state rather than relying only on a registry value.",
+  "roles": [
+    "Mailbox",
+    "Edge"
+  ]
+}

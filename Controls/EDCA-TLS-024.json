@@ -22,8 +22,16 @@
       "url": "https://eur-lex.europa.eu/eli/dir/2022/2555/oj"
     },
     {
+      "name": "Commission Implementing Regulation (EU) 2024/2690 - Annex, Sections 9, 6.7, 6.3, 6.6 (technical requirements for NIS2 Article 21(2))",
+      "url": "https://eur-lex.europa.eu/eli/reg_impl/2024/2690/oj"
+    },
+    {
       "name": "CISA BOD 18-01 (2017): Enhance Email and Web Security - enforce SMTP encryption for email transport",
       "url": "https://www.cisa.gov/binding-operational-directive-18-01"
+    },
+    {
+      "name": "CISA/NSA Microsoft Exchange Server Security Best Practices (October 2025) - DANE for inbound SMTP; separate service required",
+      "url": "https://www.cisa.gov/resources-tools/resources/microsoft-exchange-server-security-best-practices"
     }
   ],
   "remediation": {

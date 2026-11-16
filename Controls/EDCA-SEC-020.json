@@ -17,8 +17,8 @@
       "url": "https://learn.microsoft.com/exchange/plan-and-deploy/post-installation-tasks/security-best-practices/owa-download-domains"
     },
     {
-      "name": "CISA AA21-062A: Mitigate Microsoft Exchange Server Vulnerabilities - configure OWA Download Domains to prevent NTLM relay attacks",
-      "url": "https://www.cisa.gov/news-events/cybersecurity-advisories/aa21-062a"
+      "name": "CISA/NSA Microsoft Exchange Server Security Best Practices (October 2025): Configure Download Domains",
+      "url": "https://www.cisa.gov/resources-tools/resources/microsoft-exchange-server-security-best-practices"
     },
     {
       "name": "Configure Exchange Server on-premises to use Hybrid Modern Authentication",

@@ -19,8 +19,8 @@
       "url": "https://aka.ms/HC-HSTS"
     },
     {
-      "name": "CISA AA21-062A: Mitigate Microsoft Exchange Server Vulnerabilities - enable HTTP Strict Transport Security (HSTS) on Exchange web virtual directories",
-      "url": "https://www.cisa.gov/news-events/cybersecurity-advisories/aa21-062a"
+      "name": "CISA/NSA Microsoft Exchange Server Security Best Practices (October 2025): Enable HSTS on Outlook on the Web and EAC",
+      "url": "https://www.cisa.gov/resources-tools/resources/microsoft-exchange-server-security-best-practices"
     },
     {
       "name": "ANSSI - Recommandations de sécurité relatives à TLS (v1.2, 2020)",

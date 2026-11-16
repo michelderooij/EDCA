@@ -27,6 +27,10 @@
     {
       "name": "CISA AA21-062A: Mitigate Microsoft Exchange Server Vulnerabilities - use Kerberos (Alternate Service Account) rather than NTLM for load-balanced Client Access authentication",
       "url": "https://www.cisa.gov/news-events/cybersecurity-advisories/aa21-062a"
+    },
+    {
+      "name": "CISA/NSA Microsoft Exchange Server Security Best Practices (October 2025) - use Kerberos instead of NTLM where supported",
+      "url": "https://www.cisa.gov/resources-tools/resources/microsoft-exchange-server-security-best-practices"
     }
   ],
   "remediation": {

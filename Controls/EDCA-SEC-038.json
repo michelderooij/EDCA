@@ -24,6 +24,10 @@
       "url": "https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259711"
     },
     {
+      "name": "DISA STIG EX19-ED-999999: Exchange must be a version supported by the vendor (V-288847, 2026-09-30 Edge Transport release)",
+      "url": "https://public.cyber.mil/stigs/downloads/"
+    },
+    {
       "name": "Exchange Server build numbers and release dates",
       "url": "https://learn.microsoft.com/exchange/new-features/build-numbers-and-release-dates"
     },

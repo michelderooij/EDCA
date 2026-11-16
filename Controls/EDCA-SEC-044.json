@@ -1,0 +1,33 @@
+{
+  "id": "EDCA-SEC-044",
+  "title": "Defender ASR blocks webshell creation on Exchange servers",
+  "description": "Microsoft Defender Antivirus Attack Surface Reduction rule 'Block Webshell creation for Servers' MUST be enabled in Block mode on Exchange servers. The rule ID is a8f5898e-1dc8-49a9-9878-85004b8a61e6. This built-in rule blocks webshell script creation on servers running Exchange.",
+  "verify": false,
+  "subject": "Server",
+  "category": "Platform Security",
+  "severity": "High",
+  "severityWeight": 7,
+  "frameworks": [
+    "Best Practice",
+    "CISA"
+  ],
+  "references": [
+    {
+      "name": "CISA/NSA Microsoft Exchange Server Security Best Practices (October 2025) - enable the Block Webshell creation for Servers ASR rule",
+      "url": "https://www.cisa.gov/resources-tools/resources/microsoft-exchange-server-security-best-practices"
+    },
+    {
+      "name": "Microsoft Defender Attack Surface Reduction rules reference",
+      "url": "https://learn.microsoft.com/defender-endpoint/attack-surface-reduction-rules-reference"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Deploy the ASR rule in Block mode through the organization's Microsoft Defender or Group Policy management process.",
+    "scriptTemplate": "$ruleId = 'a8f5898e-1dc8-49a9-9878-85004b8a61e6'\n$preferences = Get-MpPreference\n$index = [Array]::IndexOf($preferences.AttackSurfaceReductionRules_Ids, $ruleId)\nif ($index -lt 0) {\n    'ASR rule is not configured.'\n} else {\n    [pscustomobject]@{\n        RuleId = $ruleId\n        Action = $preferences.AttackSurfaceReductionRules_Actions[$index]\n    }\n}\n\n# Configure in Block mode after compatibility testing:\n# Add-MpPreference -AttackSurfaceReductionRules_Ids $ruleId -AttackSurfaceReductionRules_Actions Enabled"
+  },
+  "considerations": "The rule is provided by Microsoft Defender Antivirus and must be applied consistently to Exchange servers. Test with representative Exchange workloads and review audit events before enforcing Block mode; use centralized policy management where available.",
+  "roles": [
+    "Mailbox"
+  ]
+}
