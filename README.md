@@ -167,6 +167,8 @@ EDCA evaluates controls against the following compliance frameworks. Each contro
 | **ISM** 🇦🇺 | [Information Security Manual](https://www.cyber.gov.au/resources-business-and-government/essential-cyber-security/ism)<br>[ISM September 2026 changes](https://www.cyber.gov.au/sites/default/files/2026-11/ISM%20September%202026%20changes%20%28September%202026%29.pdf) | September 2026 | [cyber.gov.au](https://www.cyber.gov.au/) | Free to access (Australian Government) |
 | **NIS2** 🇪🇺🇳🇱 | [NIS2 Directive (EU) 2022/2555](https://eur-lex.europa.eu/eli/dir/2022/2555/oj)<br>[Commission Implementing Regulation (EU) 2024/2690](https://eur-lex.europa.eu/eli/reg_impl/2024/2690/oj)<br>[NCSC-NL TLS Guidelines 2025-05](https://www.ncsc.nl/transport-layer-security/ICT-beveiligingsrichtlijnen-voor-TLS) | December 2022<br>October 2024<br>2025-05; errata March 2026 | [eur-lex.europa.eu](https://eur-lex.europa.eu/eli/dir/2022/2555/oj)<br>[ncsc.nl](https://www.ncsc.nl/) | Open (EU law)<br>Free (Dutch Government) |
 
+Exchange benchmark references are checked against CIS Microsoft Exchange Server 2019 Benchmark v1.0.1. Administrator audit logging maps to recommendation 4.2; MAPI over HTTP and Extended Protection are not recommendations in this benchmark version and are not attributed to CIS.
+
 ISM coverage in EDCA is focused on machine-checkable Exchange and Windows hardening controls. Process-only and governance-only ISM controls that cannot be reliably validated from Exchange telemetry are intentionally documented as out of scope for automated evaluation.
 
 ## Control Language

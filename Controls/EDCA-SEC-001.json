@@ -19,10 +19,6 @@
     {
       "name": "MAPI over HTTP in Exchange Server",
       "url": "https://learn.microsoft.com/exchange/clients/mapi-over-http/mapi-over-http"
-    },
-    {
-      "name": "CIS 2.1.1 (L1): Ensure MAPI over HTTP is Enabled",
-      "url": "https://www.cisecurity.org/benchmark/microsoft_exchange_server"
     }
   ],
   "remediation": {
