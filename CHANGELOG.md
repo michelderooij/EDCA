@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.0.2.1
+
+- Fixed `EDCA-MON-017` collection to read resource names from Exchange diagnostic XML attributes.
+
 ## v1.0.2.0
 
 - Added scored Best Practice controls:

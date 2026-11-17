@@ -623,9 +623,18 @@ function Get-EDCAExchangeRuntimeEvidence {
 
         $meters = @()
         foreach ($meterNode in $meterNodes) {
-            $resourceNode = $meterNode.SelectSingleNode("./*[local-name()='Resource']")
+            $resourceAttribute = $meterNode.SelectSingleNode("@*[local-name()='Resource']")
+            $resource = ''
+            if ($null -ne $resourceAttribute) {
+                $resource = [string]$resourceAttribute.Value
+            }
+            else {
+                $resourceNode = $meterNode.SelectSingleNode("./*[local-name()='Resource']")
+                if ($null -ne $resourceNode) {
+                    $resource = [string]$resourceNode.InnerText
+                }
+            }
             $usageNode = $meterNode.SelectSingleNode("./*[local-name()='CurrentResourceUse']")
-            $resource = if ($null -ne $resourceNode) { [string]$resourceNode.InnerText } else { '' }
             $usage = if ($null -ne $usageNode) { [string]$usageNode.InnerText } else { '' }
             if ([string]::IsNullOrWhiteSpace($resource) -or
                 [string]::IsNullOrWhiteSpace($usage) -or
