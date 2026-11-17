@@ -9,7 +9,7 @@ Note: A blog on usage of the module is located at [https://eightwone.com/2026/04
 
 PowerShell-based tool that collects Exchange on-premises deployment data, evaluates it against best practices and compliance controls, and produces an interactive HTML report ([sample](https://michelderooij.github.io/EDCA/report_sample.html)). Supports Exchange 2016, Exchange 2019, and Exchange SE.
 
-Current module release: **v1.0.1.2** (see [CHANGELOG.md](CHANGELOG.md)).
+Current module release: **v1.0.2.0** (see [CHANGELOG.md](CHANGELOG.md)).
 
 ## Key Features
 
@@ -155,6 +155,10 @@ Report and remediation files are written to `Output`:
 ## Frameworks
 
 EDCA evaluates controls against the following compliance frameworks. Each control in `Controls/` is tagged with one or more framework identifiers; the HTML report displays a separate score for each.
+
+Scores are weighted by severity for verified controls. A Pass contributes its full weight; Fail and Warning contribute no passing weight. Unknown and Skipped findings are excluded from the score, but remain visible in the report. When no assessable weight is available, the score is `null` in analysis data and **N/A** in the report. Earlier analysis files retain their original score calculation, so scores across this change may not be directly comparable.
+
+Best Practice checks include exact wildcard accepted domains, AMSI request-body scanning, conflicting setting overrides, maintenance state, Exchange IIS certificate bindings and application-pool recycling, and live transport back pressure. Detected maintenance is reported as Unknown because it can be intentional. Checks also report Unknown when required telemetry is unavailable, including for collection files created before these checks were added. The IIS certificate check does not validate trust chains, revocation, or hostname coverage.
 
 | Framework | Official Reference(s) | Version / Date | Official URL | License |
 |---|---|---|---|---|

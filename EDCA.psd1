@@ -1,6 +1,6 @@
 @{
     RootModule        = 'EDCA.psm1'
-    ModuleVersion     = '1.0.1.2'
+    ModuleVersion     = '1.0.2.0'
     GUID              = '3bc65f39-03b1-4d4d-a3af-b88f21dac09b'
     Author            = 'Michel de Rooij'
     CompanyName       = 'EighTwOne'
@@ -13,7 +13,7 @@
     AliasesToExport   = @()
     PrivateData       = @{
         PSData = @{
-            Tags         = @('Exchange', 'Compliance', 'Assessment', 'Security', 'Report')
+            Tags         = @('Exchange', 'Compliance', 'Assessment', 'Security', 'Report', 'ANSSI','BSI','CIS','CISA','DISA','DPIA','ENISA','NIS2','ISM')
             ProjectUri   = 'https://github.com/michelderooij/EDCA'
             ReleaseNotes = 'See CHANGELOG.md'
         }

@@ -1,0 +1,33 @@
+{
+  "id": "EDCA-MON-017",
+  "title": "Exchange transport has no active back-pressure meters",
+  "description": "Live EdgeTransport ResourceThrottling diagnostics SHOULD NOT report resource meters in a non-Low state, except for SystemMemory, which does not block mail flow. Missing, failed, or malformed diagnostic data is Unknown.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Monitoring",
+  "severity": "High",
+  "severityWeight": 7,
+  "frameworks": [
+    "Best Practice"
+  ],
+  "references": [
+    {
+      "name": "Back pressure and resource monitoring in Exchange Server",
+      "url": "https://learn.microsoft.com/en-us/exchange/mail-flow/back-pressure"
+    },
+    {
+      "name": "Exchange Server Health Checker",
+      "url": "https://microsoft.github.io/CSS-Exchange/Diagnostics/HealthChecker/"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Review the active resource meters and corresponding Exchange transport, disk, or memory health before taking action. Do not change back-pressure thresholds solely to clear this finding.",
+    "scriptTemplate": "# Read-only diagnostics\nGet-ExchangeDiagnosticInfo -Server $env:COMPUTERNAME -Process EdgeTransport -Component ResourceThrottling"
+  },
+  "considerations": "This live diagnostic check is distinct from EDCA-MON-009, which evaluates EdgeTransport.exe.config. Medium or High non-SystemMemory meters are Fail; SystemMemory is excluded. Empty, unexpected, malformed, or inaccessible diagnostic data is Unknown.",
+  "roles": [
+    "Mailbox",
+    "Edge"
+  ]
+}

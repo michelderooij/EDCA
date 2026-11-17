@@ -77,6 +77,9 @@ Framework cells contain comma-separated links with extracted control/article IDs
 | EDCA-MON-012 | Exchange diagnostic event log levels are set to Lowest | — | — | — | — | — | [EX19-MB-000032](https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259653), [V-259653](https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259653), [EX19-ED-000032](https://www.stigviewer.com/stigs/microsoft_exchange_2019_edge_server/2024-12-06/finding/V-259581), [V-259581](https://www.stigviewer.com/stigs/microsoft_exchange_2019_edge_server/2024-12-06/finding/V-259581), [EX16-MB-000050](https://www.stigviewer.com/stigs/microsoft_exchange_2016_mailbox_server/2023-12-18/finding/V-228358), [V-228358](https://www.stigviewer.com/stigs/microsoft_exchange_2016_mailbox_server/2023-12-18/finding/V-228358) | — | — |
 | EDCA-MON-013 | Windows Advanced Audit Policy is configured | — | ✓ | [SYS.1.1.A10](https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/07_SYS_IT_Systeme/SYS_1_1_Allgemeiner_Server_Edition_2023.pdf?__blob=publicationFile), [APP.2.2.A7](https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/06_APP_Anwendungen/APP_2_2_Active_Directory_Domain_Services_Edition_2023.pdf?__blob=publicationFile) | — | — | — | [ISM-0582](https://www.cyber.gov.au/resources-business-and-government/essential-cyber-security/ism/cyber-security-guidelines/guidelines-for-system-hardening) | — |
 | EDCA-MON-014 | PowerShell Module Logging is enabled | — | ✓ | ✓ | ✓ | — | — | [ISM-0582](https://www.cyber.gov.au/resources-business-and-government/essential-cyber-security/ism/cyber-security-guidelines/guidelines-for-system-hardening) | — |
+| EDCA-MON-015 | Exchange IIS HTTPS bindings use in-date certificates | ✓ | — | — | — | — | — | — | — |
+| EDCA-MON-016 | IIS application pools have no periodic recycling triggers | ✓ | — | — | — | — | — | — | — |
+| EDCA-MON-017 | Exchange transport has no active back-pressure meters | ✓ | — | — | — | — | — | — | — |
 | EDCA-PERF-001 | CTS processor affinity baseline | ✓ | — | — | — | — | — | — | — |
 | EDCA-PERF-002 | High Performance power plan is active | ✓ | — | — | — | — | — | — | — |
 | EDCA-PERF-003 | Hyper-Threading/SMT not enabled | ✓ | — | — | — | — | — | — | — |
@@ -109,6 +112,7 @@ Framework cells contain comma-separated links with extracted control/article IDs
 | EDCA-RES-013 | DAG is not stretched beyond two Active Directory sites | ✓ | — | — | — | — | — | — | — |
 | EDCA-RES-014 | DAG member distribution is symmetrical across sites | ✓ | — | — | — | — | — | — | — |
 | EDCA-RES-015 | DAG witness server configuration is present | ✓ | — | — | — | — | — | — | — |
+| EDCA-RES-016 | Exchange server is not in maintenance state | ✓ | — | — | — | — | — | — | — |
 | EDCA-SEC-001 | MAPI over HTTP is enabled | ✓ | — | — | — | ✓ | — | — | — |
 | EDCA-SEC-002 | .NET Framework version compatible with Exchange | ✓ | — | — | — | — | — | — | — |
 | EDCA-SEC-003 | AD Domain functional level compatible with Exchange | ✓ | — | — | — | — | — | — | — |
@@ -154,6 +158,9 @@ Framework cells contain comma-separated links with extracted control/article IDs
 | EDCA-SEC-043 | SMB packet signing is required on server and client | — | ✓ | ✓ | ✓ | — | — | — | [Article 21(2)(h)](https://eur-lex.europa.eu/eli/dir/2022/2555/oj) |
 | EDCA-SEC-044 | Defender ASR blocks webshell creation on Exchange servers | ✓ | — | — | — | ✓ | — | — | — |
 | EDCA-SEC-045 | Kernel-mode code loading is restricted | ✓ | — | — | — | — | — | [ISM-2127](https://www.cyber.gov.au/resources-business-and-government/essential-cyber-security/ism/cyber-security-guidelines/guidelines-for-system-hardening), [ISM-2128](https://www.cyber.gov.au/resources-business-and-government/essential-cyber-security/ism/cyber-security-guidelines/guidelines-for-system-hardening) | — |
+| EDCA-SEC-046 | Wildcard accepted domain is not configured | ✓ | — | — | — | — | — | — | — |
+| EDCA-SEC-047 | AMSI request-body scanning is enabled | ✓ | — | — | — | — | — | — | — |
+| EDCA-SEC-048 | Exchange setting overrides do not conflict | ✓ | — | — | — | — | — | — | — |
 | EDCA-TLS-001 | Receive connector internal and external relay patterns are separated | ✓ | — | — | — | — | [EX19-MB-000135](https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259687), [V-259687](https://www.stigviewer.com/stigs/microsoft_exchange_2019_mailbox_server/2025-05-14/finding/V-259687) | — | — |
 | EDCA-TLS-002 | Transport retry configuration baseline | ✓ | — | — | — | — | — | — | — |
 | EDCA-TLS-003 | Hybrid send connector TLS integrity | ✓ | — | — | — | — | — | — | [Article 21(2)(h)](https://eur-lex.europa.eu/eli/dir/2022/2555/oj) |

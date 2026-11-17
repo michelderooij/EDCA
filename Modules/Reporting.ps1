@@ -32,6 +32,7 @@ function Get-EDCARagLabel {
         'Pass' { return '<span class="rag-icon rag-pass" title="Passed">&#10004;</span>' }
         'Fail' { return '<span class="rag-icon rag-fail" title="Risk">&#10006;</span>' }
         'Skipped' { return '<span class="rag-icon rag-skip" title="Not applicable">&#8856;</span>' }
+        'Unknown' { return '<span class="rag-icon rag-warn" title="Unknown">&#9888;</span>' }
         default { return '<span class="rag-icon rag-warn" title="Warning">&#9888;</span>' }
     }
 }
@@ -59,6 +60,10 @@ function Get-EDCAAggregateStatus {
 
     if ($nonSkipped -contains 'Unknown') {
         return 'Unknown'
+    }
+
+    if ($nonSkipped -contains 'Warning') {
+        return 'Warning'
     }
 
     return 'Pass'
@@ -195,21 +200,24 @@ function New-EDCAHtmlReport {
     foreach ($score in $AnalysisData.Scores) {
         $failCount = [int]$score.FailedControls
         $unknownCount = [int]$score.UnknownControls
+        $warningCount = if ($score.PSObject.Properties.Name -contains 'WarningControls') { [int]$score.WarningControls } else { 0 }
         $skipCount = [int]$score.SkippedControls
         $totalCount = [int]$score.TotalControls
-        $passCount = [math]::Max(0, $totalCount - $failCount - $unknownCount)
+        $passCount = [math]::Max(0, $totalCount - $failCount - $unknownCount - $warningCount)
         $displayLabel = if ($score.Framework -eq 'All') { 'Total' } else { $score.Framework }
+        $scoreDisplay = if ($null -eq $score.Score) { 'N/A' } else { [string]$score.Score }
 
         $null = $scoreCards.AppendLine((
-                ('<div class="score-card" data-pass="{0}" data-fail="{1}" data-warn="{2}" data-skip="{5}" data-label="{3}" data-score="{4}">' +
+                ('<div class="score-card" data-pass="{0}" data-fail="{1}" data-warn="{2}" data-skip="{5}" data-label="{3}" data-score="{4}" data-unknown="{7}">' +
                 '<canvas class="donut-canvas" width="120" height="120"></canvas>' +
                 '<p class="card-label">{6}</p>' +
                 '</div>') -f
-                $passCount, $failCount, $unknownCount,
+                $passCount, $failCount, $warningCount,
                 $score.Framework,
-                $score.Score,
+                $scoreDisplay,
                 $skipCount,
-                $displayLabel
+                $displayLabel,
+                $unknownCount
             ))
     }
 
@@ -238,11 +246,12 @@ function New-EDCAHtmlReport {
                 foreach ($sc in @($entry.Scores)) {
                     $fk = [string]$sc.Framework
                     $tFail = [int]$sc.FailedControls
-                    $tWarn = [int]$sc.UnknownControls
+                    $tUnknown = [int]$sc.UnknownControls
+                    $tWarning = if ($sc.PSObject.Properties.Name -contains 'WarningControls') { [int]$sc.WarningControls } else { 0 }
                     $tSkip = [int]$sc.SkippedControls
                     $tTotal = [int]$sc.TotalControls
-                    $tPass = [math]::Max(0, $tTotal - $tFail - $tWarn - $tSkip)
-                    $parts += ',"' + $fk + '":{"p":' + $tPass + ',"w":' + $tWarn + ',"f":' + $tFail + ',"s":' + $tSkip + '}'
+                    $tPass = [math]::Max(0, $tTotal - $tFail - $tUnknown - $tWarning)
+                    $parts += ',"' + $fk + '":{"p":' + $tPass + ',"u":' + $tUnknown + ',"w":' + $tWarning + ',"f":' + $tFail + ',"s":' + $tSkip + '}'
                 }
                 '{' + $parts + '}'
             })
@@ -704,6 +713,7 @@ function New-EDCAHtmlReport {
         $noticesSection
         <section>
             <h2>Framework Scoreboard</h2>
+            <p class="score-explanation">Scores are severity-weighted: Pass earns credit, while Fail and Warning remain in the denominator without credit. Unknown and Skipped findings are excluded from weighted scores. The control total includes Unknown and Warning findings; Skipped findings are counted separately. N/A means there is no assessable control weight. Older analysis scores may use earlier scoring rules, including Unknown findings in the denominator.</p>
             <div class="score-grid">
                 $($scoreCards.ToString())
                 $trendCardHtml
@@ -724,7 +734,8 @@ function New-EDCAHtmlReport {
                         <hr class="ms-sep">
                         <label class="ms-item"><input type="checkbox" value="Pass"> &#10004; Passed</label>
                         <label class="ms-item"><input type="checkbox" value="Fail"> &#10006; Risk</label>
-                        <label class="ms-item"><input type="checkbox" value="Unknown"> &#9888; Warning</label>
+                        <label class="ms-item"><input type="checkbox" value="Unknown"> &#9888; Unknown</label>
+                        <label class="ms-item"><input type="checkbox" value="Warning"> &#9888; Warning</label>
                         <label class="ms-item"><input type="checkbox" value="Skipped"> &#8856; Skipped</label>
                     </div>
                 </div>
@@ -873,15 +884,17 @@ function New-EDCAHtmlReport {
                 var pass  = parseInt(card.getAttribute('data-pass'),  10) || 0;
                 var fail  = parseInt(card.getAttribute('data-fail'),  10) || 0;
                 var warn  = parseInt(card.getAttribute('data-warn'),  10) || 0;
+                var unknown = parseInt(card.getAttribute('data-unknown'), 10) || 0;
                 var skip  = parseInt(card.getAttribute('data-skip'),  10) || 0;
                 var label = card.getAttribute('data-label') || '';
                 var score = card.getAttribute('data-score') || '0';
-                var total = pass + fail + warn + skip || 1;
+                var scoreText = score === 'N/A' ? score : score + '%';
+                var total = pass + fail + warn + unknown + skip || 1;
                 var ctx   = canvas.getContext('2d');
                 var cx = 60, cy = 60, r = 52, hole = 34;
                 var segments = [
                     { v: pass, c: '#16a34a' },
-                    { v: warn, c: '#d97706' },
+                    { v: warn + unknown, c: '#d97706' },
                     { v: fail, c: '#dc2626' },
                     { v: skip, c: '#94a3b8' }
                 ];
@@ -908,12 +921,12 @@ function New-EDCAHtmlReport {
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
                 ctx.font = 'bold 15px Segoe UI, Arial, sans-serif';
-                ctx.fillText(score + '%', cx, cy);
+                ctx.fillText(scoreText, cx, cy);
                 /* hover tooltip */
-                (function (c2, p2, w2, f2, s2, lbl2) {
+                (function (c2, p2, w2, u2, f2, s2, lbl2) {
                     var tip = document.createElement('div');
                     tip.style.cssText = 'display:none;position:fixed;background:#0f172a;color:#f8fafc;font-size:12px;padding:6px 10px;border-radius:8px;pointer-events:none;white-space:nowrap;z-index:9999;line-height:1.6;';
-                    tip.innerHTML = '<strong>' + lbl2 + '</strong><br>&#10004;&nbsp;Pass:&nbsp;' + p2 + '<br>&#9888;&nbsp;Warn:&nbsp;' + w2 + '<br>&#10006;&nbsp;Fail:&nbsp;' + f2 + '<br>&#8856;&nbsp;Skip:&nbsp;' + s2;
+                    tip.innerHTML = '<strong>' + lbl2 + '</strong><br>&#10004;&nbsp;Pass:&nbsp;' + p2 + '<br>&#9888;&nbsp;Warning (scored):&nbsp;' + w2 + '<br>&#9888;&nbsp;Unknown (not scored):&nbsp;' + u2 + '<br>&#10006;&nbsp;Fail:&nbsp;' + f2 + '<br>&#8856;&nbsp;Skip:&nbsp;' + s2;
                     document.body.appendChild(tip);
                     c2.parentElement.addEventListener('mouseenter', function () { tip.style.display = 'block'; });
                     c2.parentElement.addEventListener('mousemove',  function (e) {
@@ -921,7 +934,7 @@ function New-EDCAHtmlReport {
                         tip.style.top  = (e.clientY - 36) + 'px';
                     });
                     c2.parentElement.addEventListener('mouseleave', function () { tip.style.display = 'none'; });
-                }(canvas, pass, warn, fail, skip, label));
+                }(canvas, pass, warn, unknown, fail, skip, label));
             }
         })();
 
@@ -942,8 +955,8 @@ function New-EDCAHtmlReport {
             var chartW = W - padL - padR;
             var chartH = H - padT - padB;
             var ctx    = canvas.getContext('2d');
-            var colors = { p: '#16a34a', w: '#d97706', f: '#dc2626', s: '#94a3b8' };
-            var order  = ['s', 'f', 'w', 'p'];
+            var colors = { p: '#16a34a', w: '#d97706', u: '#d97706', f: '#dc2626', s: '#94a3b8' };
+            var order  = ['s', 'f', 'w', 'u', 'p'];
             var currentEntries = [];
             var n = 0, slotW = 0;
 
@@ -970,7 +983,7 @@ function New-EDCAHtmlReport {
                     var e  = entries[i];
                     var sc = e[key] || e['All'];
                     if (!sc) { continue; }
-                    currentEntries.push({ d: e.d, p: sc.p || 0, w: sc.w || 0, f: sc.f || 0, s: sc.s || 0 });
+                    currentEntries.push({ d: e.d, p: sc.p || 0, w: sc.w || 0, u: sc.u || 0, f: sc.f || 0, s: sc.s || 0 });
                 }
                 n = currentEntries.length;
                 if (n === 0) { ctx.clearRect(0, 0, W, H); return; }
@@ -979,7 +992,7 @@ function New-EDCAHtmlReport {
                 var maxTotal = 0;
                 for (var j = 0; j < n; j++) {
                     var ce = currentEntries[j];
-                    var t  = (ce.p || 0) + (ce.w || 0) + (ce.f || 0) + (ce.s || 0);
+                    var t  = (ce.p || 0) + (ce.w || 0) + (ce.u || 0) + (ce.f || 0) + (ce.s || 0);
                     if (t > maxTotal) { maxTotal = t; }
                 }
                 var yMax = Math.ceil(maxTotal / 10) * 10 || 10;
@@ -1040,7 +1053,8 @@ function New-EDCAHtmlReport {
                 var ce = currentEntries[idx];
                 tip.innerHTML = '<strong>' + (ce.d || '') + '</strong><br>' +
                     '&#10004;&nbsp;Pass:&nbsp;' + (ce.p || 0) + '<br>' +
-                    '&#9888;&nbsp;Unknown:&nbsp;' + (ce.w || 0) + '<br>' +
+                    '&#9888;&nbsp;Warning (scored):&nbsp;' + (ce.w || 0) + '<br>' +
+                    '&#9888;&nbsp;Unknown:&nbsp;' + (ce.u || 0) + '<br>' +
                     '&#10006;&nbsp;Fail:&nbsp;' + (ce.f || 0) + '<br>' +
                     '&#8856;&nbsp;Skip:&nbsp;' + (ce.s || 0);
                 tip.style.display = 'block';
@@ -1107,7 +1121,8 @@ function New-EDCAHtmlReport {
                     c.getContext('2d').textAlign = 'center';
                     c.getContext('2d').textBaseline = 'middle';
                     c.getContext('2d').font = 'bold 15px Segoe UI, Arial, sans-serif';
-                    c.getContext('2d').fillText((card.getAttribute('data-score') || '0') + '%', cx, cy);
+                    var score = card.getAttribute('data-score') || '0';
+                    c.getContext('2d').fillText(score === 'N/A' ? score : score + '%', cx, cy);
                 }
             }
 
@@ -1208,6 +1223,7 @@ function New-EDCAHtmlReport {
                 if (nonSkipped.length === 0) return 'Skipped';
                 if (nonSkipped.indexOf('Fail') >= 0) return 'Fail';
                 if (nonSkipped.indexOf('Unknown') >= 0) return 'Unknown';
+                if (nonSkipped.indexOf('Warning') >= 0) return 'Warning';
                 return 'Pass';
             }
             function getStatusClass(s) {
@@ -1220,6 +1236,7 @@ function New-EDCAHtmlReport {
                 if (s === 'Pass')    return '<span class="rag-icon rag-pass" title="Passed">&#10004;</span>';
                 if (s === 'Fail')    return '<span class="rag-icon rag-fail" title="Risk">&#10006;</span>';
                 if (s === 'Skipped') return '<span class="rag-icon rag-skip" title="Not applicable">&#8856;</span>';
+                if (s === 'Unknown') return '<span class="rag-icon rag-warn" title="Unknown">&#9888;</span>';
                 return '<span class="rag-icon rag-warn" title="Warning">&#9888;</span>';
             }
             function applyFilters() {

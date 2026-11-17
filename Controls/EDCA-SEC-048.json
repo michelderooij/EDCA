@@ -1,0 +1,32 @@
+{
+  "id": "EDCA-SEC-048",
+  "title": "Exchange setting overrides do not conflict",
+  "description": "Active Exchange setting overrides MUST NOT assign different values to the same component, section, and parameter where their server and version scopes overlap. Valid nonoverlapping overrides and identical assignments are not conflicts.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Platform Security",
+  "severity": "Medium",
+  "severityWeight": 6,
+  "frameworks": [
+    "Best Practice"
+  ],
+  "references": [
+    {
+      "name": "CSS HealthChecker Setting Overrides guidance",
+      "url": "https://microsoft.github.io/CSS-Exchange/Diagnostics/HealthChecker/SettingOverridesCheck/"
+    },
+    {
+      "name": "New-SettingOverride",
+      "url": "https://learn.microsoft.com/en-us/powershell/module/exchangepowershell/new-settingoverride"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Review conflicting override definitions, their purpose, status, version bounds, and server scope with the Exchange service owner or Microsoft Support. Change or remove an override only after validating the intended effective configuration.",
+    "scriptTemplate": "Get-SettingOverride | Format-List Name, ComponentName, SectionName, Parameters, Server, MinVersion, MaxVersion, Status"
+  },
+  "considerations": "EDCA uses the server-targeted Exchange diagnostic to establish effective status. Active Directory override status alone is not reliable for the server under assessment. EDCA reports Unknown when effective status, scope, version applicability, parameter parsing, or precedence is indeterminate. Parameter values are hashed in collection data and are not written to evidence.",
+  "roles": [
+    "Mailbox"
+  ]
+}

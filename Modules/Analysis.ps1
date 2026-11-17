@@ -217,6 +217,597 @@ function Get-EDCAOsBuildInfo {
     }
 }
 
+function Get-EDCAExchangeBuildVersion {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [pscustomobject]$Server
+    )
+
+    $buildNumber = ''
+    if (($Server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $Server.Exchange -and
+        ($Server.Exchange.PSObject.Properties.Name -contains 'BuildNumber')) {
+        $buildNumber = [string]$Server.Exchange.BuildNumber
+    }
+
+    $buildVersion = $null
+    if ([string]::IsNullOrWhiteSpace($buildNumber) -or -not [System.Version]::TryParse($buildNumber, [ref]$buildVersion)) {
+        return $null
+    }
+    return $buildVersion
+}
+
+function Test-EDCAServerScopeMatch {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$OverrideServer,
+        [Parameter(Mandatory = $true)]
+        [string]$ServerName
+    )
+
+    $normalizedOverride = $OverrideServer.Trim().TrimEnd('.').ToLowerInvariant()
+    $normalizedServer = $ServerName.Trim().TrimEnd('.').ToLowerInvariant()
+    if ([string]::IsNullOrWhiteSpace($normalizedOverride) -or [string]::IsNullOrWhiteSpace($normalizedServer)) {
+        return $false
+    }
+
+    if ([string]::Equals($normalizedOverride, $normalizedServer, [System.StringComparison]::OrdinalIgnoreCase)) {
+        return $true
+    }
+    return [string]::Equals(($normalizedOverride -split '\.')[0], ($normalizedServer -split '\.')[0], [System.StringComparison]::OrdinalIgnoreCase)
+}
+
+function Get-EDCASettingOverrideApplicability {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [pscustomobject]$Override,
+        [Parameter(Mandatory = $true)]
+        [string]$ServerName,
+        [AllowNull()]
+        [System.Version]$BuildVersion
+    )
+
+    if (-not ($Override.PSObject.Properties.Name -contains 'IsComplete') -or -not [bool]$Override.IsComplete) {
+        return [pscustomobject]@{ IsKnown = $false; Applies = $false; IsActive = $false; Reason = 'Override scope or parameters are incomplete.' }
+    }
+    if ($null -eq $BuildVersion) {
+        return [pscustomobject]@{ IsKnown = $false; Applies = $false; IsActive = $false; Reason = 'Exchange build is unavailable.' }
+    }
+
+    $minimumVersion = $null
+    $maximumVersion = $null
+    if (($Override.PSObject.Properties.Name -contains 'MinVersion') -and -not [string]::IsNullOrWhiteSpace([string]$Override.MinVersion)) {
+        if (-not [System.Version]::TryParse([string]$Override.MinVersion, [ref]$minimumVersion)) {
+            return [pscustomobject]@{ IsKnown = $false; Applies = $false; IsActive = $false; Reason = 'Override minimum version is malformed.' }
+        }
+    }
+    if (($Override.PSObject.Properties.Name -contains 'MaxVersion') -and -not [string]::IsNullOrWhiteSpace([string]$Override.MaxVersion)) {
+        if (-not [System.Version]::TryParse([string]$Override.MaxVersion, [ref]$maximumVersion)) {
+            return [pscustomobject]@{ IsKnown = $false; Applies = $false; IsActive = $false; Reason = 'Override maximum version is malformed.' }
+        }
+    }
+    if ($null -ne $minimumVersion -and $null -ne $maximumVersion -and $minimumVersion -gt $maximumVersion) {
+        return [pscustomobject]@{ IsKnown = $false; Applies = $false; IsActive = $false; Reason = 'Override version bounds are inverted.' }
+    }
+
+    if (($Override.PSObject.Properties.Name -contains 'Server') -and $null -ne $Override.Server) {
+        $scopes = @($Override.Server | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
+        if ($scopes.Count -gt 0) {
+            $matchingScopes = @($scopes | Where-Object { Test-EDCAServerScopeMatch -OverrideServer ([string]$_) -ServerName $ServerName })
+            if ($matchingScopes.Count -eq 0) {
+                return [pscustomobject]@{ IsKnown = $true; Applies = $false; IsActive = $false; Reason = '' }
+            }
+        }
+    }
+    if (($null -ne $minimumVersion -and $BuildVersion -lt $minimumVersion) -or
+        ($null -ne $maximumVersion -and $BuildVersion -gt $maximumVersion)) {
+        return [pscustomobject]@{ IsKnown = $true; Applies = $false; IsActive = $false; Reason = '' }
+    }
+
+    if (-not ($Override.PSObject.Properties.Name -contains 'EffectiveStatusAvailable') -or
+        -not [bool]$Override.EffectiveStatusAvailable -or
+        -not ($Override.PSObject.Properties.Name -contains 'StatusEvidence') -or
+        $Override.StatusEvidence -ne 'ServerDiagnostic' -or
+        -not ($Override.PSObject.Properties.Name -contains 'StatusSourceServer') -or
+        -not (Test-EDCAServerScopeMatch -OverrideServer ([string]$Override.StatusSourceServer) -ServerName $ServerName)) {
+        return [pscustomobject]@{ IsKnown = $false; Applies = $true; IsActive = $false; Reason = 'Effective status is unavailable for this server.' }
+    }
+
+    $status = [string]$Override.Status
+    if ([string]::Equals($status, 'Accepted', [System.StringComparison]::OrdinalIgnoreCase)) {
+        return [pscustomobject]@{ IsKnown = $true; Applies = $true; IsActive = $true; Reason = '' }
+    }
+    return [pscustomobject]@{ IsKnown = $false; Applies = $true; IsActive = $false; Reason = 'Override effective status is missing or unrecognized.' }
+}
+
+function Get-EDCASettingOverrideInventory {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [pscustomobject]$Server
+    )
+
+    if (-not ($Server.PSObject.Properties.Name -contains 'Exchange') -or $null -eq $Server.Exchange -or
+        -not ($Server.Exchange.PSObject.Properties.Name -contains 'SettingOverrides') -or $null -eq $Server.Exchange.SettingOverrides) {
+        return [pscustomobject]@{ IsKnown = $false; Details = @(); Reason = 'Setting override telemetry is unavailable.' }
+    }
+
+    $inventory = $Server.Exchange.SettingOverrides
+    if (-not ($inventory.PSObject.Properties.Name -contains 'CollectionSucceeded') -or -not [bool]$inventory.CollectionSucceeded) {
+        return [pscustomobject]@{ IsKnown = $false; Details = @(); Reason = 'Setting override collection did not succeed.' }
+    }
+    if (-not ($inventory.PSObject.Properties.Name -contains 'DiagnosticCollectionSucceeded') -or
+        $inventory.DiagnosticCollectionSucceeded -ne $true) {
+        return [pscustomobject]@{ IsKnown = $false; Details = @(); Reason = 'Server-specific setting override diagnostics did not succeed.' }
+    }
+    if (-not ($Server.PSObject.Properties.Name -contains 'Server') -or [string]::IsNullOrWhiteSpace([string]$Server.Server) -or
+        -not ($inventory.PSObject.Properties.Name -contains 'DiagnosticSourceServer') -or
+        [string]::IsNullOrWhiteSpace([string]$inventory.DiagnosticSourceServer) -or
+        -not (Test-EDCAServerScopeMatch -OverrideServer ([string]$inventory.DiagnosticSourceServer) -ServerName ([string]$Server.Server))) {
+        return [pscustomobject]@{ IsKnown = $false; Details = @(); Reason = 'Setting override diagnostics are not verified for this server.' }
+    }
+    if (-not ($inventory.PSObject.Properties.Name -contains 'DiagnosticDetails') -or $null -eq $inventory.DiagnosticDetails) {
+        return [pscustomobject]@{ IsKnown = $false; Details = @(); Reason = 'Server-specific setting override diagnostic details are unavailable.' }
+    }
+
+    $details = @($inventory.DiagnosticDetails)
+    $count = $null
+    if (($inventory.PSObject.Properties.Name -contains 'DiagnosticCount') -and $null -ne $inventory.DiagnosticCount) {
+        try { $count = [int]$inventory.DiagnosticCount } catch { $count = $null }
+    }
+    if ($null -eq $count -or $count -ne $details.Count) {
+        return [pscustomobject]@{ IsKnown = $false; Details = $details; Reason = 'Setting override diagnostic count does not match the collected details.' }
+    }
+    $directoryCount = $null
+    if (($inventory.PSObject.Properties.Name -contains 'Count') -and $null -ne $inventory.Count) {
+        try { $directoryCount = [int]$inventory.Count } catch { $directoryCount = $null }
+    }
+    if ($null -eq $directoryCount -or $directoryCount -lt 0) {
+        return [pscustomobject]@{ IsKnown = $false; Details = $details; Reason = 'Directory override count is unavailable or malformed.' }
+    }
+    if ($details.Count -eq 0 -and $directoryCount -gt 0) {
+        return [pscustomobject]@{ IsKnown = $false; Details = $details; Reason = 'Server diagnostics are empty while directory overrides exist.' }
+    }
+    return [pscustomobject]@{ IsKnown = $true; Details = $details; Reason = '' }
+}
+
+function Test-EDCAAcceptedDomainWildcard {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [pscustomobject]$CollectionData
+    )
+
+    $sources = @()
+    $serverEntries = if (($CollectionData.PSObject.Properties.Name -contains 'Servers') -and $null -ne $CollectionData.Servers) { @($CollectionData.Servers) } else { @() }
+    $knownExchangeServers = @($serverEntries | Where-Object {
+            -not ($_.PSObject.Properties.Name -contains 'CollectionError') -and
+            ($_.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $_.Exchange -and
+            ($_.Exchange.PSObject.Properties.Name -contains 'IsExchangeServer') -and [bool]$_.Exchange.IsExchangeServer
+        })
+    $mailboxServers = @($knownExchangeServers | Where-Object {
+            -not (($_.Exchange.PSObject.Properties.Name -contains 'IsEdge') -and [bool]$_.Exchange.IsEdge)
+        })
+    if (@($knownExchangeServers).Count -gt 0 -and @($mailboxServers).Count -eq 0) {
+        return [pscustomobject]@{ Status = 'Skipped'; Evidence = 'No Exchange Mailbox server is present; accepted-domain organization checks are not applicable to Edge-only deployments.' }
+    }
+    if (@($knownExchangeServers).Count -eq 0 -and @($serverEntries).Count -gt 0 -and
+        @($serverEntries | Where-Object { $_.PSObject.Properties.Name -contains 'CollectionError' }).Count -eq 0) {
+        return [pscustomobject]@{ Status = 'Skipped'; Evidence = 'No Exchange server was detected; accepted-domain organization checks are not applicable.' }
+    }
+
+    $organization = if (($CollectionData.PSObject.Properties.Name -contains 'Organization') -and $null -ne $CollectionData.Organization) { $CollectionData.Organization } else { $null }
+    if ($null -ne $organization -and
+        ($organization.PSObject.Properties.Name -contains 'AcceptedDomainsCollectionSucceeded') -and
+        [bool]$organization.AcceptedDomainsCollectionSucceeded) {
+        if (-not ($organization.PSObject.Properties.Name -contains 'AcceptedDomainDetails') -or $null -eq $organization.AcceptedDomainDetails) {
+            return [pscustomobject]@{ Status = 'Unknown'; Evidence = 'Accepted-domain collection succeeded but normalized domain/type details are missing.' }
+        }
+        $organizationDomainDetails = @($organization.AcceptedDomainDetails)
+        $organizationRecordCount = $null
+        if (($organization.PSObject.Properties.Name -contains 'AcceptedDomainRecordCount') -and $null -ne $organization.AcceptedDomainRecordCount) {
+            try { $organizationRecordCount = [int]$organization.AcceptedDomainRecordCount } catch { $organizationRecordCount = $null }
+        }
+        if ($null -eq $organizationRecordCount -or $organizationRecordCount -ne $organizationDomainDetails.Count) {
+            return [pscustomobject]@{ Status = 'Unknown'; Evidence = 'Accepted-domain query result count does not match the normalized records.' }
+        }
+        $sources += ,$organizationDomainDetails
+    }
+    else {
+        foreach ($server in $serverEntries) {
+            if (($server.PSObject.Properties.Name -contains 'CollectionError') -or
+                -not ($server.PSObject.Properties.Name -contains 'Exchange') -or $null -eq $server.Exchange -or
+                -not ($server.Exchange.PSObject.Properties.Name -contains 'AcceptedDomainsCollectionSucceeded') -or
+                -not [bool]$server.Exchange.AcceptedDomainsCollectionSucceeded) {
+                continue
+            }
+            if (-not ($server.Exchange.PSObject.Properties.Name -contains 'AcceptedDomainDetails') -or $null -eq $server.Exchange.AcceptedDomainDetails) {
+                return [pscustomobject]@{ Status = 'Unknown'; Evidence = 'A server accepted-domain query succeeded but normalized domain/type details are missing.' }
+            }
+            $serverDomainDetails = @($server.Exchange.AcceptedDomainDetails)
+            $serverRecordCount = $null
+            if (($server.Exchange.PSObject.Properties.Name -contains 'AcceptedDomainRecordCount') -and $null -ne $server.Exchange.AcceptedDomainRecordCount) {
+                try { $serverRecordCount = [int]$server.Exchange.AcceptedDomainRecordCount } catch { $serverRecordCount = $null }
+            }
+            if ($null -eq $serverRecordCount -or $serverRecordCount -ne $serverDomainDetails.Count) {
+                return [pscustomobject]@{ Status = 'Unknown'; Evidence = 'A server accepted-domain query result count does not match normalized records.' }
+            }
+            $sources += ,$serverDomainDetails
+        }
+    }
+
+    if ($sources.Count -eq 0) {
+        return [pscustomobject]@{ Status = 'Unknown'; Evidence = 'Accepted-domain collection is missing or unsuccessful; a clean result cannot be established.' }
+    }
+
+    $sourceKeys = @()
+    foreach ($source in $sources) {
+        $keys = @()
+        foreach ($domain in @($source)) {
+            if ($null -eq $domain -or -not ($domain.PSObject.Properties.Name -contains 'Domain')) {
+                return [pscustomobject]@{ Status = 'Unknown'; Evidence = 'Accepted-domain evidence contains a malformed domain record.' }
+            }
+            $domainName = ([string]$domain.Domain).Trim().TrimEnd('.').ToLowerInvariant()
+            if ([string]::IsNullOrWhiteSpace($domainName)) {
+                return [pscustomobject]@{ Status = 'Unknown'; Evidence = 'Accepted-domain evidence contains an empty domain name.' }
+            }
+            $domainType = if ($domain.PSObject.Properties.Name -contains 'DomainType' -and $null -ne $domain.DomainType) { [string]$domain.DomainType } else { '' }
+            $keys += ('{0}|{1}' -f $domainName, $domainType.ToLowerInvariant())
+        }
+        $sourceKeys += ,@($keys | Sort-Object -Unique)
+    }
+    for ($index = 1; $index -lt $sourceKeys.Count; $index++) {
+        if (($sourceKeys[$index] -join "`n") -ne ($sourceKeys[0] -join "`n")) {
+            return [pscustomobject]@{ Status = 'Unknown'; Evidence = 'Successful accepted-domain queries returned different domain/type inventories.' }
+        }
+    }
+
+    $wildcards = @()
+    foreach ($domain in @($sources[0])) {
+        if ($null -ne $domain -and ($domain.PSObject.Properties.Name -contains 'Domain') -and
+            [string]::Equals(([string]$domain.Domain).Trim(), '*', [System.StringComparison]::OrdinalIgnoreCase)) {
+            $domainType = if ($domain.PSObject.Properties.Name -contains 'DomainType' -and $null -ne $domain.DomainType) { [string]$domain.DomainType } else { 'unknown' }
+            $wildcards += ('{0} ({1})' -f [string]$domain.Domain, $domainType)
+        }
+    }
+
+    if ($wildcards.Count -gt 0) {
+        $internalRelay = @($sources[0] | Where-Object {
+                ($_.PSObject.Properties.Name -contains 'Domain') -and
+                [string]::Equals(([string]$_.Domain).Trim(), '*', [System.StringComparison]::OrdinalIgnoreCase) -and
+                ($_.PSObject.Properties.Name -contains 'DomainType') -and
+                [string]::Equals([string]$_.DomainType, 'InternalRelay', [System.StringComparison]::OrdinalIgnoreCase)
+            }).Count -gt 0
+        $caveat = if ($internalRelay) { ' An InternalRelay accepted domain of * is also associated with Exchange Transport service crashes.' } else { '' }
+        return [pscustomobject]@{
+            Status   = 'Fail'
+            Evidence = ('Exact wildcard accepted domain detected: {0}.{1} Review relay scope and the accepted-domain type before changing mail flow.' -f ($wildcards -join ', '), $caveat)
+        }
+    }
+
+    return [pscustomobject]@{ Status = 'Pass'; Evidence = 'No exact wildcard (*) accepted domain is configured; subdomain wildcard patterns are not treated as an exact wildcard domain.' }
+}
+
+function Test-EDCASettingOverrideConflicts {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [pscustomobject]$Server
+    )
+
+    $inventory = Get-EDCASettingOverrideInventory -Server $Server
+    if (-not $inventory.IsKnown) {
+        return [pscustomobject]@{ Status = 'Unknown'; Evidence = $inventory.Reason }
+    }
+    if ($inventory.Details.Count -eq 0) {
+        return [pscustomobject]@{ Status = 'Pass'; Evidence = 'Setting override collection succeeded and returned no overrides.' }
+    }
+
+    $serverName = if (($Server.PSObject.Properties.Name -contains 'Server') -and -not [string]::IsNullOrWhiteSpace([string]$Server.Server)) { [string]$Server.Server } else { '' }
+    $buildVersion = Get-EDCAExchangeBuildVersion -Server $Server
+    if ([string]::IsNullOrWhiteSpace($serverName) -or $null -eq $buildVersion) {
+        return [pscustomobject]@{ Status = 'Unknown'; Evidence = 'Server identity or complete Exchange build is unavailable for override scope evaluation.' }
+    }
+
+    $effectiveOverrides = @()
+    $unknownReasons = @()
+    foreach ($override in $inventory.Details) {
+        $applicability = Get-EDCASettingOverrideApplicability -Override $override -ServerName $serverName -BuildVersion $buildVersion
+        if (-not $applicability.IsKnown) {
+            $unknownReasons += ('{0}: {1}' -f [string]$override.Name, $applicability.Reason)
+            continue
+        }
+        if (-not $applicability.Applies -or -not $applicability.IsActive) { continue }
+        $effectiveOverrides += $override
+    }
+
+    $conflicts = @()
+    for ($leftIndex = 0; $leftIndex -lt $effectiveOverrides.Count; $leftIndex++) {
+        $left = $effectiveOverrides[$leftIndex]
+        for ($rightIndex = $leftIndex + 1; $rightIndex -lt $effectiveOverrides.Count; $rightIndex++) {
+            $right = $effectiveOverrides[$rightIndex]
+            if (-not [string]::Equals([string]$left.ComponentName, [string]$right.ComponentName, [System.StringComparison]::OrdinalIgnoreCase) -or
+                -not [string]::Equals([string]$left.SectionName, [string]$right.SectionName, [System.StringComparison]::OrdinalIgnoreCase)) {
+                continue
+            }
+
+            foreach ($leftParameter in @($left.Parameters)) {
+                if (-not ($leftParameter.PSObject.Properties.Name -contains 'ParseSucceeded') -or -not [bool]$leftParameter.ParseSucceeded) { continue }
+                foreach ($rightParameter in @($right.Parameters)) {
+                    if (-not ($rightParameter.PSObject.Properties.Name -contains 'ParseSucceeded') -or -not [bool]$rightParameter.ParseSucceeded -or
+                        -not [string]::Equals([string]$leftParameter.Name, [string]$rightParameter.Name, [System.StringComparison]::OrdinalIgnoreCase)) {
+                        continue
+                    }
+                    if ([string]::IsNullOrWhiteSpace([string]$leftParameter.ValueHash) -or [string]::IsNullOrWhiteSpace([string]$rightParameter.ValueHash)) {
+                        $unknownReasons += ('{0}/{1}: parameter value could not be compared.' -f [string]$left.Name, [string]$right.Name)
+                        continue
+                    }
+                    if (-not [string]::Equals([string]$leftParameter.ValueHash, [string]$rightParameter.ValueHash, [System.StringComparison]::OrdinalIgnoreCase)) {
+                        $conflicts += ('{0} and {1} assign different values to {2}/{3}/{4}.' -f [string]$left.Name, [string]$right.Name, [string]$left.ComponentName, [string]$left.SectionName, [string]$leftParameter.Name)
+                    }
+                }
+            }
+        }
+    }
+
+    if ($conflicts.Count -gt 0) {
+        $evidence = Format-EDCAEvidenceWithElements -Summary ('Conflicting active setting overrides apply to server {0}.' -f $serverName) -Elements $conflicts
+        if ($unknownReasons.Count -gt 0) {
+            $evidence += "`nSome override evidence was indeterminate: " + ($unknownReasons -join '; ')
+        }
+        return [pscustomobject]@{ Status = 'Fail'; Evidence = $evidence }
+    }
+    if ($unknownReasons.Count -gt 0) {
+        return [pscustomobject]@{
+            Status   = 'Unknown'
+            Evidence = Format-EDCAEvidenceWithElements -Summary 'Setting override applicability or effective status could not be determined.' -Elements ($unknownReasons | Select-Object -Unique)
+        }
+    }
+
+    return [pscustomobject]@{ Status = 'Pass'; Evidence = 'No conflicting active setting override parameter values apply to this server and Exchange build.' }
+}
+
+function Test-EDCAAMSIRequestBodyScanning {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [pscustomobject]$Server
+    )
+
+    $productLine = Get-EDCAProductLineFromServerData -Server $Server
+    $buildVersion = Get-EDCAExchangeBuildVersion -Server $Server
+    if ($productLine -notin @('Exchange2016', 'Exchange2019', 'ExchangeSE') -or $null -eq $buildVersion) {
+        return [pscustomobject]@{ Status = 'Unknown'; Evidence = 'Exchange product line or complete build number is unavailable; AMSI body-scanning applicability cannot be determined.' }
+    }
+
+    $bodyScanningMinimum = $null
+    $bodyScanningDefault = $null
+    # Microsoft AMSI guidance sets feature availability at the November 2024 SU and the enabled-by-default state at the August 2025 SU.
+    switch ($productLine) {
+        'Exchange2016' {
+            if ($buildVersion.Major -ne 15 -or $buildVersion.Minor -ne 1 -or $buildVersion.Build -ne 2507) {
+                return [pscustomobject]@{ Status = 'Unknown'; Evidence = 'Exchange 2016 build is outside the recognized CU23 version family.' }
+            }
+            $bodyScanningMinimum = [version]'15.1.2507.43'
+            $bodyScanningDefault = [version]'15.1.2507.58'
+        }
+        'Exchange2019' {
+            if ($buildVersion.Major -ne 15 -or $buildVersion.Minor -ne 2) {
+                return [pscustomobject]@{ Status = 'Unknown'; Evidence = 'Exchange 2019 build is outside the recognized version family.' }
+            }
+            switch ($buildVersion.Build) {
+                1258 { $bodyScanningMinimum = [version]'15.2.1258.39' }
+                1544 { $bodyScanningMinimum = [version]'15.2.1544.13'; $bodyScanningDefault = [version]'15.2.1544.33' }
+                1748 { $bodyScanningMinimum = [version]'15.2.1748.10'; $bodyScanningDefault = [version]'15.2.1748.36' }
+                default {
+                    return [pscustomobject]@{ Status = 'Unknown'; Evidence = 'Exchange 2019 cumulative update build is not recognized for AMSI body scanning.' }
+                }
+            }
+        }
+        'ExchangeSE' {
+            if ($buildVersion.Major -ne 15 -or $buildVersion.Minor -ne 2 -or $buildVersion.Build -ne 2562) {
+                return [pscustomobject]@{ Status = 'Unknown'; Evidence = 'Exchange Subscription Edition build is outside the recognized version family.' }
+            }
+            $bodyScanningMinimum = [version]'15.2.2562.17'
+            $bodyScanningDefault = [version]'15.2.2562.20'
+        }
+    }
+
+    if ($buildVersion -lt $bodyScanningMinimum) {
+        return [pscustomobject]@{
+            Status   = 'Fail'
+            Evidence = ('Exchange build {0} predates AMSI request-body scanning support ({1}); update to a supported build.' -f $buildVersion, $bodyScanningMinimum)
+        }
+    }
+
+    $amsi = if (($Server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $Server.Exchange -and
+        ($Server.Exchange.PSObject.Properties.Name -contains 'Amsi')) { $Server.Exchange.Amsi } else { $null }
+    if ($null -eq $amsi -or -not ($amsi.PSObject.Properties.Name -contains 'ProviderCount') -or $null -eq $amsi.ProviderCount) {
+        return [pscustomobject]@{ Status = 'Unknown'; Evidence = 'AMSI provider state is unavailable.' }
+    }
+    if ([int]$amsi.ProviderCount -le 0) {
+        return [pscustomobject]@{ Status = 'Fail'; Evidence = 'No AMSI provider is registered; Exchange request-body scanning cannot be verified.' }
+    }
+
+    $inventory = Get-EDCASettingOverrideInventory -Server $Server
+    if (-not $inventory.IsKnown) {
+        return [pscustomobject]@{ Status = 'Unknown'; Evidence = $inventory.Reason }
+    }
+    $serverName = if (($Server.PSObject.Properties.Name -contains 'Server') -and -not [string]::IsNullOrWhiteSpace([string]$Server.Server)) { [string]$Server.Server } else { '' }
+    if ([string]::IsNullOrWhiteSpace($serverName)) {
+        return [pscustomobject]@{ Status = 'Unknown'; Evidence = 'Server identity is unavailable for setting override applicability.' }
+    }
+
+    $baseAmsiValues = @()
+    $baseAmsiUnknown = @()
+    $bodyOverrides = @()
+    $blockOverrides = @()
+    foreach ($override in $inventory.Details) {
+        if (-not ($override.PSObject.Properties.Name -contains 'IsComplete') -or -not [bool]$override.IsComplete) {
+            $baseAmsiUnknown += ('{0}: override fields or parameter parsing are incomplete.' -f [string]$override.Name)
+            continue
+        }
+        $componentName = [string]$override.ComponentName
+        $sectionName = [string]$override.SectionName
+        if (-not [string]::Equals($componentName, 'Cafe', [System.StringComparison]::OrdinalIgnoreCase) -or
+            $sectionName -notin @('HttpRequestFiltering', 'AmsiRequestBodyScanning', 'BlockRequestBodyGreaterThanMaxScanSize')) {
+            continue
+        }
+
+        $applicability = Get-EDCASettingOverrideApplicability -Override $override -ServerName $serverName -BuildVersion $buildVersion
+        if (-not $applicability.IsKnown) {
+            $baseAmsiUnknown += ('{0}: {1}' -f [string]$override.Name, $applicability.Reason)
+            continue
+        }
+        if (-not $applicability.Applies -or -not $applicability.IsActive) { continue }
+
+        if ($sectionName -eq 'HttpRequestFiltering') {
+            $baseEnabledParameters = @($override.Parameters | Where-Object { [string]$_.Name -eq 'Enabled' })
+            if ($baseEnabledParameters.Count -eq 0) {
+                $baseAmsiUnknown += ('{0}: base AMSI override does not contain an Enabled parameter.' -f [string]$override.Name)
+            }
+            foreach ($parameter in $baseEnabledParameters) {
+                if ($null -eq $parameter.BooleanValue) {
+                    $baseAmsiUnknown += ('{0}: AMSI integration Enabled value is not a Boolean.' -f [string]$override.Name)
+                }
+                else {
+                    $baseAmsiValues += [bool]$parameter.BooleanValue
+                }
+            }
+        }
+        elseif ($sectionName -eq 'AmsiRequestBodyScanning') {
+            $bodyOverrides += $override
+        }
+        elseif ($sectionName -eq 'BlockRequestBodyGreaterThanMaxScanSize') {
+            $blockOverrides += $override
+        }
+    }
+
+    $distinctBaseAmsiValues = @($baseAmsiValues | Sort-Object -Unique)
+    if ($distinctBaseAmsiValues.Count -gt 1) {
+        return [pscustomobject]@{ Status = 'Unknown'; Evidence = 'Conflicting active base AMSI Enabled overrides have no established precedence.' }
+    }
+    if ($distinctBaseAmsiValues.Count -eq 1 -and -not [bool]$distinctBaseAmsiValues[0]) {
+        return [pscustomobject]@{ Status = 'Fail'; Evidence = 'A reliably active Cafe/HttpRequestFiltering setting override disables base AMSI integration on this server.' }
+    }
+    if ($baseAmsiUnknown.Count -gt 0) {
+        return [pscustomobject]@{
+            Status   = 'Unknown'
+            Evidence = Format-EDCAEvidenceWithElements -Summary 'AMSI setting override scope, status, or parsing is indeterminate.' -Elements ($baseAmsiUnknown | Select-Object -Unique)
+        }
+    }
+
+    $defaultEnabled = ($null -ne $bodyScanningDefault) -and ($buildVersion -ge $bodyScanningDefault)
+    $protocols = @('Api', 'AutoD', 'Ecp', 'Ews', 'Mapi', 'Eas', 'Oab', 'Owa', 'PowerShell', 'Others')
+    $knownProtocolParameters = @('EnabledAll') + @($protocols | ForEach-Object { 'Enabled{0}' -f $_ })
+    $disabledProtocols = @()
+    $unknownProtocols = @()
+    foreach ($protocol in $protocols) {
+        $globalValues = @()
+        $protocolValues = @()
+        foreach ($override in $bodyOverrides) {
+            foreach ($parameter in @($override.Parameters | Where-Object {
+                        [string]$_.Name -match '^Enabled' -and [string]$_.Name -notin $knownProtocolParameters
+                    })) {
+                $unknownProtocols += ('{0}: unsupported AMSI request-body parameter {1} requires review.' -f $protocol, [string]$parameter.Name)
+            }
+            foreach ($parameter in @($override.Parameters | Where-Object {
+                        [string]$_.Name -eq 'EnabledAll' -or [string]$_.Name -eq ('Enabled{0}' -f $protocol)
+                    })) {
+                if ($null -eq $parameter.BooleanValue) {
+                    $unknownProtocols += ('{0}: {1} has a non-Boolean {2} value.' -f $protocol, [string]$override.Name, [string]$parameter.Name)
+                    continue
+                }
+                if ([string]$parameter.Name -eq 'EnabledAll') { $globalValues += [bool]$parameter.BooleanValue }
+                else { $protocolValues += [bool]$parameter.BooleanValue }
+            }
+        }
+
+        $distinctGlobal = @($globalValues | Sort-Object -Unique)
+        $distinctProtocol = @($protocolValues | Sort-Object -Unique)
+        if ($distinctGlobal.Count -gt 1 -or $distinctProtocol.Count -gt 1 -or
+            ($distinctGlobal.Count -gt 0 -and $distinctProtocol.Count -gt 0 -and $distinctGlobal[0] -ne $distinctProtocol[0])) {
+            $unknownProtocols += ('{0}: conflicting global and per-protocol settings have no established precedence.' -f $protocol)
+            continue
+        }
+
+        $effectiveEnabled = $defaultEnabled
+        if ($distinctGlobal.Count -gt 0) { $effectiveEnabled = [bool]$distinctGlobal[0] }
+        if ($distinctProtocol.Count -gt 0) { $effectiveEnabled = [bool]$distinctProtocol[0] }
+        if (-not $effectiveEnabled) { $disabledProtocols += $protocol }
+    }
+
+    $blockGlobalValues = @()
+    $blockProtocolValues = @{}
+    foreach ($override in $blockOverrides) {
+        foreach ($parameter in @($override.Parameters | Where-Object {
+                    [string]$_.Name -match '^Enabled' -and [string]$_.Name -notin $knownProtocolParameters
+                })) {
+            $unknownProtocols += ('Oversized request blocking parameter {0} is not recognized.' -f [string]$parameter.Name)
+        }
+        foreach ($parameter in @($override.Parameters | Where-Object { [string]$_.Name -match '^Enabled(All|Api|AutoD|Ecp|Ews|Mapi|Eas|Oab|Owa|PowerShell|Others)$' })) {
+            if ($null -eq $parameter.BooleanValue) {
+                $unknownProtocols += ('Oversized request blocking: {0} has a non-Boolean value.' -f [string]$parameter.Name)
+            }
+            elseif ([string]$parameter.Name -eq 'EnabledAll') {
+                $blockGlobalValues += [bool]$parameter.BooleanValue
+            }
+            else {
+                $blockProtocolName = [string]$parameter.Name -replace '^Enabled', ''
+                if (-not $blockProtocolValues.ContainsKey($blockProtocolName)) {
+                    $blockProtocolValues[$blockProtocolName] = @()
+                }
+                $blockProtocolValues[$blockProtocolName] += [bool]$parameter.BooleanValue
+            }
+        }
+    }
+    $distinctBlockGlobalValues = @($blockGlobalValues | Sort-Object -Unique)
+    if ($distinctBlockGlobalValues.Count -gt 1) {
+        $unknownProtocols += 'Oversized request blocking has conflicting active global values.'
+    }
+    $oversizedBlockingProtocols = @()
+    foreach ($protocol in $protocols) {
+        $protocolKey = [string]$protocol
+        $distinctBlockProtocolValues = @()
+        if ($blockProtocolValues.ContainsKey($protocolKey)) {
+            $distinctBlockProtocolValues = @($blockProtocolValues[$protocolKey] | Sort-Object -Unique)
+        }
+        if ($distinctBlockProtocolValues.Count -gt 1 -or
+            ($distinctBlockGlobalValues.Count -gt 0 -and $distinctBlockProtocolValues.Count -gt 0 -and
+                $distinctBlockGlobalValues[0] -ne $distinctBlockProtocolValues[0])) {
+            $unknownProtocols += ('Oversized request blocking has conflicting global and per-protocol values for {0}.' -f $protocol)
+            continue
+        }
+        $blockingEnabled = $false
+        if ($distinctBlockGlobalValues.Count -gt 0) { $blockingEnabled = [bool]$distinctBlockGlobalValues[0] }
+        if ($distinctBlockProtocolValues.Count -gt 0) { $blockingEnabled = [bool]$distinctBlockProtocolValues[0] }
+        if ($blockingEnabled) { $oversizedBlockingProtocols += ('Enabled{0}' -f $protocol) }
+    }
+
+    if ($disabledProtocols.Count -gt 0) {
+        $evidence = Format-EDCAEvidenceWithElements -Summary 'AMSI request-body scanning is disabled for one or more protocols.' -Elements $disabledProtocols
+        if ($oversizedBlockingProtocols.Count -gt 0) {
+            $evidence += "`nWarning: oversized HTTP request bodies are configured to be blocked for {0}; Microsoft documents a 1 MB threshold." -f (($oversizedBlockingProtocols | Sort-Object -Unique) -join ', ')
+        }
+        return [pscustomobject]@{ Status = 'Fail'; Evidence = $evidence }
+    }
+    if ($unknownProtocols.Count -gt 0) {
+        return [pscustomobject]@{
+            Status   = 'Unknown'
+            Evidence = Format-EDCAEvidenceWithElements -Summary 'AMSI request-body scanning state could not be determined for every supported protocol.' -Elements ($unknownProtocols | Select-Object -Unique)
+        }
+    }
+    if ($oversizedBlockingProtocols.Count -gt 0) {
+        return [pscustomobject]@{
+            Status   = 'Warning'
+            Evidence = ('AMSI request-body scanning is enabled for all supported protocols. Oversized request blocking is also active for {0}; Microsoft documents that requests exceeding the 1 MB maximum can be blocked.' -f (($oversizedBlockingProtocols | Sort-Object -Unique) -join ', '))
+        }
+    }
+    return [pscustomobject]@{ Status = 'Pass'; Evidence = ('AMSI request-body scanning is enabled for all supported protocols on build {0}.' -f $buildVersion) }
+}
+
 function Test-EDCAControl {
     [CmdletBinding()]
     param(
@@ -226,13 +817,18 @@ function Test-EDCAControl {
         [pscustomobject]$CollectionData
     )
 
-    if ($Control.id -in @('EDCA-MON-001', 'EDCA-IAC-001', 'EDCA-DATA-002', 'EDCA-IAC-004', 'EDCA-IAC-008', 'EDCA-SEC-032', 'EDCA-TLS-026', 'EDCA-TLS-023', 'EDCA-TLS-025', 'EDCA-TLS-024', 'EDCA-TLS-027', 'EDCA-TLS-028', 'EDCA-TLS-029', 'EDCA-SEC-004', 'EDCA-SEC-003', 'EDCA-SEC-005', 'EDCA-TLS-003', 'EDCA-IAC-011', 'EDCA-GOV-004', 'EDCA-IAC-009', 'EDCA-IAC-010', 'EDCA-TLS-004', 'EDCA-TLS-005', 'EDCA-TLS-006', 'EDCA-TLS-007', 'EDCA-TLS-008', 'EDCA-TLS-009', 'EDCA-MON-008', 'EDCA-TLS-010', 'EDCA-TLS-011', 'EDCA-TLS-014', 'EDCA-IAC-014', 'EDCA-IAC-015', 'EDCA-IAC-016', 'EDCA-IAC-017', 'EDCA-IAC-018', 'EDCA-IAC-019', 'EDCA-IAC-020', 'EDCA-IAC-021', 'EDCA-IAC-022', 'EDCA-IAC-023', 'EDCA-IAC-024', 'EDCA-TLS-012', 'EDCA-TLS-018', 'EDCA-TLS-019', 'EDCA-DATA-016', 'EDCA-RES-012', 'EDCA-RES-013', 'EDCA-RES-014', 'EDCA-RES-015', 'EDCA-GOV-009', 'EDCA-PERF-012', 'EDCA-GOV-011', 'EDCA-SEC-036', 'EDCA-IAC-028', 'EDCA-RES-011')) {
+    if ($Control.id -in @('EDCA-MON-001', 'EDCA-IAC-001', 'EDCA-DATA-002', 'EDCA-IAC-004', 'EDCA-IAC-008', 'EDCA-SEC-032', 'EDCA-TLS-026', 'EDCA-TLS-023', 'EDCA-TLS-025', 'EDCA-TLS-024', 'EDCA-TLS-027', 'EDCA-TLS-028', 'EDCA-TLS-029', 'EDCA-SEC-004', 'EDCA-SEC-003', 'EDCA-SEC-005', 'EDCA-TLS-003', 'EDCA-IAC-011', 'EDCA-GOV-004', 'EDCA-IAC-009', 'EDCA-IAC-010', 'EDCA-TLS-004', 'EDCA-TLS-005', 'EDCA-TLS-006', 'EDCA-TLS-007', 'EDCA-TLS-008', 'EDCA-TLS-009', 'EDCA-MON-008', 'EDCA-TLS-010', 'EDCA-TLS-011', 'EDCA-TLS-014', 'EDCA-IAC-014', 'EDCA-IAC-015', 'EDCA-IAC-016', 'EDCA-IAC-017', 'EDCA-IAC-018', 'EDCA-IAC-019', 'EDCA-IAC-020', 'EDCA-IAC-021', 'EDCA-IAC-022', 'EDCA-IAC-023', 'EDCA-IAC-024', 'EDCA-TLS-012', 'EDCA-TLS-018', 'EDCA-TLS-019', 'EDCA-DATA-016', 'EDCA-RES-012', 'EDCA-RES-013', 'EDCA-RES-014', 'EDCA-RES-015', 'EDCA-GOV-009', 'EDCA-PERF-012', 'EDCA-GOV-011', 'EDCA-SEC-036', 'EDCA-IAC-028', 'EDCA-RES-011', 'EDCA-SEC-046')) {
         $status = 'Unknown'
         $evidence = ''
         $domainServerResults = $null
         $subjectLabel = 'Organization'
 
         switch ($Control.id) {
+            'EDCA-SEC-046' {
+                $acceptedDomainResult = Test-EDCAAcceptedDomainWildcard -CollectionData $CollectionData
+                $status = [string]$acceptedDomainResult.Status
+                $evidence = [string]$acceptedDomainResult.Evidence
+            }
             'EDCA-SEC-032' {
                 # SettingOverrides are an organization-wide Exchange concept available only on
                 # Mailbox servers; Edge Transport servers have no access to Get-SettingOverride.
@@ -2917,6 +3513,8 @@ function Test-EDCAControl {
         'EDCA-SEC-009',
         'EDCA-SEC-008',
         'EDCA-SEC-002',
+        'EDCA-SEC-047',
+        'EDCA-SEC-048',
         'EDCA-DATA-009',
         'EDCA-DATA-010',
         'EDCA-SEC-027',
@@ -2968,9 +3566,13 @@ function Test-EDCAControl {
         'EDCA-TLS-022',
         'EDCA-SEC-039',
         'EDCA-MON-012',
+        'EDCA-MON-015',
+        'EDCA-MON-016',
+        'EDCA-MON-017',
         'EDCA-DATA-017',
         'EDCA-DATA-018',
         'EDCA-SEC-040',
+        'EDCA-RES-016',
         'EDCA-TLS-030',
         'EDCA-TLS-031',
         'EDCA-TLS-032',
@@ -5174,6 +5776,28 @@ function Test-EDCAControl {
                     }
                 }
             }
+            'EDCA-SEC-047' {
+                if (-not $isExchangeServer) {
+                    $status = 'Skipped'
+                    $evidence = 'Exchange not detected on this server; AMSI request-body scanning is not applicable.'
+                    break
+                }
+
+                $amsiBodyScanResult = Test-EDCAAMSIRequestBodyScanning -Server $server
+                $status = [string]$amsiBodyScanResult.Status
+                $evidence = [string]$amsiBodyScanResult.Evidence
+            }
+            'EDCA-SEC-048' {
+                if (-not $isExchangeServer) {
+                    $status = 'Skipped'
+                    $evidence = 'Exchange not detected on this server; setting override conflict analysis is not applicable.'
+                    break
+                }
+
+                $overrideConflictResult = Test-EDCASettingOverrideConflicts -Server $server
+                $status = [string]$overrideConflictResult.Status
+                $evidence = [string]$overrideConflictResult.Evidence
+            }
             'EDCA-SEC-024' {
                 if (-not $isExchangeServer) {
                     $status = 'Skipped'
@@ -7001,6 +7625,396 @@ function Test-EDCAControl {
                     }
                 }
             }
+            'EDCA-RES-016' {
+                $maintenance = $null
+                if (($server.PSObject.Properties.Name -contains 'Exchange') -and
+                    $null -ne $server.Exchange -and
+                    ($server.Exchange.PSObject.Properties.Name -contains 'MaintenanceEvidence')) {
+                    $maintenance = $server.Exchange.MaintenanceEvidence
+                }
+
+                if ($null -eq $maintenance) {
+                    $status = 'Unknown'
+                    $evidence = 'Exchange maintenance-state telemetry is unavailable.'
+                }
+                else {
+                    $unknownReasons = @()
+                    $maintenanceReasons = @()
+                    $components = @()
+                    if (($maintenance.PSObject.Properties.Name -contains 'Components') -and $null -ne $maintenance.Components) {
+                        $components = @($maintenance.Components)
+                    }
+
+                    if (($maintenance.PSObject.Properties.Name -notcontains 'ComponentQuerySucceeded') -or
+                        $maintenance.ComponentQuerySucceeded -isnot [bool] -or
+                        -not $maintenance.ComponentQuerySucceeded) {
+                        $unknownReasons += 'Get-ServerComponentState collection failed or is unavailable'
+                    }
+                    elseif ($components.Count -eq 0) {
+                        $unknownReasons += 'Get-ServerComponentState returned no component records'
+                    }
+                    else {
+                        foreach ($component in $components) {
+                            if ($null -eq $component) {
+                                $unknownReasons += 'A component record is null'
+                                continue
+                            }
+                            if (($component.PSObject.Properties.Name -notcontains 'Component') -or
+                                [string]::IsNullOrWhiteSpace([string]$component.Component) -or
+                                ($component.PSObject.Properties.Name -notcontains 'State') -or
+                                [string]::IsNullOrWhiteSpace([string]$component.State)) {
+                                $unknownReasons += 'A component record is missing its name or current state'
+                                continue
+                            }
+
+                            if (-not [string]::Equals([string]$component.State, 'Active', [System.StringComparison]::OrdinalIgnoreCase)) {
+                                $localState = if (($component.PSObject.Properties.Name -contains 'LocalState') -and $null -ne $component.LocalState) { [string]$component.LocalState } else { 'unavailable' }
+                                $localRequester = if (($component.PSObject.Properties.Name -contains 'LocalRequester') -and -not [string]::IsNullOrWhiteSpace([string]$component.LocalRequester)) { [string]$component.LocalRequester } else { 'unknown requester' }
+                                $remoteState = if (($component.PSObject.Properties.Name -contains 'RemoteState') -and $null -ne $component.RemoteState) { [string]$component.RemoteState } else { 'unavailable' }
+                                $remoteRequester = if (($component.PSObject.Properties.Name -contains 'RemoteRequester') -and -not [string]::IsNullOrWhiteSpace([string]$component.RemoteRequester)) { [string]$component.RemoteRequester } else { 'unknown requester' }
+                                $maintenanceReasons += ('{0}: current state {1}; local state {2} ({3}); remote state {4} ({5})' -f
+                                    [string]$component.Component, [string]$component.State, $localState, $localRequester, $remoteState, $remoteRequester)
+                            }
+                        }
+                    }
+
+                    $isEdgeServer = $null
+                    if (($server.Exchange.PSObject.Properties.Name -contains 'IsEdge') -and
+                        $server.Exchange.IsEdge -is [bool]) {
+                        $isEdgeServer = [bool]$server.Exchange.IsEdge
+                    }
+                    else {
+                        $unknownReasons += 'Exchange server role is unavailable or malformed'
+                    }
+
+                    if ($false -eq $isEdgeServer) {
+                        if (($maintenance.PSObject.Properties.Name -notcontains 'DatabaseConfigSucceeded') -or
+                            $maintenance.DatabaseConfigSucceeded -isnot [bool] -or
+                            -not $maintenance.DatabaseConfigSucceeded) {
+                            $unknownReasons += 'Mailbox database activation policy collection failed or is unavailable'
+                        }
+                        else {
+                            if (($maintenance.PSObject.Properties.Name -notcontains 'DatabaseCopyActivationDisabledAndMoveNow') -or
+                                $null -eq $maintenance.DatabaseCopyActivationDisabledAndMoveNow -or
+                                ($maintenance.PSObject.Properties.Name -notcontains 'DatabaseCopyAutoActivationPolicy') -or
+                                [string]::IsNullOrWhiteSpace([string]$maintenance.DatabaseCopyAutoActivationPolicy)) {
+                                $unknownReasons += 'Mailbox database activation policy is incomplete'
+                            }
+                            elseif ([bool]$maintenance.DatabaseCopyActivationDisabledAndMoveNow -or
+                                [string]::Equals([string]$maintenance.DatabaseCopyAutoActivationPolicy, 'Blocked', [System.StringComparison]::OrdinalIgnoreCase)) {
+                                $maintenanceReasons += ('Database copy activation is restricted: DisabledAndMoveNow={0}; AutoActivationPolicy={1}' -f
+                                    [bool]$maintenance.DatabaseCopyActivationDisabledAndMoveNow, [string]$maintenance.DatabaseCopyAutoActivationPolicy)
+                            }
+                            elseif (-not [string]::Equals([string]$maintenance.DatabaseCopyAutoActivationPolicy, 'Unrestricted', [System.StringComparison]::OrdinalIgnoreCase)) {
+                                $unknownReasons += ('Unrecognized mailbox database auto-activation policy: {0}' -f [string]$maintenance.DatabaseCopyAutoActivationPolicy)
+                            }
+                        }
+
+                        if (($server.Exchange.PSObject.Properties.Name -notcontains 'IsDagMember') -or
+                            $server.Exchange.IsDagMember -isnot [bool]) {
+                            $unknownReasons += 'DAG membership is unknown'
+                        }
+                        elseif ([bool]$server.Exchange.IsDagMember) {
+                            if (($maintenance.PSObject.Properties.Name -notcontains 'ClusterNodeSucceeded') -or
+                                $maintenance.ClusterNodeSucceeded -isnot [bool] -or
+                                -not $maintenance.ClusterNodeSucceeded -or
+                                [string]::IsNullOrWhiteSpace([string]$maintenance.ClusterNodeState)) {
+                                $unknownReasons += 'DAG cluster node state is unavailable'
+                            }
+                            elseif (-not [string]::Equals([string]$maintenance.ClusterNodeState, 'Up', [System.StringComparison]::OrdinalIgnoreCase)) {
+                                $maintenanceReasons += ('DAG cluster node state is {0}' -f [string]$maintenance.ClusterNodeState)
+                            }
+                        }
+                    }
+
+                    if ($maintenanceReasons.Count -gt 0) {
+                        $status = 'Unknown'
+                        $evidence = Format-EDCAEvidenceWithElements -Summary 'Exchange maintenance may be intentional; maintenance state detected and is not scored as a pass or fail.' -Elements $maintenanceReasons
+                        if ($unknownReasons.Count -gt 0) {
+                            $evidence += "`nUnverified evidence: " + ($unknownReasons -join '; ')
+                        }
+                    }
+                    elseif ($unknownReasons.Count -gt 0) {
+                        $status = 'Unknown'
+                        $evidence = Format-EDCAEvidenceWithElements -Summary 'Exchange maintenance state cannot be verified from complete evidence.' -Elements $unknownReasons
+                    }
+                    else {
+                        $status = 'Pass'
+                        $evidence = ('No inactive Exchange components or maintenance indicators detected across {0} components; mailbox activation policy and applicable cluster state are healthy.' -f $components.Count)
+                    }
+                }
+            }
+            'EDCA-MON-015' {
+                $iisBindings = $null
+                if (($server.PSObject.Properties.Name -contains 'Exchange') -and
+                    $null -ne $server.Exchange -and
+                    ($server.Exchange.PSObject.Properties.Name -contains 'IisHttpsBindings')) {
+                    $iisBindings = $server.Exchange.IisHttpsBindings
+                }
+
+                if ($null -eq $iisBindings -or
+                    ($iisBindings.PSObject.Properties.Name -notcontains 'CollectionSucceeded') -or
+                    $iisBindings.CollectionSucceeded -isnot [bool] -or
+                    -not $iisBindings.CollectionSucceeded -or
+                    ($iisBindings.PSObject.Properties.Name -notcontains 'Sites') -or
+                    $null -eq $iisBindings.Sites) {
+                    $status = 'Unknown'
+                    $evidence = 'IIS HTTPS binding or certificate telemetry is unavailable or incomplete.'
+                }
+                else {
+                    $issues = @()
+                    $unknownReasons = @()
+                    $siteRecords = @($iisBindings.Sites)
+                    foreach ($expectedSite in @('Default Web Site', 'Exchange Back End')) {
+                        $siteMatches = @($siteRecords | Where-Object {
+                                ($null -ne $_) -and
+                                ($_.PSObject.Properties.Name -contains 'Name') -and
+                                [string]::Equals([string]$_.Name, $expectedSite, [System.StringComparison]::OrdinalIgnoreCase)
+                            })
+                        if ($siteMatches.Count -ne 1 -or
+                            ($siteMatches[0].PSObject.Properties.Name -notcontains 'Exists') -or
+                            $siteMatches[0].Exists -isnot [bool] -or
+                            -not $siteMatches[0].Exists) {
+                            $unknownReasons += ('Expected IIS site {0} is missing or ambiguous.' -f $expectedSite)
+                            continue
+                        }
+
+                        $bindings = @()
+                        if (($siteMatches[0].PSObject.Properties.Name -contains 'Bindings') -and $null -ne $siteMatches[0].Bindings) {
+                            $bindings = @($siteMatches[0].Bindings)
+                        }
+                        if ($bindings.Count -eq 0) {
+                            $issues += ('{0} has no HTTPS binding.' -f $expectedSite)
+                            continue
+                        }
+
+                        foreach ($binding in $bindings) {
+                            if ($null -eq $binding) {
+                                $unknownReasons += ('{0} contains an empty HTTPS binding record.' -f $expectedSite)
+                                continue
+                            }
+                            if (($binding.PSObject.Properties.Name -notcontains 'BindingDataAvailable') -or
+                                $binding.BindingDataAvailable -isnot [bool] -or
+                                -not $binding.BindingDataAvailable -or
+                                ($binding.PSObject.Properties.Name -notcontains 'CertificateQuerySucceeded') -or
+                                $binding.CertificateQuerySucceeded -isnot [bool] -or
+                                -not $binding.CertificateQuerySucceeded) {
+                                $unknownReasons += ('{0} HTTPS binding certificate evidence is unavailable.' -f $expectedSite)
+                                continue
+                            }
+                            if (($binding.PSObject.Properties.Name -notcontains 'CertificateFound') -or
+                                $binding.CertificateFound -isnot [bool]) {
+                                $unknownReasons += ('{0} HTTPS binding certificate identity is incomplete.' -f $expectedSite)
+                                continue
+                            }
+                            if (-not $binding.CertificateFound) {
+                                $issues += ('{0} HTTPS binding has no matching certificate in its configured store.' -f $expectedSite)
+                                continue
+                            }
+                            if (($binding.PSObject.Properties.Name -notcontains 'Thumbprint') -or
+                                [string]::IsNullOrWhiteSpace([string]$binding.Thumbprint)) {
+                                $unknownReasons += ('{0} HTTPS binding certificate thumbprint is unavailable.' -f $expectedSite)
+                                continue
+                            }
+
+                            $notBefore = [datetime]::MinValue
+                            $notAfter = [datetime]::MinValue
+                            if (($binding.PSObject.Properties.Name -notcontains 'NotBefore') -or
+                                ($binding.PSObject.Properties.Name -notcontains 'NotAfter') -or
+                                $null -eq $binding.NotBefore -or
+                                $null -eq $binding.NotAfter -or
+                                -not [datetime]::TryParse([string]$binding.NotBefore, [ref]$notBefore) -or
+                                -not [datetime]::TryParse([string]$binding.NotAfter, [ref]$notAfter) -or
+                                ($binding.PSObject.Properties.Name -notcontains 'HasPrivateKey') -or
+                                $binding.HasPrivateKey -isnot [bool]) {
+                                $unknownReasons += ('{0} HTTPS binding certificate validity or private-key evidence is incomplete.' -f $expectedSite)
+                                continue
+                            }
+                            if ($notAfter -le $notBefore) {
+                                $unknownReasons += ('{0} HTTPS binding certificate validity dates are inconsistent.' -f $expectedSite)
+                                continue
+                            }
+                            if (-not $binding.HasPrivateKey) {
+                                $issues += ('{0} HTTPS binding certificate has no private key.' -f $expectedSite)
+                            }
+                            if ($notBefore -gt (Get-Date)) {
+                                $issues += ('{0} HTTPS binding certificate is not yet valid.' -f $expectedSite)
+                            }
+                            if ($notAfter -le (Get-Date)) {
+                                $issues += ('{0} HTTPS binding certificate is expired.' -f $expectedSite)
+                            }
+                        }
+                    }
+
+                    if ($issues.Count -gt 0) {
+                        $status = 'Fail'
+                        $evidence = Format-EDCAEvidenceWithElements -Summary 'One or more Exchange IIS HTTPS bindings have no valid certificate.' -Elements $issues
+                        if ($unknownReasons.Count -gt 0) {
+                            $evidence += "`nAdditional evidence unavailable: " + ($unknownReasons -join '; ')
+                        }
+                    }
+                    elseif ($unknownReasons.Count -gt 0) {
+                        $status = 'Unknown'
+                        $evidence = Format-EDCAEvidenceWithElements -Summary 'Exchange IIS HTTPS binding validity cannot be verified.' -Elements $unknownReasons
+                    }
+                    else {
+                        $status = 'Pass'
+                        $evidence = 'Both Exchange IIS sites have HTTPS bindings with matching, currently valid certificates and private keys.'
+                    }
+                }
+            }
+            'EDCA-MON-016' {
+                $poolData = $null
+                if (($server.PSObject.Properties.Name -contains 'Exchange') -and
+                    $null -ne $server.Exchange -and
+                    ($server.Exchange.PSObject.Properties.Name -contains 'IisAppPoolRecycling')) {
+                    $poolData = $server.Exchange.IisAppPoolRecycling
+                }
+
+                if ($null -eq $poolData -or
+                    ($poolData.PSObject.Properties.Name -notcontains 'CollectionSucceeded') -or
+                    $poolData.CollectionSucceeded -isnot [bool] -or
+                    -not $poolData.CollectionSucceeded -or
+                    ($poolData.PSObject.Properties.Name -notcontains 'ScopeVerified') -or
+                    $poolData.ScopeVerified -isnot [bool] -or
+                    -not $poolData.ScopeVerified -or
+                    ($poolData.PSObject.Properties.Name -notcontains 'EffectiveSettings') -or
+                    $poolData.EffectiveSettings -isnot [bool] -or
+                    -not $poolData.EffectiveSettings -or
+                    ($poolData.PSObject.Properties.Name -notcontains 'Pools') -or
+                    $null -eq $poolData.Pools -or
+                    @($poolData.Pools).Count -eq 0) {
+                    $status = 'Unknown'
+                    $evidence = 'IIS application-pool recycling telemetry is unavailable or incomplete.'
+                }
+                else {
+                    $issues = @()
+                    $unknownReasons = @()
+                    foreach ($pool in @($poolData.Pools)) {
+                        if ($null -eq $pool) {
+                            $unknownReasons += 'An application-pool record is null.'
+                            continue
+                        }
+                        if (($pool.PSObject.Properties.Name -notcontains 'Name') -or
+                            [string]::IsNullOrWhiteSpace([string]$pool.Name) -or
+                            ($pool.PSObject.Properties.Name -notcontains 'SettingsAvailable') -or
+                            $pool.SettingsAvailable -isnot [bool] -or
+                            -not $pool.SettingsAvailable) {
+                            $unknownReasons += 'An application pool is missing its name or recycling settings.'
+                            continue
+                        }
+
+                        $poolName = [string]$pool.Name
+                        $privateMemory = 0L
+                        $memory = 0L
+                        $requests = 0L
+                        $scheduleCount = 0
+                        $time = [TimeSpan]::Zero
+                        if (($pool.PSObject.Properties.Name -notcontains 'PrivateMemory') -or
+                            ($pool.PSObject.Properties.Name -notcontains 'Memory') -or
+                            ($pool.PSObject.Properties.Name -notcontains 'Requests') -or
+                            ($pool.PSObject.Properties.Name -notcontains 'ScheduleCount') -or
+                            ($pool.PSObject.Properties.Name -notcontains 'Time') -or
+                            -not [long]::TryParse([string]$pool.PrivateMemory, [ref]$privateMemory) -or
+                            -not [long]::TryParse([string]$pool.Memory, [ref]$memory) -or
+                            -not [long]::TryParse([string]$pool.Requests, [ref]$requests) -or
+                            -not [int]::TryParse([string]$pool.ScheduleCount, [ref]$scheduleCount) -or
+                            -not [TimeSpan]::TryParse([string]$pool.Time, [ref]$time) -or
+                            $privateMemory -lt 0 -or $memory -lt 0 -or $requests -lt 0 -or $scheduleCount -lt 0 -or $time -lt [TimeSpan]::Zero) {
+                            $unknownReasons += ('{0} recycling settings are missing or malformed.' -f $poolName)
+                            continue
+                        }
+
+                        if ($privateMemory -gt 0) {
+                            $issues += ('{0} recycles by private memory ({1}).' -f $poolName, $privateMemory)
+                        }
+                        if ($memory -gt 0) {
+                            $issues += ('{0} recycles by memory ({1}).' -f $poolName, $memory)
+                        }
+                        if ($requests -gt 0) {
+                            $issues += ('{0} recycles by request count ({1}).' -f $poolName, $requests)
+                        }
+                        if ($scheduleCount -gt 0) {
+                            $issues += ('{0} has a scheduled recycle.' -f $poolName)
+                        }
+                        if ($time -gt [TimeSpan]::Zero -and
+                            $poolName -notin @('MSExchangeOWAAppPool', 'MSExchangeECPAppPool')) {
+                            $issues += ('{0} recycles periodically by time ({1}).' -f $poolName, [string]$pool.Time)
+                        }
+                    }
+
+                    if ($issues.Count -gt 0) {
+                        $status = 'Fail'
+                        $evidence = Format-EDCAEvidenceWithElements -Summary 'IIS application-pool recycling triggers are configured.' -Elements $issues
+                        if ($unknownReasons.Count -gt 0) {
+                            $evidence += "`nAdditional evidence unavailable: " + ($unknownReasons -join '; ')
+                        }
+                    }
+                    elseif ($unknownReasons.Count -gt 0) {
+                        $status = 'Unknown'
+                        $evidence = Format-EDCAEvidenceWithElements -Summary 'IIS application-pool recycling settings cannot be verified.' -Elements $unknownReasons
+                    }
+                    else {
+                        $status = 'Pass'
+                        $evidence = ('No periodic, scheduled, memory-, or request-based recycling triggers are configured for {0} Exchange-owned application pools used by Exchange sites. OWA/ECP time-based recycling is excluded.' -f @($poolData.Pools).Count)
+                    }
+                }
+            }
+            'EDCA-MON-017' {
+                $backPressure = $null
+                if (($server.PSObject.Properties.Name -contains 'Exchange') -and
+                    $null -ne $server.Exchange -and
+                    ($server.Exchange.PSObject.Properties.Name -contains 'TransportBackPressureLive')) {
+                    $backPressure = $server.Exchange.TransportBackPressureLive
+                }
+
+                if ($null -eq $backPressure -or
+                    ($backPressure.PSObject.Properties.Name -notcontains 'CollectionSucceeded') -or
+                    $backPressure.CollectionSucceeded -isnot [bool] -or
+                    -not $backPressure.CollectionSucceeded -or
+                    ($backPressure.PSObject.Properties.Name -notcontains 'Meters') -or
+                    $null -eq $backPressure.Meters -or
+                    @($backPressure.Meters).Count -eq 0) {
+                    $status = 'Unknown'
+                    $evidence = 'Live EdgeTransport ResourceThrottling diagnostic data is unavailable, malformed, or incomplete.'
+                }
+                else {
+                    $activeMeters = @()
+                    $unknownReasons = @()
+                    foreach ($meter in @($backPressure.Meters)) {
+                        if ($null -eq $meter) {
+                            $unknownReasons += 'A resource meter record is null.'
+                            continue
+                        }
+                        if (($meter.PSObject.Properties.Name -notcontains 'Resource') -or
+                            [string]::IsNullOrWhiteSpace([string]$meter.Resource) -or
+                            ($meter.PSObject.Properties.Name -notcontains 'CurrentResourceUse') -or
+                            [string]::IsNullOrWhiteSpace([string]$meter.CurrentResourceUse) -or
+                            [string]$meter.CurrentResourceUse -notin @('Low', 'Medium', 'High')) {
+                            $unknownReasons += 'A resource meter is missing a recognized resource name or usage state.'
+                            continue
+                        }
+
+                        if (-not [string]::Equals([string]$meter.Resource, 'SystemMemory', [System.StringComparison]::OrdinalIgnoreCase) -and
+                            -not [string]::Equals([string]$meter.CurrentResourceUse, 'Low', [System.StringComparison]::OrdinalIgnoreCase)) {
+                            $activeMeters += ('{0} ({1})' -f [string]$meter.Resource, [string]$meter.CurrentResourceUse)
+                        }
+                    }
+
+                    if ($activeMeters.Count -gt 0) {
+                        $status = 'Fail'
+                        $evidence = Format-EDCAEvidenceWithElements -Summary 'Active non-Low transport resource meters are applying back pressure.' -Elements $activeMeters
+                    }
+                    elseif ($unknownReasons.Count -gt 0) {
+                        $status = 'Unknown'
+                        $evidence = Format-EDCAEvidenceWithElements -Summary 'Live transport back-pressure state cannot be verified.' -Elements $unknownReasons
+                    }
+                    else {
+                        $status = 'Pass'
+                        $evidence = ('No active non-Low resource meters detected across {0} meters; SystemMemory is excluded because it does not block mail flow.' -f @($backPressure.Meters).Count)
+                    }
+                }
+            }
             'EDCA-MON-009' {
                 $bp = $null
                 if (($server.PSObject.Properties.Name -contains 'Exchange') -and $null -ne $server.Exchange -and
@@ -8167,6 +9181,9 @@ function Test-EDCAControl {
     elseif ($hasUnknown) {
         'Unknown'
     }
+    elseif ($Control.id -eq 'EDCA-SEC-047' -and @($nonSkipped | Where-Object { $_.Status -eq 'Warning' }).Count -gt 0) {
+        'Warning'
+    }
     else {
         'Pass'
     }
@@ -8201,29 +9218,30 @@ function Get-EDCAScores {
     $frameworks = @('Best Practice', 'ANSSI', 'BSI', 'CIS', 'CISA', 'DISA', 'ISM', 'NIS2')
     $scores = @()
 
-    # Overall score across all verifiable controls (each counted once); Skipped excluded from denominator
+    # Unknown and Skipped findings remain visible in counts but are not assessable for weighted scoring.
+    $allCounted = @($Findings | Where-Object { $_.Verify -and $_.OverallStatus -ne 'Skipped' })
     $allSkipped = @($Findings | Where-Object { $_.Verify -and $_.OverallStatus -eq 'Skipped' })
-    $allEligible = @($Findings | Where-Object { $_.Verify -and $_.OverallStatus -ne 'Skipped' })
+    $allAssessable = @($allCounted | Where-Object { $_.OverallStatus -ne 'Unknown' })
     $allTotalWeight = 0
     $allPassedWeight = 0
-    foreach ($item in $allEligible) {
+    foreach ($item in $allAssessable) {
         $w = 0
         if ($item.PSObject.Properties.Name -contains 'SeverityWeight') { [void][int]::TryParse([string]$item.SeverityWeight, [ref]$w) }
         $allTotalWeight += $w
     }
-    foreach ($item in ($allEligible | Where-Object { $_.OverallStatus -eq 'Pass' })) {
+    foreach ($item in ($allAssessable | Where-Object { $_.OverallStatus -eq 'Pass' })) {
         $w = 0
         if ($item.PSObject.Properties.Name -contains 'SeverityWeight') { [void][int]::TryParse([string]$item.SeverityWeight, [ref]$w) }
         $allPassedWeight += $w
     }
-    $allScore = if ($allTotalWeight -gt 0) { [math]::Round(100 * $allPassedWeight / $allTotalWeight, 2) } else { 0 }
+    $allScore = if ($allTotalWeight -gt 0) { [math]::Round(100 * $allPassedWeight / $allTotalWeight, 2) } else { $null }
     $scores += [pscustomobject]@{
         Framework       = 'All'
         Score           = $allScore
-        TotalControls   = $allEligible.Count
-        FailedControls  = @($allEligible | Where-Object { $_.OverallStatus -eq 'Fail' }).Count
-        WarningControls = @($allEligible | Where-Object { $_.OverallStatus -eq 'Warning' }).Count
-        UnknownControls = @($allEligible | Where-Object { $_.OverallStatus -eq 'Unknown' }).Count
+        TotalControls   = $allCounted.Count
+        FailedControls  = @($allCounted | Where-Object { $_.OverallStatus -eq 'Fail' }).Count
+        WarningControls = @($allCounted | Where-Object { $_.OverallStatus -eq 'Warning' }).Count
+        UnknownControls = @($allCounted | Where-Object { $_.OverallStatus -eq 'Unknown' }).Count
         SkippedControls = $allSkipped.Count
     }
 
@@ -8232,10 +9250,11 @@ function Get-EDCAScores {
                 $_.Verify -and ($_.Frameworks -contains $framework)
             })
         $skippedCount = @($allFramework | Where-Object { $_.OverallStatus -eq 'Skipped' }).Count
-        $eligible = @($allFramework | Where-Object { $_.OverallStatus -ne 'Skipped' })
+        $counted = @($allFramework | Where-Object { $_.OverallStatus -ne 'Skipped' })
+        $assessable = @($counted | Where-Object { $_.OverallStatus -ne 'Unknown' })
 
         $totalWeight = 0
-        foreach ($item in $eligible) {
+        foreach ($item in $assessable) {
             $weight = 0
             if ($item.PSObject.Properties.Name -contains 'SeverityWeight') {
                 [void][int]::TryParse([string]$item.SeverityWeight, [ref]$weight)
@@ -8244,18 +9263,18 @@ function Get-EDCAScores {
         }
 
         $passedWeight = 0
-        foreach ($item in ($eligible | Where-Object { $_.OverallStatus -eq 'Pass' })) {
+        foreach ($item in ($assessable | Where-Object { $_.OverallStatus -eq 'Pass' })) {
             $weight = 0
             if ($item.PSObject.Properties.Name -contains 'SeverityWeight') {
                 [void][int]::TryParse([string]$item.SeverityWeight, [ref]$weight)
             }
             $passedWeight += $weight
         }
-        $failedCount = @($eligible | Where-Object { $_.OverallStatus -eq 'Fail' }).Count
-        $unknownCount = @($eligible | Where-Object { $_.OverallStatus -eq 'Unknown' }).Count
+        $failedCount = @($counted | Where-Object { $_.OverallStatus -eq 'Fail' }).Count
+        $unknownCount = @($counted | Where-Object { $_.OverallStatus -eq 'Unknown' }).Count
 
         if ($null -eq $totalWeight -or $totalWeight -eq 0) {
-            $score = 0
+            $score = $null
         }
         else {
             $score = [math]::Round((100 * $passedWeight / $totalWeight), 2)
@@ -8264,9 +9283,9 @@ function Get-EDCAScores {
         $scores += [pscustomobject]@{
             Framework       = $framework
             Score           = $score
-            TotalControls   = $eligible.Count
+            TotalControls   = $counted.Count
             FailedControls  = $failedCount
-            WarningControls = @($eligible | Where-Object { $_.OverallStatus -eq 'Warning' }).Count
+            WarningControls = @($counted | Where-Object { $_.OverallStatus -eq 'Warning' }).Count
             UnknownControls = $unknownCount
             SkippedControls = $skippedCount
         }

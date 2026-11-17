@@ -1,0 +1,32 @@
+{
+  "id": "EDCA-MON-016",
+  "title": "IIS application pools have no periodic recycling triggers",
+  "description": "Exchange server IIS application pools SHOULD NOT use periodic time, schedule, memory, or request-count recycling triggers. The OWA and ECP application pools are exempt only from the periodic time-based check.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Monitoring",
+  "severity": "Medium",
+  "severityWeight": 5,
+  "frameworks": [
+    "Best Practice"
+  ],
+  "references": [
+    {
+      "name": "IIS application pool periodicRestart settings",
+      "url": "https://learn.microsoft.com/en-us/iis/configuration/system.applicationhost/applicationpools/add/recycling/periodicrestart/"
+    },
+    {
+      "name": "Exchange Server Health Checker",
+      "url": "https://microsoft.github.io/CSS-Exchange/Diagnostics/HealthChecker/"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Review each reported IIS application pool and its recycling conditions with the Exchange administrator. Remove only unintended recycling triggers after assessing operational impact; do not change OWA/ECP time-based settings based on this control alone.",
+    "scriptTemplate": "# Read-only diagnostics\nGet-WebConfigurationProperty -PSPath 'IIS:\\' -Filter 'system.applicationHost/applicationPools/add/recycling/periodicRestart' -Name '.'"
+  },
+  "considerations": "Only Exchange-owned application pools assigned to applications in the Default Web Site and Exchange Back End are evaluated. Unrelated pools are excluded. Both sites and their OWA/ECP applications must be present, and recognized Exchange applications must reference Exchange-owned pools; unresolved scope is Unknown. Effective IIS provider settings include inherited applicationPoolDefaults, schema defaults, and schedule overrides. OWA/ECP pools are exempt only from the time-based condition; the other four conditions still apply. Incomplete, legacy raw-XML, or malformed pool evidence is Unknown.",
+  "roles": [
+    "Mailbox"
+  ]
+}

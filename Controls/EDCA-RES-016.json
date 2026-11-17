@@ -1,0 +1,37 @@
+{
+  "id": "EDCA-RES-016",
+  "title": "Exchange server is not in maintenance state",
+  "description": "Exchange component state, mailbox database activation policy, and applicable DAG cluster-node state MUST provide complete evidence that the server is not in maintenance. Detected maintenance indicators are reported as Unknown because maintenance may be intentional.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Resilience",
+  "severity": "Medium",
+  "severityWeight": 6,
+  "frameworks": [
+    "Best Practice"
+  ],
+  "references": [
+    {
+      "name": "Get-ServerComponentState",
+      "url": "https://learn.microsoft.com/en-us/powershell/module/exchangepowershell/get-servercomponentstate?view=exchange-ps"
+    },
+    {
+      "name": "Determine the requestor that changed Server component state",
+      "url": "https://learn.microsoft.com/en-us/exchange/troubleshoot/administration/requestor-changed-server-component"
+    },
+    {
+      "name": "Manage database availability groups",
+      "url": "https://learn.microsoft.com/en-us/exchange/high-availability/manage-ha/manage-dags"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Review the reported component state and local or remote requester, database activation policy, and cluster-node state with the Exchange administrator. Confirm whether maintenance is intentional before taking action.",
+    "scriptTemplate": "# Read-only diagnostics\nGet-ServerComponentState -Identity $env:COMPUTERNAME | Select-Object Component, State, LocalStates, RemoteStates\nGet-MailboxServer -Identity $env:COMPUTERNAME | Select-Object DatabaseCopyActivationDisabledAndMoveNow, DatabaseCopyAutoActivationPolicy\nGet-ClusterNode -Name $env:COMPUTERNAME"
+  },
+  "considerations": "An inactive component, restricted database activation policy, or non-Up DAG node is reported as Unknown, not Pass or Fail, because it may represent planned maintenance. Missing, failed, empty, or incomplete required collection is also Unknown. Cluster-node state is required only for DAG members; mailbox activation policy is not applicable to Edge servers.",
+  "roles": [
+    "Mailbox",
+    "Edge"
+  ]
+}

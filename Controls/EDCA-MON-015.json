@@ -1,0 +1,32 @@
+{
+  "id": "EDCA-MON-015",
+  "title": "Exchange IIS HTTPS bindings use in-date certificates",
+  "description": "The Default Web Site and Exchange Back End IIS sites MUST have HTTPS bindings associated with certificates that are currently within their validity period and have a private key. Incomplete binding or certificate collection is Unknown.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Monitoring",
+  "severity": "High",
+  "severityWeight": 8,
+  "frameworks": [
+    "Best Practice"
+  ],
+  "references": [
+    {
+      "name": "Exchange Server certificates",
+      "url": "https://learn.microsoft.com/en-us/exchange/architecture/client-access/certificates"
+    },
+    {
+      "name": "IIS site bindings",
+      "url": "https://learn.microsoft.com/en-us/iis/configuration/system.applicationhost/sites/site/bindings/binding"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Review the affected Exchange IIS site and HTTPS binding. Install or renew the certificate as appropriate, confirm the binding points to the intended certificate store and thumbprint, and verify service impact before changing it.",
+    "scriptTemplate": "# Read-only diagnostics\nGet-WebBinding -Name 'Default Web Site' -Protocol https\nGet-WebBinding -Name 'Exchange Back End' -Protocol https\nGet-ChildItem Cert:\\LocalMachine\\My | Select-Object Subject, Thumbprint, NotBefore, NotAfter, HasPrivateKey"
+  },
+  "considerations": "The control evaluates the Default Web Site and Exchange Back End HTTPS bindings on Mailbox servers. It checks certificate identity, date validity, and private-key presence; it does not validate trust chains, revocation, or hostname coverage. Missing IIS sites or inaccessible binding/certificate details are Unknown. A missing HTTPS binding, unmatched certificate, expired or not-yet-valid certificate, or certificate without a private key is Fail.",
+  "roles": [
+    "Mailbox"
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "id": "EDCA-SEC-046",
+  "title": "Wildcard accepted domain is not configured",
+  "description": "Exchange MUST NOT use an exact wildcard (*) accepted domain without a documented and approved design. A wildcard accepted domain can permit relay behavior beyond intended recipient domains. An InternalRelay wildcard is also associated with Exchange Transport service crashes.",
+  "verify": true,
+  "subject": "Organization",
+  "category": "Platform Security",
+  "severity": "High",
+  "severityWeight": 8,
+  "frameworks": [
+    "Best Practice"
+  ],
+  "references": [
+    {
+      "name": "CSS HealthChecker Open Relay Domain guidance",
+      "url": "https://microsoft.github.io/CSS-Exchange/Diagnostics/HealthChecker/OpenRelayDomain/"
+    },
+    {
+      "name": "Allow anonymous relay on Exchange servers",
+      "url": "https://learn.microsoft.com/en-us/exchange/mail-flow/connectors/allow-anonymous-relay"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Review the accepted domain, its type, receive connector permissions, and required mail-flow design. Remove or replace an exact wildcard only after confirming the change will not disrupt valid relay or recipient delivery.",
+    "scriptTemplate": "Get-AcceptedDomain | Select-Object Name, DomainName, DomainType"
+  },
+  "considerations": "The check matches only an exact accepted domain of *. It does not flag wildcard subdomains such as *.contoso.com. HealthChecker notes that an InternalRelay accepted domain of * is not recommended and can cause Transport service crashes. Validate connector scope and mail flow before making changes.",
+  "roles": [
+    "Mailbox"
+  ]
+}

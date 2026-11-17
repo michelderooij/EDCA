@@ -1,0 +1,32 @@
+{
+  "id": "EDCA-SEC-047",
+  "title": "AMSI request-body scanning is enabled",
+  "description": "Exchange Antimalware Scan Interface (AMSI) request-body scanning MUST be enabled for all supported HTTP protocols on Mailbox servers. The check accounts for Exchange build support, the documented default behavior, and active global or per-protocol setting overrides.",
+  "verify": true,
+  "subject": "Server",
+  "category": "Platform Security",
+  "severity": "High",
+  "severityWeight": 8,
+  "frameworks": [
+    "Best Practice"
+  ],
+  "references": [
+    {
+      "name": "AMSI integration with Exchange Server",
+      "url": "https://learn.microsoft.com/en-us/exchange/antispam-and-antimalware/amsi-integration-with-exchange"
+    },
+    {
+      "name": "CSS HealthChecker AMSI integration guidance",
+      "url": "https://microsoft.github.io/CSS-Exchange/Diagnostics/HealthChecker/AMSIIntegration/"
+    }
+  ],
+  "remediation": {
+    "automatable": false,
+    "description": "Install a supported Exchange build and a compatible AMSI provider. Review the effective AMSI and request-body scanning setting overrides, then enable scanning in accordance with Microsoft guidance and validate service performance.",
+    "scriptTemplate": "Get-SettingOverride | Where-Object { $_.ComponentName -eq 'Cafe' -and $_.SectionName -in @('HttpRequestFiltering', 'AmsiRequestBodyScanning', 'BlockRequestBodyGreaterThanMaxScanSize') } | Format-List Name, Server, MinVersion, MaxVersion, Status"
+  },
+  "considerations": "Microsoft documents body-scanning support beginning with the November 2024 Security Update on eligible Exchange 2016 CU23 and Exchange 2019 CU13/CU14 builds; Exchange Subscription Edition is also applicable. Scanning defaults to enabled for all protocols starting with the August 2025 Security Updates. Before that default, explicit active overrides are required. The check returns Unknown when build, provider, override collection, scope, effective status, or precedence cannot be determined. Microsoft warns that enabling oversized-request blocking can block request bodies over 1 MB.",
+  "roles": [
+    "Mailbox"
+  ]
+}
